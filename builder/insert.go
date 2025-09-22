@@ -1,0 +1,209 @@
+package builder
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+)
+
+type InsertBuilder struct {
+	prefixes         []Sqlizer
+	statementKeyword string
+	options          []string
+	into             string
+	columns          []string
+	values           [][]any
+	suffixes         []Sqlizer
+	selectBuilder    *SelectBuilder
+}
+
+func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
+	if len(b.into) == 0 {
+		err = errors.New("insert statements must specify a table")
+		return
+	}
+	if len(b.values) == 0 && b.selectBuilder == nil {
+		err = errors.New("insert statements must have at least one set of values or select clause")
+		return
+	}
+
+	sql := &bytes.Buffer{}
+
+	if len(b.prefixes) > 0 {
+		args, err = appendToSql(b.prefixes, sql, " ", args)
+		if err != nil {
+			return
+		}
+
+		sql.WriteString(" ")
+	}
+
+	if b.statementKeyword == "" {
+		sql.WriteString("INSERT ")
+	} else {
+		sql.WriteString(b.statementKeyword)
+		sql.WriteString(" ")
+	}
+
+	if len(b.options) > 0 {
+		sql.WriteString(strings.Join(b.options, " "))
+		sql.WriteString(" ")
+	}
+
+	sql.WriteString("INTO ")
+	sql.WriteString(b.into)
+	sql.WriteString(" ")
+
+	if len(b.columns) > 0 {
+		sql.WriteString("(")
+		sql.WriteString(strings.Join(b.columns, ","))
+		sql.WriteString(") ")
+	}
+
+	if b.selectBuilder != nil {
+		args, err = b.appendSelectToSQL(sql, args)
+	} else {
+		args, err = b.appendValuesToSQL(sql, args)
+	}
+	if err != nil {
+		return
+	}
+
+	if len(b.suffixes) > 0 {
+		sql.WriteString(" ")
+		args, err = appendToSql(b.suffixes, sql, " ", args)
+		if err != nil {
+			return
+		}
+	}
+
+	sqlStr = sql.String()
+	return
+}
+
+func (b *InsertBuilder) appendValuesToSQL(w io.Writer, args []any) ([]any, error) {
+	if len(b.values) == 0 {
+		return args, errors.New("values for insert statements are not set")
+	}
+
+	io.WriteString(w, "VALUES ")
+
+	valuesStrings := make([]string, len(b.values))
+	for r, row := range b.values {
+		valueStrings := make([]string, len(row))
+		for v, val := range row {
+			if vs, ok := val.(Sqlizer); ok {
+				vsql, vargs, err := vs.ToSql()
+				if err != nil {
+					return nil, err
+				}
+				valueStrings[v] = vsql
+				args = append(args, vargs...)
+			} else {
+				valueStrings[v] = "?"
+				args = append(args, val)
+			}
+		}
+		valuesStrings[r] = fmt.Sprintf("(%s)", strings.Join(valueStrings, ","))
+	}
+
+	io.WriteString(w, strings.Join(valuesStrings, ","))
+
+	return args, nil
+}
+
+func (b *InsertBuilder) appendSelectToSQL(w io.Writer, args []any) ([]any, error) {
+	if b.selectBuilder == nil {
+		return args, errors.New("select clause for insert statements are not set")
+	}
+
+	selectClause, sArgs, err := b.selectBuilder.ToSql()
+	if err != nil {
+		return args, err
+	}
+
+	io.WriteString(w, selectClause)
+	args = append(args, sArgs...)
+
+	return args, nil
+}
+
+// Prefix adds an expression to the beginning of the query
+func (b *InsertBuilder) Prefix(sql string, args ...any) *InsertBuilder {
+	return b.PrefixExpr(Expr(sql, args...))
+}
+
+// PrefixExpr adds an expression to the very beginning of the query
+func (b *InsertBuilder) PrefixExpr(expr Sqlizer) *InsertBuilder {
+	b.prefixes = append(b.prefixes, expr)
+	return b
+}
+
+// Options adds keyword options before the INTO clause of the query.
+func (b *InsertBuilder) Options(options ...string) *InsertBuilder {
+	b.options = append(b.options, options...)
+	return b
+}
+
+// Into sets the INTO clause of the query.
+func (b *InsertBuilder) Into(from string) *InsertBuilder {
+	b.into = from
+	return b
+}
+
+// Columns adds insert columns to the query.
+func (b *InsertBuilder) Columns(columns ...string) *InsertBuilder {
+	b.columns = columns
+	return b
+}
+
+// Values adds a single row's values to the query.
+func (b *InsertBuilder) Values(values ...any) *InsertBuilder {
+	b.values = append(b.values, values)
+	return b
+}
+
+// Suffix adds an expression to the end of the query
+func (b *InsertBuilder) Suffix(sql string, args ...any) *InsertBuilder {
+	return b.SuffixExpr(Expr(sql, args...))
+}
+
+// SuffixExpr adds an expression to the end of the query
+func (b *InsertBuilder) SuffixExpr(expr Sqlizer) *InsertBuilder {
+	b.suffixes = append(b.suffixes, expr)
+	return b
+}
+
+// SetMap set columns and values for insert builder from a map of column name and value
+// note that it will reset all previous columns and values was set if any
+func (b *InsertBuilder) SetMap(clauses map[string]any) *InsertBuilder {
+	// Keep the columns in a consistent order by sorting the column key string.
+	cols := make([]string, 0, len(clauses))
+	for col := range clauses {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+
+	vals := make([]any, 0, len(clauses))
+	for _, col := range cols {
+		vals = append(vals, clauses[col])
+	}
+	b.columns = cols
+	b.values = [][]any{vals}
+	return b
+}
+
+// Select set Select clause for insert query
+// If Values and Select are used, then Select has higher priority
+func (b *InsertBuilder) Select(sb *SelectBuilder) *InsertBuilder {
+	b.selectBuilder = sb
+	return b
+}
+
+func (b *InsertBuilder) StatementKeyword(keyword string) *InsertBuilder {
+	b.statementKeyword = keyword
+	return b
+}
