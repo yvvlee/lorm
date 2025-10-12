@@ -22,11 +22,11 @@ func (q Quoter) Escape(fieldOrTable string) string {
 	if q.prefix == 0 && q.suffix == 0 {
 		return fieldOrTable
 	}
-	items := strings.Split(fieldOrTable, ".")
-	return strings.Join(lo.Map(items, func(s string, _ int) string {
+	items := lo.Map(strings.Split(fieldOrTable, "."), func(s string, _ int) string {
 		s = strings.TrimRight(strings.TrimLeft(s, string(q.prefix)), string(q.suffix))
 		return string(q.prefix) + s + string(q.suffix)
-	}), ".")
+	})
+	return strings.Join(items, ".")
 }
 
 type Escaper interface {

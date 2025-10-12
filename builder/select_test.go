@@ -59,6 +59,113 @@ func TestSelectBuilderToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
+func TestCountBuilder(t *testing.T) {
+	// 测试基本的 COUNT 查询
+	t.Run("BasicCount", func(t *testing.T) {
+		b := Select("id", "name").From("users").Where("age > ?", 18)
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM users WHERE age > ?", sql)
+		assert.Equal(t, []any{18}, args)
+	})
+
+	// 测试带 GROUP BY 单个字段且无 HAVING 子句的情况
+	t.Run("SingleGroupByWithoutHaving", func(t *testing.T) {
+		b := Select("department", "COUNT(*) as cnt").
+			From("employees").
+			Where("salary > ?", 30000).
+			GroupBy("department")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(DISTINCT department) FROM employees WHERE salary > ?", sql)
+		assert.Equal(t, []any{30000}, args)
+	})
+
+	// 测试带 GROUP BY 多个字段的情况
+	t.Run("MultipleGroupBy", func(t *testing.T) {
+		b := Select("department", "location", "COUNT(*) as cnt").
+			From("employees").
+			Where("salary > ?", 30000).
+			GroupBy("department", "location")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT department, location, COUNT(*) as cnt FROM employees WHERE salary > ? GROUP BY department, location) AS sub", sql)
+		assert.Equal(t, []any{30000}, args)
+	})
+
+	// 测试带 GROUP BY 和 HAVING 的情况
+	t.Run("GroupByWithHaving", func(t *testing.T) {
+		b := Select("department", "COUNT(*) as cnt").
+			From("employees").
+			Where("salary > ?", 30000).
+			GroupBy("department").
+			Having("COUNT(*) > ?", 5)
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT department, COUNT(*) as cnt FROM employees WHERE salary > ? GROUP BY department HAVING COUNT(*) > ?) AS sub", sql)
+		assert.Equal(t, []any{30000, 5}, args)
+	})
+
+	// 测试包含逗号的 GROUP BY 表达式
+	t.Run("GroupByWithCommaExpression", func(t *testing.T) {
+		b := Select("YEAR(hire_date)", "department", "COUNT(*) as cnt").
+			From("employees").
+			GroupBy("YEAR(hire_date), department")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT YEAR(hire_date), department, COUNT(*) as cnt FROM employees GROUP BY YEAR(hire_date), department) AS sub", sql)
+		assert.Len(t, args, 0)
+	})
+
+	// 测试带有前缀和后缀的查询
+	t.Run("WithPrefixAndSuffix", func(t *testing.T) {
+		b := Select("id", "name").
+			Prefix("WITH temp AS (SELECT * FROM departments)").
+			From("users u").
+			Join("temp t ON u.dept_id = t.id").
+			Where("u.age > ?", 21).
+			Suffix("FOR UPDATE")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "WITH temp AS (SELECT * FROM departments) SELECT COUNT(1) FROM users u JOIN temp t ON u.dept_id = t.id WHERE u.age > ? FOR UPDATE", sql)
+		assert.Equal(t, []any{21}, args)
+	})
+
+	// 测试带有 JOIN 的复杂查询
+	t.Run("ComplexQueryWithJoins", func(t *testing.T) {
+		b := Select("u.id", "u.name", "d.name as dept_name").
+			From("users u").
+			Join("departments d ON u.dept_id = d.id").
+			LeftJoin("salaries s ON u.id = s.emp_id").
+			Where("u.age > ?", 21).
+			GroupBy("u.id", "u.name", "d.name")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT u.id, u.name, d.name as dept_name FROM users u JOIN departments d ON u.dept_id = d.id LEFT JOIN salaries s ON u.id = s.emp_id WHERE u.age > ? GROUP BY u.id, u.name, d.name) AS sub", sql)
+		assert.Equal(t, []any{21}, args)
+	})
+}
+
 func TestSelectBuilderFromSelect(t *testing.T) {
 	subQ := Select("c").From("d").Where(Eq{"i": 0})
 	b := Select("a", "b").FromSelect(subQ, "subq")

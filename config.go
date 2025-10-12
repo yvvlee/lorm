@@ -8,57 +8,73 @@ import (
 )
 
 type Config struct {
-	driverName        string
-	dsn               string
+	// driverName is the name of the database driver (e.g. "mysql", "postgres", etc.)
+	driverName string
+	// dsn is the data source name or connection string used to connect to the database
+	dsn string
+	// placeholderFormat specifies the format of placeholders used in SQL queries (e.g. ?, $1, :1)
 	placeholderFormat builder.PlaceholderFormat
-	escaper           names.Escaper
-	maxIdleConns      int
-	maxOpenConns      int
-	connMaxLifetime   time.Duration
-	connMaxIdleTime   time.Duration
+	// escaper is used to escape special characters in table names and column names
+	escaper names.Escaper
+	// logger is the logger instance used for logging database operations
+	logger Logger
+	// maxIdleConns is the maximum number of idle connections in the connection pool
+	maxIdleConns int
+	// maxOpenConns is the maximum number of open connections to the database
+	maxOpenConns int
+	// connMaxLifetime is the maximum amount of time a connection may be reused
+	connMaxLifetime time.Duration
+	// connMaxIdleTime is the maximum amount of time a connection may be idle
+	connMaxIdleTime time.Duration
 }
 
-// Option 是一个函数类型，用于配置Config
 type Option func(*Config)
 
-// WithPlaceholderFormat 设置占位符格式
+// WithPlaceholderFormat sets the placeholder format
 func WithPlaceholderFormat(format builder.PlaceholderFormat) Option {
 	return func(c *Config) {
 		c.placeholderFormat = format
 	}
 }
 
-// WithEscaper 设置转义器
+// WithEscaper sets the escaper
 func WithEscaper(escaper names.Escaper) Option {
 	return func(c *Config) {
 		c.escaper = escaper
 	}
 }
 
-// WithMaxIdleConns 设置最大空闲连接数
+// WithMaxIdleConns sets the maximum number of idle connections
 func WithMaxIdleConns(maxIdleConns int) Option {
 	return func(c *Config) {
 		c.maxIdleConns = maxIdleConns
 	}
 }
 
-// WithMaxOpenConns 设置最大打开连接数
+// WithMaxOpenConns sets the maximum number of open connections
 func WithMaxOpenConns(maxOpenConns int) Option {
 	return func(c *Config) {
 		c.maxOpenConns = maxOpenConns
 	}
 }
 
-// WithConnMaxLifetime 设置连接最大生命周期
+// WithConnMaxLifetime sets the maximum lifetime of a connection
 func WithConnMaxLifetime(connMaxLifetime time.Duration) Option {
 	return func(c *Config) {
 		c.connMaxLifetime = connMaxLifetime
 	}
 }
 
-// WithConnMaxIdleTime 设置连接最大空闲时间
+// WithConnMaxIdleTime sets the maximum idle time of a connection
 func WithConnMaxIdleTime(connMaxIdleTime time.Duration) Option {
 	return func(c *Config) {
 		c.connMaxIdleTime = connMaxIdleTime
+	}
+}
+
+// WithLogger sets the logger
+func WithLogger(logger Logger) Option {
+	return func(c *Config) {
+		c.logger = logger
 	}
 }

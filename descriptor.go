@@ -53,7 +53,7 @@ type Import struct {
 	Alias string
 }
 
-// ModelDescriptor 存储结构体信息
+// ModelDescriptor stores struct information
 type ModelDescriptor struct {
 	Name      string
 	TableName string
@@ -72,7 +72,7 @@ func (m *ModelDescriptor) AllFields() []string {
 	})
 }
 
-// FieldDescriptor 存储字段信息
+// FieldDescriptor stores field information
 type FieldDescriptor struct {
 	Name     string
 	FullName string

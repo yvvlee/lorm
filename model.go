@@ -86,6 +86,22 @@ func (s *JSONFieldWrapper) Value() (driver.Value, error) {
 	return json.Marshal(s.v)
 }
 
+func (s *JSONFieldWrapper) String() string {
+	if s.v == nil {
+		return ""
+	}
+	str, _ := json.MarshalString(s.v)
+	return str
+}
+
+func (s *JSONFieldWrapper) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.v)
+}
+
+func (s *JSONFieldWrapper) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, s.v)
+}
+
 func (s *JSONFieldWrapper) Scan(src any) error {
 	if v, ok := s.v.(sql.Scanner); ok {
 		return v.Scan(src)

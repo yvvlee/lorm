@@ -1,0 +1,22 @@
+DROP TABLE IF EXISTS test;
+CREATE TABLE test (
+  id BIGSERIAL PRIMARY KEY,
+  index INTEGER NOT NULL DEFAULT 0,
+  int_p INTEGER,
+  bool BOOLEAN NOT NULL DEFAULT FALSE,
+  bool_p BOOLEAN,
+  str VARCHAR(255) NOT NULL DEFAULT '',
+  str_p VARCHAR(255),
+  timestamp TIMESTAMP NOT NULL,
+  timestamp_p TIMESTAMP,
+  datetime TIMESTAMP NOT NULL,
+  datetime_p TIMESTAMP,
+  decimal NUMERIC(10,2) NOT NULL,
+  decimal_p NUMERIC(10,2),
+  int_slice VARCHAR(255) NOT NULL,
+  int_slice_p VARCHAR(255),
+  struct VARCHAR(255) NOT NULL,
+  struct_p VARCHAR(255),
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);

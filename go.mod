@@ -5,7 +5,9 @@ go 1.22.0
 require (
 	github.com/bytedance/sonic v1.14.1
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/samber/lo v1.51.0
+	github.com/lib/pq v1.10.9
+	github.com/mattn/go-sqlite3 v1.14.16
+	github.com/samber/lo v1.52.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.1

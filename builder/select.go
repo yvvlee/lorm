@@ -121,6 +121,52 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	return
 }
 
+func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
+	if len(b.groupBys) == 0 {
+		builder := &SelectBuilder{
+			prefixes:   b.prefixes,
+			options:    b.options,
+			columns:    nil,
+			from:       b.from,
+			joins:      b.joins,
+			whereParts: b.whereParts,
+			suffixes:   b.suffixes,
+		}
+		return builder.Select("COUNT(1)")
+	}
+
+	if len(b.groupBys) == 1 &&
+		len(b.havingParts) == 0 &&
+		!strings.Contains(b.groupBys[0], ",") {
+		builder := &SelectBuilder{
+			prefixes:   b.prefixes,
+			options:    b.options,
+			columns:    nil,
+			from:       b.from,
+			joins:      b.joins,
+			whereParts: b.whereParts,
+			suffixes:   b.suffixes,
+		}
+		return builder.Select(fmt.Sprintf("COUNT(DISTINCT %s)", b.groupBys[0]))
+	}
+
+	subBuilder := &SelectBuilder{
+		prefixes:    b.prefixes,
+		options:     b.options,
+		columns:     b.columns,
+		from:        b.from,
+		joins:       b.joins,
+		whereParts:  b.whereParts,
+		groupBys:    b.groupBys,
+		havingParts: b.havingParts,
+		suffixes:    b.suffixes,
+	}
+
+	return new(SelectBuilder).
+		Select("COUNT(1)").
+		FromSelect(subBuilder, "sub")
+}
+
 // Prefix adds an expression to the beginning of the query
 func (b *SelectBuilder) Prefix(sql string, args ...any) *SelectBuilder {
 	return b.PrefixExpr(Expr(sql, args...))

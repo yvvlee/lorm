@@ -23,7 +23,7 @@ func (s *DeleteStmt) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	result, err := s.engine.DB(ctx).Exec(ctx, query, args...)
+	result, err := s.engine.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}

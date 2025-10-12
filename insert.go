@@ -42,14 +42,11 @@ func inserts[T Table](ctx context.Context, engine *Engine, models []T) (sql.Resu
 	table := models[0].TableName()
 	insertBuilder := builder.Insert(table)
 	fields, values := ModelsToInsertData(models)
-	if escaper := engine.Escaper(); escaper != nil {
-		insertBuilder.Into(escaper.Escape(table))
-		insertBuilder.Columns(lo.Map(fields, func(field string, _ int) string {
-			return escaper.Escape(field)
-		})...)
-	} else {
-		insertBuilder.Columns(fields...)
-	}
+	escaper := engine.Escaper()
+	insertBuilder.Into(escaper.Escape(table))
+	insertBuilder.Columns(lo.Map(fields, func(field string, _ int) string {
+		return escaper.Escape(field)
+	})...)
 	for _, value := range values {
 		insertBuilder.Values(value...)
 	}
@@ -57,7 +54,7 @@ func inserts[T Table](ctx context.Context, engine *Engine, models []T) (sql.Resu
 	if err != nil {
 		return nil, err
 	}
-	return engine.DB(ctx).Exec(ctx, query, args...)
+	return engine.Exec(ctx, query, args...)
 }
 
 func fillCurrentTime(value any, now time.Time) {

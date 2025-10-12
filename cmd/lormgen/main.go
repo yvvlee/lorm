@@ -42,62 +42,66 @@ var (
 	fileSuffix     string
 	ignorePatterns []string
 
-	wd string //当前工作路径
+	wd string // current working directory
 
 	cmd = &cobra.Command{
 		Use:   "lormgen",
 		Short: "lormgen is a code generator for Lorm",
 		Long:  `lormgen is a code generator for Lorm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return errors.New("请提供目录路径")
-			}
-			tableNameMapper, ok := mappers[tableMapper]
-			if !ok {
-				return errors.New("不支持的表名映射")
-			}
-			if tableSuffix != "" {
-				tableNameMapper = names.NewSuffixMapper(tableNameMapper, tableSuffix)
-			}
-			if tablePrefix != "" {
-				tableNameMapper = names.NewPrefixMapper(tableNameMapper, tablePrefix)
-			}
-			fieldNameMapper, ok := mappers[fieldMapper]
-			if !ok {
-				return errors.New("不支持的字段映射")
-			}
-
-			files, err := argsToFiles(args)
-			if err != nil {
-				return fmt.Errorf("文件解析失败: %v\n", err)
-			}
-			if len(ignorePatterns) > 0 {
-				files = lo.Filter(files, func(item string, _ int) bool {
-					for _, pattern := range ignorePatterns {
-						matched, err := filepath.Match(pattern, item)
-						if err != nil {
-							panic(err)
-						}
-						if matched {
-							return false
-						}
-					}
-					return true
-				})
-			}
-			if len(files) == 0 {
-				return fmt.Errorf("没有找到符合要求的文件")
-			}
-			generator := NewGenerator(
-				tableNameMapper,
-				fieldNameMapper,
-				tagKey,
-				fileSuffix,
-			)
-			return generator.Generate(files)
+			return run(args)
 		},
 	}
 )
+
+func run(args []string) error {
+	if len(args) == 0 {
+		return errors.New("please provide directory path")
+	}
+	tableNameMapper, ok := mappers[tableMapper]
+	if !ok {
+		return errors.New("unsupported table name mapping")
+	}
+	if tableSuffix != "" {
+		tableNameMapper = names.NewSuffixMapper(tableNameMapper, tableSuffix)
+	}
+	if tablePrefix != "" {
+		tableNameMapper = names.NewPrefixMapper(tableNameMapper, tablePrefix)
+	}
+	fieldNameMapper, ok := mappers[fieldMapper]
+	if !ok {
+		return errors.New("unsupported field mapping")
+	}
+
+	files, err := argsToFiles(args)
+	if err != nil {
+		return fmt.Errorf("file parsing failed: %v\n", err)
+	}
+	if len(ignorePatterns) > 0 {
+		files = lo.Filter(files, func(item string, _ int) bool {
+			for _, pattern := range ignorePatterns {
+				matched, err := filepath.Match(pattern, item)
+				if err != nil {
+					panic(err)
+				}
+				if matched {
+					return false
+				}
+			}
+			return true
+		})
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("no matching files found")
+	}
+	generator := NewGenerator(
+		tableNameMapper,
+		fieldNameMapper,
+		tagKey,
+		fileSuffix,
+	)
+	return generator.Generate(files)
+}
 
 func main() {
 	if err := cmd.Execute(); err != nil {
@@ -110,7 +114,7 @@ func argsToFiles(args []string) ([]string, error) {
 	var files []string
 	for _, arg := range args {
 		if strings.HasSuffix(arg, "/...") {
-			// 处理 "./..." 这样的递归路径
+			// Handle recursive paths like "./..."
 			dir := strings.TrimSuffix(arg, "/...")
 			if dir == "." {
 				dir = "./"
@@ -125,19 +129,19 @@ func argsToFiles(args []string) ([]string, error) {
 				return nil
 			})
 			if err != nil {
-				return nil, fmt.Errorf("遍历目录时出错: %v", err)
+				return nil, fmt.Errorf("error traversing directory: %v", err)
 			}
 		} else {
-			// 处理单个文件或目录
+			// Handle single files or directories
 			info, err := os.Stat(arg)
 			if err != nil {
-				return nil, fmt.Errorf("无法访问路径: %v", err)
+				return nil, fmt.Errorf("cannot access path: %v", err)
 			}
 			if info.IsDir() {
-				// 如果是目录，查找其中的所有go文件
+				// If it's a directory, find all go files in it
 				items, err := os.ReadDir(arg)
 				if err != nil {
-					return nil, fmt.Errorf("读取目录失败: %v", err)
+					return nil, fmt.Errorf("failed to read directory: %v", err)
 				}
 				for _, item := range items {
 					if !item.IsDir() && isValidFile(item.Name()) {
@@ -145,7 +149,7 @@ func argsToFiles(args []string) ([]string, error) {
 					}
 				}
 			} else if isValidFile(arg) {
-				// 如果是单个文件
+				// If it's a single file
 				files = append(files, arg)
 			}
 		}
@@ -170,10 +174,10 @@ func initWd() {
 func initGoImports() {
 	path, err := exec.LookPath("goimports")
 	if err != nil || path == "" {
-		fmt.Println(`未找到goimports, 执行安装 go install golang.org/x/tools/cmd/goimports@latest`)
+		fmt.Println(`goimports not found, installing with go install golang.org/x/tools/cmd/goimports@latest`)
 		err = exec.Command("go", "install", "golang.org/x/tools/cmd/goimports@latest").Run()
 		if err != nil {
-			panic(fmt.Errorf("goimports 安装失败: %+v", err))
+			panic(fmt.Errorf("goimports installation failed: %+v", err))
 		}
 	}
 }

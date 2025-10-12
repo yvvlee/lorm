@@ -97,7 +97,7 @@ func (b *CaseBuilder) When(when any, then any) *CaseBuilder {
 	return b
 }
 
-// what sets optional "ELSE ..." part for CASE construct
+// Else sets optional "ELSE ..." part for CASE construct
 func (b *CaseBuilder) Else(expr any) *CaseBuilder {
 	b.els = newPart(expr)
 	return b
