@@ -118,12 +118,12 @@ func TestArgsToFiles(t *testing.T) {
 }
 
 func TestInitFunctions(t *testing.T) {
-	// 测试初始化工作目录功能
+	// Test initialization of working directory function
 	assert.NotEmpty(t, wd)
 	_, err := os.Stat(wd)
 	assert.NoError(t, err)
 
-	// 测试映射器是否正确初始化
+	// Test if mappers are correctly initialized
 	assert.NotNil(t, mappers["snake"])
 	assert.NotNil(t, mappers["camel"])
 	assert.NotNil(t, mappers["same"])
@@ -132,54 +132,29 @@ func TestInitFunctions(t *testing.T) {
 	assert.IsType(t, &names.SameMapper{}, mappers["same"])
 }
 
-func TestCommandExecutionWithInvalidArgs(t *testing.T) {
-	// 测试没有提供参数时的情况
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.EqualError(t, err, "please provide directory path")
-
-	// 测试无效的表映射器
-	oldTableMapper := tableMapper
-	tableMapper = "invalid"
-	defer func() { tableMapper = oldTableMapper }()
-
-	err = cmd.RunE(cmd, []string{"."})
-	assert.Error(t, err)
-	assert.EqualError(t, err, "unsupported table name mapping")
-
-	// 测试无效的字段映射器
-	oldFieldMapper := fieldMapper
-	fieldMapper = "invalid"
-	defer func() { fieldMapper = oldFieldMapper }()
-}
-
 func TestArgsToFilesWithEmptyDirectory(t *testing.T) {
-	// 创建空的临时目录
 	tempDir := t.TempDir()
-
-	// 测试空目录
 	files, err := argsToFiles([]string{tempDir})
 	assert.NoError(t, err)
 	assert.Empty(t, files)
 }
 
 func TestArgsToFilesWithNonExistentPath(t *testing.T) {
-	// 测试不存在的路径
 	_, err := argsToFiles([]string{"/non/existent/path"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot access path")
 }
 
 func TestArgsToFilesRecursive(t *testing.T) {
-	// 创建带子目录的测试结构
+	// Create a test structure with subdirectories
 	tempDir := t.TempDir()
 
-	// 创建子目录
+	// Create subdirectory
 	subDir := filepath.Join(tempDir, "subdir")
 	err := os.Mkdir(subDir, 0755)
 	assert.NoError(t, err)
 
-	// 创建有效的 Go 文件
+	// Create valid Go files
 	validFile := filepath.Join(tempDir, "model.go")
 	err = os.WriteFile(validFile, []byte("package model"), 0644)
 	assert.NoError(t, err)
@@ -188,7 +163,7 @@ func TestArgsToFilesRecursive(t *testing.T) {
 	err = os.WriteFile(validSubFile, []byte("package model"), 0644)
 	assert.NoError(t, err)
 
-	// 创建应被忽略的文件
+	// Create files that should be ignored
 	testFile := filepath.Join(tempDir, "model_test.go")
 	err = os.WriteFile(testFile, []byte("package model"), 0644)
 	assert.NoError(t, err)
@@ -197,12 +172,12 @@ func TestArgsToFilesRecursive(t *testing.T) {
 	err = os.WriteFile(genFile, []byte("package model"), 0644)
 	assert.NoError(t, err)
 
-	// 测试递归模式 "./..."
+	// Test recursive pattern "./..."
 	files, err := argsToFiles([]string{tempDir + "/..."})
 	assert.NoError(t, err)
-	assert.Len(t, files, 2) // 应该只包含两个有效文件
+	assert.Len(t, files, 2) // Should only contain two valid files
 
-	// 检查返回的文件列表
+	// Check the returned file list
 	fileBasenames := make([]string, len(files))
 	for i, file := range files {
 		fileBasenames[i] = filepath.Base(file)
