@@ -1,16 +1,15 @@
-package test
+package lorm
 
 import (
 	"time"
 
 	"github.com/shopspring/decimal"
-	"github.com/yvvlee/lorm"
 )
 
 type Test struct {
-	lorm.UnimplementedModel
+	UnimplementedTable
 	ID         uint64 `lorm:"primary_key,auto_increment"`
-	Int        int    `lorm:"index"`
+	Int        int    `lorm:"index"` // db field is "index", struct field is "Int"
 	IntP       *int
 	Bool       bool
 	BoolP      *bool
@@ -22,10 +21,12 @@ type Test struct {
 	DatetimeP  *time.Time
 	Decimal    decimal.Decimal
 	DecimalP   *decimal.Decimal
-	IntSlice   []int  `lorm:"json"`
-	IntSliceP  *[]int `lorm:"json"`
-	Struct     Sub    `lorm:"json"`
-	StructP    *Sub   `lorm:"json"`
+	IntSlice   []int     `lorm:"json"`
+	IntSliceP  *[]int    `lorm:"json"`
+	Struct     Sub       `lorm:"json"`
+	StructP    *Sub      `lorm:"json"`
+	CreatedAt  time.Time `lorm:"created"`
+	UpdatedAt  time.Time `lorm:"updated"`
 }
 
 type Sub struct {

@@ -17,9 +17,13 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 			return escaper.Escape(field)
 		})
 	}
+	selectBuilder := builder.Select(fields...)
+	if table, ok := any(t).(Table); ok {
+		selectBuilder.From(table.TableName())
+	}
 	return &QueryModelStmt[T]{
 		engine:  engine,
-		builder: builder.Select(fields...),
+		builder: selectBuilder,
 	}
 }
 
@@ -35,7 +39,7 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 		return t, err
 	}
 	res := t.New()
-	err = s.engine.DB(ctx).Query(ctx, NewModelScanner(res), query, args...)
+	err = s.engine.Query(ctx, NewModelScanner(res), query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, nil
@@ -50,7 +54,7 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return s.engine.DB(ctx).Exist(ctx, query, args)
+	return s.engine.Exist(ctx, query, args...)
 }
 
 func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
@@ -59,7 +63,7 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 		return nil, err
 	}
 	var t []T
-	err = s.engine.DB(ctx).Query(ctx, NewModelsScanner(&t), query, args...)
+	err = s.engine.Query(ctx, NewModelsScanner(&t), query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -69,8 +73,36 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 	return t, nil
 }
 
+func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint64, error) {
+	if size == 0 {
+		return nil, 0, errors.New("size can not be zero")
+	}
+	if page == 0 {
+		page = 1
+	}
+	offset := (page - 1) * size
+	s.builder.Limit(size).Offset(offset)
+	countStmt := QueryCol[uint64](s.engine)
+	countStmt.builder = s.builder.ToCountBuilder()
+	count, ok, err := countStmt.Get(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !ok || count == 0 {
+		return nil, 0, nil
+	}
+	if offset >= count {
+		return nil, count, nil
+	}
+	list, err := s.Find(ctx)
+	if err != nil {
+		return nil, count, err
+	}
+	return list, count, nil
+}
+
 // Prefix adds an expression to the beginning of the query
-func (s *QueryModelStmt[T]) Prefix(sql string, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Prefix(sql string, args ...any) *QueryModelStmt[T] {
 	s.builder.Prefix(sql, args...)
 	return s
 }
@@ -122,7 +154,7 @@ func (s *QueryModelStmt[T]) RemoveColumns() *QueryModelStmt[T] {
 // the columns string, for example:
 //
 //	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
-func (s *QueryModelStmt[T]) Column(column interface{}, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Column(column any, args ...any) *QueryModelStmt[T] {
 	s.builder.AddColumn(column, args...)
 	return s
 }
@@ -140,37 +172,37 @@ func (s *QueryModelStmt[T]) FromSelect(from *builder.SelectBuilder, alias string
 }
 
 // JoinClause adds a join clause to the query.
-func (s *QueryModelStmt[T]) JoinClause(pred interface{}, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) JoinClause(pred any, args ...any) *QueryModelStmt[T] {
 	s.builder.JoinClause(pred, args...)
 	return s
 }
 
 // Join adds a JOIN clause to the query.
-func (s *QueryModelStmt[T]) Join(join string, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Join(join string, rest ...any) *QueryModelStmt[T] {
 	s.builder.Join(join, rest...)
 	return s
 }
 
 // LeftJoin adds a LEFT JOIN clause to the query.
-func (s *QueryModelStmt[T]) LeftJoin(join string, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) LeftJoin(join string, rest ...any) *QueryModelStmt[T] {
 	s.builder.LeftJoin(join, rest...)
 	return s
 }
 
 // RightJoin adds a RIGHT JOIN clause to the query.
-func (s *QueryModelStmt[T]) RightJoin(join string, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) RightJoin(join string, rest ...any) *QueryModelStmt[T] {
 	s.builder.RightJoin(join, rest...)
 	return s
 }
 
 // InnerJoin adds a INNER JOIN clause to the query.
-func (s *QueryModelStmt[T]) InnerJoin(join string, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) InnerJoin(join string, rest ...any) *QueryModelStmt[T] {
 	s.builder.InnerJoin(join, rest...)
 	return s
 }
 
 // CrossJoin adds a CROSS JOIN clause to the query.
-func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...any) *QueryModelStmt[T] {
 	s.builder.CrossJoin(join, rest...)
 	return s
 }
@@ -187,7 +219,7 @@ func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryMo
 // If the expression has SQL placeholders then a set of arguments must be passed
 // as well, one for each placeholder.
 //
-// map[string]interface{} OR Eq - map of SQL expressions to values. Each key is
+// map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
 // bound to the placeholder. If the value is nil, the expression will be "<key>
 // IS NULL". If the value is an array or slice, the expression will be "<key> IN
@@ -195,7 +227,7 @@ func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryMo
 // are ANDed together.
 //
 // Where will panic if pred isn't any of the above types.
-func (s *QueryModelStmt[T]) Where(pred interface{}, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Where(pred any, args ...any) *QueryModelStmt[T] {
 	s.builder.Where(pred, args...)
 	return s
 }
@@ -209,13 +241,13 @@ func (s *QueryModelStmt[T]) GroupBy(groupBys ...string) *QueryModelStmt[T] {
 // Having adds an expression to the HAVING clause of the query.
 //
 // See Where.
-func (s *QueryModelStmt[T]) Having(pred interface{}, rest ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Having(pred any, rest ...any) *QueryModelStmt[T] {
 	s.builder.Having(pred, rest...)
 	return s
 }
 
 // OrderByClause adds ORDER BY clause to the query.
-func (s *QueryModelStmt[T]) OrderByClause(pred interface{}, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) OrderByClause(pred any, args ...any) *QueryModelStmt[T] {
 	s.builder.Having(pred, args...)
 	return s
 }
@@ -250,7 +282,7 @@ func (s *QueryModelStmt[T]) RemoveOffset() *QueryModelStmt[T] {
 }
 
 // Suffix adds an expression to the end of the query
-func (s *QueryModelStmt[T]) Suffix(sql string, args ...interface{}) *QueryModelStmt[T] {
+func (s *QueryModelStmt[T]) Suffix(sql string, args ...any) *QueryModelStmt[T] {
 	s.builder.Suffix(sql, args...)
 	return s
 }
@@ -279,7 +311,7 @@ func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	if err != nil {
 		return t, false, err
 	}
-	err = s.engine.DB(ctx).Query(ctx, NewColScanner(&t), query, args...)
+	err = s.engine.Query(ctx, NewColScanner(&t), query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, false, nil
@@ -295,7 +327,7 @@ func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
 		return nil, err
 	}
 	var t []T
-	err = s.engine.DB(ctx).Query(ctx, NewColsScanner(&t), query, args...)
+	err = s.engine.Query(ctx, NewColsScanner(&t), query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -306,7 +338,7 @@ func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
 }
 
 // Prefix adds an expression to the beginning of the query
-func (s *QueryColStmt[T]) Prefix(sql string, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Prefix(sql string, args ...any) *QueryColStmt[T] {
 	s.builder.Prefix(sql, args...)
 	return s
 }
@@ -348,7 +380,7 @@ func (s *QueryColStmt[T]) RemoveColumns() *QueryColStmt[T] {
 // the columns string, for example:
 //
 //	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
-func (s *QueryColStmt[T]) Column(column interface{}, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Column(column any, args ...any) *QueryColStmt[T] {
 	s.builder.AddColumn(column, args...)
 	return s
 }
@@ -366,37 +398,37 @@ func (s *QueryColStmt[T]) FromSelect(from *builder.SelectBuilder, alias string) 
 }
 
 // JoinClause adds a join clause to the query.
-func (s *QueryColStmt[T]) JoinClause(pred interface{}, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) JoinClause(pred any, args ...any) *QueryColStmt[T] {
 	s.builder.JoinClause(pred, args...)
 	return s
 }
 
 // Join adds a JOIN clause to the query.
-func (s *QueryColStmt[T]) Join(join string, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Join(join string, rest ...any) *QueryColStmt[T] {
 	s.builder.Join(join, rest...)
 	return s
 }
 
 // LeftJoin adds a LEFT JOIN clause to the query.
-func (s *QueryColStmt[T]) LeftJoin(join string, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) LeftJoin(join string, rest ...any) *QueryColStmt[T] {
 	s.builder.LeftJoin(join, rest...)
 	return s
 }
 
 // RightJoin adds a RIGHT JOIN clause to the query.
-func (s *QueryColStmt[T]) RightJoin(join string, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) RightJoin(join string, rest ...any) *QueryColStmt[T] {
 	s.builder.RightJoin(join, rest...)
 	return s
 }
 
 // InnerJoin adds a INNER JOIN clause to the query.
-func (s *QueryColStmt[T]) InnerJoin(join string, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) InnerJoin(join string, rest ...any) *QueryColStmt[T] {
 	s.builder.InnerJoin(join, rest...)
 	return s
 }
 
 // CrossJoin adds a CROSS JOIN clause to the query.
-func (s *QueryColStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) CrossJoin(join string, rest ...any) *QueryColStmt[T] {
 	s.builder.CrossJoin(join, rest...)
 	return s
 }
@@ -413,7 +445,7 @@ func (s *QueryColStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryColS
 // If the expression has SQL placeholders then a set of arguments must be passed
 // as well, one for each placeholder.
 //
-// map[string]interface{} OR Eq - map of SQL expressions to values. Each key is
+// map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
 // bound to the placeholder. If the value is nil, the expression will be "<key>
 // IS NULL". If the value is an array or slice, the expression will be "<key> IN
@@ -421,7 +453,7 @@ func (s *QueryColStmt[T]) CrossJoin(join string, rest ...interface{}) *QueryColS
 // are ANDed together.
 //
 // Where will panic if pred isn't any of the above types.
-func (s *QueryColStmt[T]) Where(pred interface{}, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Where(pred any, args ...any) *QueryColStmt[T] {
 	s.builder.Where(pred, args...)
 	return s
 }
@@ -435,13 +467,13 @@ func (s *QueryColStmt[T]) GroupBy(groupBys ...string) *QueryColStmt[T] {
 // Having adds an expression to the HAVING clause of the query.
 //
 // See Where.
-func (s *QueryColStmt[T]) Having(pred interface{}, rest ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Having(pred any, rest ...any) *QueryColStmt[T] {
 	s.builder.Having(pred, rest...)
 	return s
 }
 
 // OrderByClause adds ORDER BY clause to the query.
-func (s *QueryColStmt[T]) OrderByClause(pred interface{}, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) OrderByClause(pred any, args ...any) *QueryColStmt[T] {
 	s.builder.Having(pred, args...)
 	return s
 }
@@ -476,7 +508,7 @@ func (s *QueryColStmt[T]) RemoveOffset() *QueryColStmt[T] {
 }
 
 // Suffix adds an expression to the end of the query
-func (s *QueryColStmt[T]) Suffix(sql string, args ...interface{}) *QueryColStmt[T] {
+func (s *QueryColStmt[T]) Suffix(sql string, args ...any) *QueryColStmt[T] {
 	s.builder.Suffix(sql, args...)
 	return s
 }

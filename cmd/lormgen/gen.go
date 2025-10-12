@@ -99,17 +99,17 @@ func (g *Generator) generatedFilePath(originFile string) string {
 }
 
 func (g *Generator) load(files []string) ([]*packages.Package, error) {
-	// 配置加载选项
+	// Configure loading options
 	cfg := &packages.Config{
-		Mode: packages.NeedName | // 需要包名
-			packages.NeedFiles | // 需要构成包的 Go 源文件名
-			packages.NeedCompiledGoFiles | // 需要最终参与编译的 Go 源文件名
-			packages.NeedImports | // 需要包的依赖关系
-			packages.NeedDeps | // @Required 确保传递性依赖被解析
-			packages.NeedTypes | // 需要包的类型信息 (*types.Package)
-			packages.NeedTypesSizes | // 需要类型的大小和对齐信息
-			packages.NeedSyntax | // 需要包的 AST (*ast.File)
-			packages.NeedTypesInfo, // 需要类型检查后的详细信息 (*types.Info)
+		Mode: packages.NeedName | // Package name required
+			packages.NeedFiles | // Need Go source file names that make up the package
+			packages.NeedCompiledGoFiles | // Need Go source file names that participate in final compilation
+			packages.NeedImports | // Need package dependencies
+			packages.NeedDeps | // @Required Ensure transitive dependencies are resolved
+			packages.NeedTypes | // Need package type information (*types.Package)
+			packages.NeedTypesSizes | // Need size and alignment information for types
+			packages.NeedSyntax | // Need package AST (*ast.File)
+			packages.NeedTypesInfo, // Need detailed information after type checking (*types.Info)
 		Fset: g.fileSet,
 	}
 
@@ -118,14 +118,14 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 		return nil, fmt.Errorf("failed to load packages: %v", err)
 	}
 
-	// 检查是否有错误，例如语法错误
+	// Check for errors, such as syntax errors
 	if packages.PrintErrors(pkgs) > 0 {
 		return nil, errors.New("packages contain errors")
 	}
 	return pkgs, nil
 }
 
-// extractFile 从AST文件中提取结构体信息
+// extractFile extracts struct information from AST file
 func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 	lormImportSpec, ok := lo.Find(file.Imports, func(item *ast.ImportSpec) bool {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
@@ -180,7 +180,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 					}
 					var hasModel bool
 					fields := lo.Filter(structType.Fields.List, func(field *ast.Field, _ int) bool {
-						//检查是否嵌入了lorm.UnimplementedTable或lorm.UnimplementedModel
+						// Check if lorm.UnimplementedTable or lorm.UnimplementedModel is embedded
 						if len(field.Names) > 0 {
 							return true
 						}
@@ -188,6 +188,9 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 						if fieldType == unimplementedTable {
 							hasModel = true
 							structInfo.TableName, _ = parseTag(field, g.tagKey)
+							if structInfo.TableName == "" {
+								structInfo.TableName = g.tableMapper.ConvertName(structInfo.Name)
+							}
 							return false
 						}
 						if fieldType == unimplementedModel {
@@ -203,7 +206,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 					// 遍历结构体字段
 					for _, field := range fields {
 						if len(field.Names) == 0 {
-							//内嵌字段
+							// Embedded field
 							embedFieldPrefix, _ := parseTag(field, g.tagKey)
 							if ident, ok := field.Type.(*ast.Ident); ok {
 								if ts, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
@@ -222,7 +225,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 								}
 							}
 						} else {
-							// 普通字段
+							// Regular field
 							fieldList := g.parseField(field)
 							if len(fields) > 0 {
 								structInfo.Fields = append(structInfo.Fields, fieldList...)
@@ -250,7 +253,7 @@ func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
 		}
 		if i == len(field.Names)-1 {
 			fieldInfo.Flag = flag
-			//字段聚合声明时tag只对最后一个字段生效，eg:  fieldA, fieldB string `lorm:"field_b"`
+			// When fields are declared in aggregation, the tag only takes effect for the last field, eg: fieldA, fieldB string `lorm:"field_b"`
 			if dbField != "" {
 				fieldInfo.DBField = dbField
 			}
@@ -285,7 +288,7 @@ func parseFlag(flags *[]string, key string) bool {
 	return length != len(*flags)
 }
 
-// exprToString 将表达式转换为字符串
+// exprToString converts an expression to a string
 func exprToString(expr ast.Expr) string {
 	switch x := expr.(type) {
 	case *ast.Ident:
@@ -303,12 +306,12 @@ func exprToString(expr ast.Expr) string {
 	}
 }
 
-// generateCode 为结构体生成代码
+// generateCode generates code for structs
 func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
 	var buf bytes.Buffer
 	err := modelTpl.Execute(&buf, fileInfo)
 	if err != nil {
-		return nil, fmt.Errorf("执行模板失败: %v\n", err)
+		return nil, fmt.Errorf("template execution failed: %v\n", err)
 	}
 	return format.Source(buf.Bytes())
 }

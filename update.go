@@ -3,6 +3,7 @@ package lorm
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/samber/lo"
 	"github.com/yvvlee/lorm/builder"
@@ -25,7 +26,7 @@ func (s *UpdateStmt) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	result, err := s.engine.DB(ctx).Exec(ctx, query, args...)
+	result, err := s.engine.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -38,7 +39,7 @@ func (s *UpdateStmt) Table(table string) *UpdateStmt {
 }
 
 // Prefix adds an expression to the beginning of the query
-func (s *UpdateStmt) Prefix(sql string, args ...interface{}) *UpdateStmt {
+func (s *UpdateStmt) Prefix(sql string, args ...any) *UpdateStmt {
 	s.builder.Prefix(sql, args...)
 	return s
 }
@@ -56,11 +57,9 @@ func (s *UpdateStmt) Set(column string, value any) *UpdateStmt {
 }
 
 func (s *UpdateStmt) SetModel(model Model) *UpdateStmt {
+	escaper := s.engine.Escaper()
 	if t, ok := model.(Table); ok {
-		s.builder.Table(t.TableName())
-		if escaper := s.engine.Escaper(); escaper != nil {
-			s.builder.Table(escaper.Escape(t.TableName()))
-		}
+		s.builder.Table(escaper.Escape(t.TableName()))
 	}
 	fieldMap := model.LormFieldMap()
 	descriptor := model.LormModelDescriptor()
@@ -69,11 +68,16 @@ func (s *UpdateStmt) SetModel(model Model) *UpdateStmt {
 		s.builder.Where(lo.PickByKeys(fieldMap, primaryKeys))
 	}
 	updatedFields := descriptor.FlagFields(FlagUpdated)
-	dataMap := lo.MapValues(fieldMap, func(value any, key string) any {
+	jsonFields := descriptor.FlagFields(FlagJson)
+	now := time.Now()
+	dataMap := lo.MapEntries(fieldMap, func(key string, value any) (string, any) {
 		if slices.Contains(updatedFields, key) {
-			return NewJSONFieldWrapper(value)
+			fillCurrentTime(value, now)
 		}
-		return value
+		if slices.Contains(jsonFields, key) {
+			value = NewJSONFieldWrapper(value)
+		}
+		return escaper.Escape(key), value
 	})
 	s.builder.SetMap(dataMap)
 	return s
@@ -117,7 +121,7 @@ func (s *UpdateStmt) Offset(offset uint64) *UpdateStmt {
 }
 
 // Suffix adds an expression to the end of the query
-func (s *UpdateStmt) Suffix(sql string, args ...interface{}) *UpdateStmt {
+func (s *UpdateStmt) Suffix(sql string, args ...any) *UpdateStmt {
 	s.builder.Suffix(sql, args...)
 	return s
 }

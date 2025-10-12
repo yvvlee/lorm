@@ -15,7 +15,6 @@ import (
 var testdata embed.FS
 
 func Test_Generate(t *testing.T) {
-	// 提取结构体信息
 	generator := NewGenerator(
 		new(names.SnakeMapper),
 		new(names.SnakeMapper),
@@ -40,7 +39,7 @@ func Test_Generate(t *testing.T) {
 	assert.Equal(t, string(exceptFileInfoJson), fileInfoJson)
 	newFile1, err := generator.generateFile(fileInfo)
 	assert.Nil(t, err)
-	//defer os.Remove(newFile1)
+	defer os.Remove(newFile1)
 	content, err := os.ReadFile(newFile1)
 	assert.Nil(t, err)
 	exceptContent, err := testdata.ReadFile("testdata/user_lorm_gen.go")
@@ -56,7 +55,7 @@ func Test_Generate(t *testing.T) {
 	assert.Equal(t, string(exceptFileInfoJson), fileInfoJson)
 	newFile2, err := generator.generateFile(fileInfo)
 	assert.Nil(t, err)
-	//defer os.Remove(newFile2)
+	defer os.Remove(newFile2)
 	content, err = os.ReadFile(newFile2)
 	assert.Nil(t, err)
 	exceptContent, err = testdata.ReadFile("testdata/user_address_lorm_gen.go")
