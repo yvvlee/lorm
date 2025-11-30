@@ -49,14 +49,30 @@ func TestEqEmptyToSql(t *testing.T) {
 
 func TestEqInToSql(t *testing.T) {
 	b := Eq{"id": []int{1, 2, 3}}
-	sql, args, err := b.ToSql()
-	assert.NoError(t, err)
+	_, _, err := b.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+}
 
-	expectedSql := "id IN (?,?,?)"
-	assert.Equal(t, expectedSql, sql)
+func TestEqNotInToSql(t *testing.T) {
+	b := NotEq{"id": []int{1, 2, 3}}
+	_, _, err := b.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+}
 
-	expectedArgs := []any{1, 2, 3}
-	assert.Equal(t, expectedArgs, args)
+func TestEqInEmptyToSql(t *testing.T) {
+	b := Eq{"id": []int{}}
+	_, _, err := b.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+}
+
+func TestNotEqInEmptyToSql(t *testing.T) {
+	b := NotEq{"id": []int{}}
+	_, _, err := b.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
 }
 
 func TestNotEqToSql(t *testing.T) {
@@ -71,8 +87,20 @@ func TestNotEqToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
-func TestEqNotInToSql(t *testing.T) {
-	b := NotEq{"id": []int{1, 2, 3}}
+func TestInToSql(t *testing.T) {
+	b := In{"id", []int{1, 2, 3}}
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSql := "id IN (?,?,?)"
+	assert.Equal(t, expectedSql, sql)
+
+	expectedArgs := []any{1, 2, 3}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestNotInToSql(t *testing.T) {
+	b := NotIn{"id", []int{1, 2, 3}}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -83,8 +111,8 @@ func TestEqNotInToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
-func TestEqInEmptyToSql(t *testing.T) {
-	b := Eq{"id": []int{}}
+func TestInEmptyToSql(t *testing.T) {
+	b := In{"id", []int{}}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -95,8 +123,8 @@ func TestEqInEmptyToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
-func TestNotEqInEmptyToSql(t *testing.T) {
-	b := NotEq{"id": []int{}}
+func TestNotInEmptyToSql(t *testing.T) {
+	b := NotIn{"id", []int{}}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -289,30 +317,26 @@ func TestNotNilPointer(t *testing.T) {
 	s := []int{1, 2, 3}
 	ids := &s
 	eq = Eq{"id": ids}
-	sql, args, err = eq.ToSql()
-	assert.NoError(t, err)
-	assert.Equal(t, []any{1, 2, 3}, args)
-	assert.Equal(t, "id IN (?,?,?)", sql)
+	_, _, err = eq.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
 
 	neq = NotEq{"id": ids}
-	sql, args, err = neq.ToSql()
-	assert.NoError(t, err)
-	assert.Equal(t, []any{1, 2, 3}, args)
-	assert.Equal(t, "id NOT IN (?,?,?)", sql)
+	_, _, err = neq.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
 
 	a := [3]int{1, 2, 3}
 	ida := &a
 	eq = Eq{"id": ida}
-	sql, args, err = eq.ToSql()
-	assert.NoError(t, err)
-	assert.Equal(t, []any{1, 2, 3}, args)
-	assert.Equal(t, "id IN (?,?,?)", sql)
+	_, _, err = eq.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
 
 	neq = NotEq{"id": ida}
-	sql, args, err = neq.ToSql()
-	assert.NoError(t, err)
-	assert.Equal(t, []any{1, 2, 3}, args)
-	assert.Equal(t, "id NOT IN (?,?,?)", sql)
+	_, _, err = neq.ToSql()
+	assert.Error(t, err)
+	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
 }
 
 func TestEmptyAndToSql(t *testing.T) {

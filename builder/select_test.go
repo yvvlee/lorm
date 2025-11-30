@@ -18,7 +18,7 @@ func TestSelectBuilderToSql(t *testing.T) {
 		AddColumn("c").
 		AddColumn("IF(d IN ("+Placeholders(3)+"), 1, 0) as stat_column", 1, 2, 3).
 		AddColumn(Expr("a > ?", 100)).
-		AddColumn(Alias(Eq{"b": []int{101, 102, 103}}, "b_alias")).
+		AddColumn(Alias(In{"b", []int{101, 102, 103}}, "b_alias")).
 		AddColumn(Alias(subQ, "subq")).
 		From("e").
 		JoinClause("CROSS JOIN j1").
@@ -30,7 +30,7 @@ func TestSelectBuilderToSql(t *testing.T) {
 		Where("f = ?", 4).
 		Where(Eq{"g": 5}).
 		Where(map[string]any{"h": 6}).
-		Where(Eq{"i": []int{7, 8, 9}}).
+		Where(In{"i", []int{7, 8, 9}}).
 		Where(Or{Expr("j = ?", 10), And{Eq{"k": 11}, Expr("true")}}).
 		GroupBy("l").
 		Having("m = n").
