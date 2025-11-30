@@ -267,4 +267,29 @@ func testEngine(t *testing.T, engine *Engine) {
 	assert.Nil(t, err)
 	assert.True(t, exist)
 	assert.Equal(t, id, uint64(1))
+
+	// QueryModelStmt.Get 空结果
+	t.Run("QueryModel Get empty", func(t *testing.T) {
+		res, err := Query[*Test](engine).Where("id = ?", -1).Limit(1).Get(ctx)
+		assert.Nil(t, err)
+		assert.Nil(t, res)
+	})
+
+	// QueryModelStmt.Find 空/非空
+	t.Run("QueryModel Find variants", func(t *testing.T) {
+		list, err := Query[*Test](engine).Where("id = ?", -1).Find(ctx)
+		assert.Nil(t, err)
+		assert.Nil(t, list)
+		list, err = Query[*Test](engine).Where("id > ?", 0).Find(ctx)
+		assert.Nil(t, err)
+		assert.True(t, len(list) > 0)
+	})
+
+	// InsertAll 单元素分支
+	t.Run("InsertAll single branch", func(t *testing.T) {
+		m := &Test{Int: 100, Str: "single", Timestamp: testTime, Datetime: testTime, Decimal: decimal.NewFromFloat(1.23), IntSlice: []int{1}, Struct: Sub{ID: 1, Name: "x"}}
+		rows, err := InsertAll(ctx, engine, []*Test{m})
+		assert.Nil(t, err)
+		assert.Equal(t, int64(1), rows)
+	})
 }
