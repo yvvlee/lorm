@@ -147,18 +147,14 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 	}
 
 	var (
-		exprs       []string
-		equalOpr    = "="
-		inOpr       = "IN"
-		nullOpr     = "IS"
-		inEmptyExpr = sqlFalse
+		exprs    []string
+		equalOpr = "="
+		nullOpr  = "IS"
 	)
 
 	if useNotOpr {
 		equalOpr = "<>"
-		inOpr = "NOT IN"
 		nullOpr = "IS NOT"
-		inEmptyExpr = sqlTrue
 	}
 
 	sortedKeys := getSortedKeys(eq)
@@ -186,22 +182,11 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 			expr = fmt.Sprintf("%s %s NULL", key, nullOpr)
 		} else {
 			if isListType(val) {
-				valVal := reflect.ValueOf(val)
-				if valVal.Len() == 0 {
-					expr = inEmptyExpr
-					if args == nil {
-						args = []any{}
-					}
-				} else {
-					for i := 0; i < valVal.Len(); i++ {
-						args = append(args, valVal.Index(i).Interface())
-					}
-					expr = fmt.Sprintf("%s %s (%s)", key, inOpr, Placeholders(valVal.Len()))
-				}
-			} else {
-				expr = fmt.Sprintf("%s %s ?", key, equalOpr)
-				args = append(args, val)
+				err = fmt.Errorf("cannot use array or slice with Eq operators")
+				return
 			}
+			expr = fmt.Sprintf("%s %s ?", key, equalOpr)
+			args = append(args, val)
 		}
 		exprs = append(exprs, expr)
 	}
@@ -221,6 +206,77 @@ type NotEq Eq
 
 func (neq NotEq) ToSql() (sql string, args []any, err error) {
 	return Eq(neq).toSQL(true)
+}
+
+// In is syntactic sugar for IN conditions
+type In struct {
+	Col string
+	Val any
+}
+
+func (in In) toSql(useNotOpr bool) (sql string, args []any, err error) {
+	var (
+		inOpr       = "IN"
+		inEmptyExpr = sqlFalse
+	)
+
+	if useNotOpr {
+		inOpr = "NOT IN"
+		inEmptyExpr = sqlTrue
+	}
+
+	val := in.Val
+
+	switch v := val.(type) {
+	case driver.Valuer:
+		if val, err = v.Value(); err != nil {
+			return
+		}
+	}
+
+	r := reflect.ValueOf(val)
+	if r.Kind() == reflect.Ptr {
+		if r.IsNil() {
+			val = nil
+		} else {
+			val = r.Elem().Interface()
+		}
+	}
+
+	if val == nil {
+		err = fmt.Errorf("cannot use null with in operators")
+		return
+	}
+
+	if isListType(val) {
+		valVal := reflect.ValueOf(val)
+		if valVal.Len() == 0 {
+			sql = inEmptyExpr
+			if args == nil {
+				args = []any{}
+			}
+		} else {
+			for i := 0; i < valVal.Len(); i++ {
+				args = append(args, valVal.Index(i).Interface())
+			}
+			sql = fmt.Sprintf("%s %s (%s)", in.Col, inOpr, Placeholders(valVal.Len()))
+		}
+	} else {
+		sql = fmt.Sprintf("%s %s (?)", in.Col, inOpr)
+		args = append(args, val)
+	}
+	return
+}
+
+func (in In) ToSql() (sql string, args []any, err error) {
+	return in.toSql(false)
+}
+
+// NotIn is syntactic sugar for NOT IN conditions
+type NotIn In
+
+func (ni NotIn) ToSql() (sql string, args []any, err error) {
+	return In(ni).toSql(true)
 }
 
 // Like is syntactic sugar for use with LIKE conditions.

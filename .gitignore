@@ -2,7 +2,10 @@
 .DS_Store
 
 # ide
-.idea/*
-.fleet/*
+.idea
+.fleet
+.vscode
+.windsurf
+.cursor
 
 bin/*
