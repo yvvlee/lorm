@@ -34,16 +34,19 @@ import (
     }
 
     func (m *{{$struct.Name}}) Fields() *{{$struct.Name}}_Fields {
-        return new({{$struct.Name}}_Fields)
+        return default_{{$struct.Name}}_Fields
     }
+
+var default_{{$struct.Name}}_Fields = new({{$struct.Name}}_Fields)
 
     type {{$struct.Name}}_Fields struct {
         alias string
     }
 
     func (f *{{$struct.Name}}_Fields) WithAlias(alias string) *{{$struct.Name}}_Fields {
-        f.alias = alias
-        return f
+        o := new({{$struct.Name}}_Fields)
+        o.alias = alias
+        return o
     }
 
     {{- range $struct.Fields }}

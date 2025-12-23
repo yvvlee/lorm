@@ -1,11 +1,12 @@
 package main
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/yvvlee/lorm/names"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/yvvlee/lorm/names"
 )
 
 func TestGenerateEndToEnd(t *testing.T) {

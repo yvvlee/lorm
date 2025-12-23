@@ -2,8 +2,9 @@ package lorm
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestScanRowErrorBranches(t *testing.T) {
