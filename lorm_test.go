@@ -63,6 +63,7 @@ func initEngine(t *testing.T) *Engine {
 		_, err := engine.Exec(ctx, sql)
 		assert.Nil(t, err)
 	}
+	return engine
 }
 
 func testEngine(t *testing.T, engine *Engine) {
