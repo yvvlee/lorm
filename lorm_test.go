@@ -43,7 +43,6 @@ func initEngine(t *testing.T) *Engine {
 
 	engine, err := NewEngine(driver, dsn)
 	assert.Nil(t, err)
-	defer engine.Close()
 	ctx := context.TODO()
 
 	var initSQL string
