@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	//nolint:revive
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 )
 
 //go:embed testdata/mysql.sql
@@ -27,6 +26,12 @@ var postgresInitSQL string
 var sqliteInitSQL string
 
 func TestEngine(t *testing.T) {
+	engine := initEngine(t)
+	defer engine.Close()
+	testEngine(t, engine)
+}
+
+func initEngine(t *testing.T) *Engine {
 	driver := os.Getenv("DB_DRIVER")
 	dsn := os.Getenv("DB_DSN")
 
@@ -39,10 +44,6 @@ func TestEngine(t *testing.T) {
 	engine, err := NewEngine(driver, dsn)
 	assert.Nil(t, err)
 	defer engine.Close()
-	testEngine(t, engine)
-}
-
-func testEngine(t *testing.T, engine *Engine) {
 	ctx := context.TODO()
 
 	var initSQL string
@@ -62,7 +63,10 @@ func testEngine(t *testing.T, engine *Engine) {
 		_, err := engine.Exec(ctx, sql)
 		assert.Nil(t, err)
 	}
+}
 
+func testEngine(t *testing.T, engine *Engine) {
+	ctx := context.TODO()
 	testTime, _ := time.ParseInLocation(time.DateTime, "2025-01-23 16:17:18", time.Local)
 	models := []*Test{
 		{

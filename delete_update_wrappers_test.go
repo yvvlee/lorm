@@ -41,27 +41,15 @@ func TestUpdateWrappers(t *testing.T) {
 }
 
 func TestDeleteExecErrorWithInvalidPrefix(t *testing.T) {
-	driver := "mysql"
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	e, err := NewEngine(driver, dsn)
-	if err != nil {
-		t.Skip("db not available")
-		return
-	}
+	e := initEngine(t)
 	defer e.Close()
-	_, err = Delete(e).From("test").Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
+	_, err := Delete(e).From("test").Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }
 
 func TestUpdateExecErrorWithInvalidPrefix(t *testing.T) {
-	driver := "mysql"
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	e, err := NewEngine(driver, dsn)
-	if err != nil {
-		t.Skip("db not available")
-		return
-	}
+	e := initEngine(t)
 	defer e.Close()
-	_, err = Update(e).Table("test").Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
+	_, err := Update(e).Table("test").Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }

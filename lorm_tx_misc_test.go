@@ -18,17 +18,11 @@ func TestTXExistingSessionBranch(t *testing.T) {
 func TestExecQueryExistErrorLogging(t *testing.T) {
 	// Use actual engine to hit error path via invalid SQL
 	// Reuse environment from lorm_test
-	driver := "mysql"
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	e, err := NewEngine(driver, dsn)
-	if err != nil {
-		t.Skip("db not available")
-		return
-	}
+	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 
-	_, err = e.Exec(ctx, "INVALID SQL")
+	_, err := e.Exec(ctx, "INVALID SQL")
 	assert.Error(t, err)
 
 	err = e.Query(ctx, NewColsScanner(&[]int{}), "INVALID SQL")
@@ -39,17 +33,11 @@ func TestExecQueryExistErrorLogging(t *testing.T) {
 }
 
 func TestTXErrorBranchAndCommit(t *testing.T) {
-	driver := "mysql"
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	e, err := NewEngine(driver, dsn)
-	if err != nil {
-		t.Skip("db not available")
-		return
-	}
+	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 	// error branch: fn returns error
-	err = e.TX(ctx, func(ctx context.Context) error { return assert.AnError })
+	err := e.TX(ctx, func(ctx context.Context) error { return assert.AnError })
 	assert.Error(t, err)
 
 	// explicit begin and commit branch

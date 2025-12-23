@@ -2,28 +2,17 @@ package lorm
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestQueryModelGetErrorBranch(t *testing.T) {
-	driver := os.Getenv("DB_DRIVER")
-	dsn := os.Getenv("DB_DSN")
-	if driver == "" || dsn == "" {
-		driver = "mysql"
-		dsn = "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	}
-	e, err := NewEngine(driver, dsn)
-	if err != nil {
-		t.Skip("db not available")
-		return
-	}
+	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 
 	// inject invalid prefix to cause SQL error
-	_, err = Query[*Test](e).Prefix("INVALID /*error*/").Limit(1).Get(ctx)
+	_, err := Query[*Test](e).Prefix("INVALID /*error*/").Limit(1).Get(ctx)
 	assert.Error(t, err)
 }
