@@ -2,9 +2,10 @@ package lorm
 
 import (
 	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/yvvlee/lorm/builder"
-	"testing"
 )
 
 func TestDeleteWrappers(t *testing.T) {

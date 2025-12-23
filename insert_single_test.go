@@ -2,11 +2,12 @@ package lorm
 
 import (
 	"context"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestInsertSingle(t *testing.T) {

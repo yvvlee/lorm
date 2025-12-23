@@ -2,9 +2,10 @@ package lorm
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestQueryModelGetErrorBranch(t *testing.T) {

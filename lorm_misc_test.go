@@ -1,9 +1,10 @@
 package lorm
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/yvvlee/lorm/builder"
-	"testing"
 )
 
 func TestPlaceholderBranches(t *testing.T) {

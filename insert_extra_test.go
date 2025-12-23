@@ -2,9 +2,10 @@ package lorm
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFillCurrentTimeAllBranches(t *testing.T) {

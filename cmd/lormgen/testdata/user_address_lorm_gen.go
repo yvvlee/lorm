@@ -27,16 +27,19 @@ func (m *UserAddress) LormModelDescriptor() *lorm.ModelDescriptor {
 }
 
 func (m *UserAddress) Fields() *UserAddress_Fields {
-	return new(UserAddress_Fields)
+	return default_UserAddress_Fields
 }
+
+var default_UserAddress_Fields = new(UserAddress_Fields)
 
 type UserAddress_Fields struct {
 	alias string
 }
 
 func (f *UserAddress_Fields) WithAlias(alias string) *UserAddress_Fields {
-	f.alias = alias
-	return f
+	o := new(UserAddress_Fields)
+	o.alias = alias
+	return o
 }
 func (f *UserAddress_Fields) ID() string {
 	if f.alias == "" {
