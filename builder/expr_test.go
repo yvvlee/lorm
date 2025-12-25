@@ -362,7 +362,7 @@ func TestEmptyOrToSql(t *testing.T) {
 }
 
 func TestLikeToSql(t *testing.T) {
-	b := Like{"name": "%irrel"}
+	b := Like{"name", "%irrel"}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -374,7 +374,7 @@ func TestLikeToSql(t *testing.T) {
 }
 
 func TestNotLikeToSql(t *testing.T) {
-	b := NotLike{"name": "%irrel"}
+	b := NotLike{"name", "%irrel"}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -386,7 +386,7 @@ func TestNotLikeToSql(t *testing.T) {
 }
 
 func TestILikeToSql(t *testing.T) {
-	b := ILike{"name": "sq%"}
+	b := ILike{"name", "sq%"}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestILikeToSql(t *testing.T) {
 }
 
 func TestNotILikeToSql(t *testing.T) {
-	b := NotILike{"name": "sq%"}
+	b := NotILike{"name", "sq%"}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -479,6 +479,42 @@ func TestExprRecursion(t *testing.T) {
 		expectedArgs := []any{1, "x", "y"}
 		assert.Equal(t, expectedArgs, args)
 	}
+}
+
+func TestBetweenIntToSql(t *testing.T) {
+	b := Between("age", 18, 65)
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSql := "age BETWEEN ? AND ?"
+	assert.Equal(t, expectedSql, sql)
+
+	expectedArgs := []any{18, 65}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestBetweenFloat64ToSql(t *testing.T) {
+	b := Between("price", 10.5, 99.99)
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSql := "price BETWEEN ? AND ?"
+	assert.Equal(t, expectedSql, sql)
+
+	expectedArgs := []any{10.5, 99.99}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestBetweenStringToSql(t *testing.T) {
+	b := Between("name", "A", "Z")
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSql := "name BETWEEN ? AND ?"
+	assert.Equal(t, expectedSql, sql)
+
+	expectedArgs := []any{"A", "Z"}
+	assert.Equal(t, expectedArgs, args)
 }
 
 func ExampleEq() {
