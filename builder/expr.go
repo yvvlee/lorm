@@ -150,7 +150,7 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 	}
 
 	var (
-		exprs    []string
+		exprs    []Sqlizer
 		equalOpr = "="
 		nullOpr  = "IS"
 	)
@@ -162,7 +162,7 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 
 	sortedKeys := getSortedKeys(eq)
 	for _, key := range sortedKeys {
-		var expr string
+		var e Sqlizer
 		val := eq[key]
 
 		switch v := val.(type) {
@@ -178,22 +178,38 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 				val = nil
 			} else {
 				val = r.Elem().Interface()
+				r = reflect.ValueOf(val)
 			}
 		}
 
 		if val == nil {
-			expr = fmt.Sprintf("%s %s NULL", key, nullOpr)
+			e = Expr(fmt.Sprintf("%s %s NULL", key, nullOpr))
 		} else {
-			if isListType(val) {
-				err = fmt.Errorf("cannot use array or slice with Eq operators")
-				return
+			if r.Kind() == reflect.Slice || r.Kind() == reflect.Array {
+				if _, ok := val.([]byte); !ok {
+					err = fmt.Errorf("cannot use array or slice with Eq operators")
+					return
+				}
 			}
-			expr = fmt.Sprintf("%s %s ?", key, equalOpr)
-			args = append(args, val)
+			e = Expr(fmt.Sprintf("%s %s ?", key, equalOpr), val)
 		}
-		exprs = append(exprs, expr)
+		exprs = append(exprs, e)
 	}
-	sql = strings.Join(exprs, " AND ")
+
+	var sqlParts []string
+	for _, sqlizer := range exprs {
+		partSQL, partArgs, err := sqlizer.ToSql()
+		if err != nil {
+			return "", nil, err
+		}
+		if partSQL != "" {
+			sqlParts = append(sqlParts, partSQL)
+			args = append(args, partArgs...)
+		}
+	}
+	if len(sqlParts) > 0 {
+		sql = strings.Join(sqlParts, " AND ")
+	}
 	return
 }
 
@@ -211,9 +227,9 @@ func (neq NotEq) ToSql() (sql string, args []any, err error) {
 	return Eq(neq).toSQL(true)
 }
 
-func In[T cmp.Ordered](field string, val []T) Sqlizer {
+func In[T any](field string, val []T) Sqlizer {
 	if len(val) == 0 {
-		return Expr(sqlFalse)
+		return expr{sql: sqlFalse, args: []any{}}
 	}
 	s := lo.Map(val, func(item T, index int) any {
 		return any(item)
@@ -221,14 +237,14 @@ func In[T cmp.Ordered](field string, val []T) Sqlizer {
 	return Expr(fmt.Sprintf("%s IN (%s)", field, Placeholders(len(val))), s...)
 }
 
-func NotIn[T cmp.Ordered](field string, val []T) Sqlizer {
+func NotIn[T any](field string, val []T) Sqlizer {
 	if len(val) == 0 {
-		return Expr(sqlTrue)
+		return expr{sql: sqlTrue, args: []any{}}
 	}
 	s := lo.Map(val, func(item T, index int) any {
 		return any(item)
 	})
-	return Expr(fmt.Sprintf("%s NOTIN (%s)", field, Placeholders(len(val))), s...)
+	return Expr(fmt.Sprintf("%s NOT IN (%s)", field, Placeholders(len(val))), s...)
 }
 
 // Like is syntactic sugar for use with LIKE conditions.
@@ -236,7 +252,7 @@ func NotIn[T cmp.Ordered](field string, val []T) Sqlizer {
 //
 //	.Where(Like("name", "%irrel"))
 func Like(field, value string) Sqlizer {
-	return Expr("%s LIKE ?", field, value)
+	return Expr(fmt.Sprintf("%s LIKE ?", field), value)
 }
 
 // NotLike is syntactic sugar for use with LIKE conditions.
@@ -244,7 +260,7 @@ func Like(field, value string) Sqlizer {
 //
 //	.Where(NotLike("name": "%irrel"))
 func NotLike(field, value string) Sqlizer {
-	return Expr("%s NOT LIKE ?", field, value)
+	return Expr(fmt.Sprintf("%s NOT LIKE ?", field), value)
 }
 
 // ILike is syntactic sugar for use with ILIKE conditions.
@@ -252,7 +268,7 @@ func NotLike(field, value string) Sqlizer {
 //
 //	.Where(ILike("name", "sq%"))
 func ILike(field, value string) Sqlizer {
-	return Expr("%s ILIKE ?", field, value)
+	return Expr(fmt.Sprintf("%s ILIKE ?", field), value)
 }
 
 // NotILike is syntactic sugar for use with ILIKE conditions.
@@ -260,7 +276,7 @@ func ILike(field, value string) Sqlizer {
 //
 //	.Where(NotILike("name", "sq%"))
 func NotILike(field, value string) Sqlizer {
-	return Expr("%s NOT ILIKE ?", field, value)
+	return Expr(fmt.Sprintf("%s NOT ILIKE ?", field), value)
 }
 
 // Lt is syntactic sugar for use with Where/Having/Set methods.
@@ -343,12 +359,4 @@ func getSortedKeys(exp map[string]any) []string {
 	}
 	sort.Strings(sortedKeys)
 	return sortedKeys
-}
-
-func isListType(val any) bool {
-	if driver.IsValue(val) {
-		return false
-	}
-	valVal := reflect.ValueOf(val)
-	return valVal.Kind() == reflect.Array || valVal.Kind() == reflect.Slice
 }

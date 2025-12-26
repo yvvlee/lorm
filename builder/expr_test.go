@@ -88,7 +88,7 @@ func TestNotEqToSql(t *testing.T) {
 }
 
 func TestInToSql(t *testing.T) {
-	b := In{"id", []int{1, 2, 3}}
+	b := In("id", []int{1, 2, 3})
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -100,7 +100,7 @@ func TestInToSql(t *testing.T) {
 }
 
 func TestNotInToSql(t *testing.T) {
-	b := NotIn{"id", []int{1, 2, 3}}
+	b := NotIn("id", []int{1, 2, 3})
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -112,7 +112,7 @@ func TestNotInToSql(t *testing.T) {
 }
 
 func TestInEmptyToSql(t *testing.T) {
-	b := In{"id", []int{}}
+	b := In("id", []int{})
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -124,7 +124,7 @@ func TestInEmptyToSql(t *testing.T) {
 }
 
 func TestNotInEmptyToSql(t *testing.T) {
-	b := NotIn{"id", []int{}}
+	b := NotIn("id", []int{})
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -148,7 +148,7 @@ func TestEqBytesToSql(t *testing.T) {
 }
 
 func TestLtToSql(t *testing.T) {
-	b := Lt{"id": 1}
+	b := Lt("id", 1)
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -160,7 +160,7 @@ func TestLtToSql(t *testing.T) {
 }
 
 func TestLtOrEqToSql(t *testing.T) {
-	b := Lte{"id": 1}
+	b := Lte("id", 1)
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -172,7 +172,7 @@ func TestLtOrEqToSql(t *testing.T) {
 }
 
 func TestGtToSql(t *testing.T) {
-	b := Gt{"id": 1}
+	b := Gt("id", 1)
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -184,7 +184,7 @@ func TestGtToSql(t *testing.T) {
 }
 
 func TestGtOrEqToSql(t *testing.T) {
-	b := Gte{"id": 1}
+	b := Gte("id", 1)
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -362,7 +362,7 @@ func TestEmptyOrToSql(t *testing.T) {
 }
 
 func TestLikeToSql(t *testing.T) {
-	b := Like{"name", "%irrel"}
+	b := Like("name", "%irrel")
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -374,7 +374,7 @@ func TestLikeToSql(t *testing.T) {
 }
 
 func TestNotLikeToSql(t *testing.T) {
-	b := NotLike{"name", "%irrel"}
+	b := NotLike("name", "%irrel")
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -386,7 +386,7 @@ func TestNotLikeToSql(t *testing.T) {
 }
 
 func TestILikeToSql(t *testing.T) {
-	b := ILike{"name", "sq%"}
+	b := ILike("name", "sq%")
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestILikeToSql(t *testing.T) {
 }
 
 func TestNotILikeToSql(t *testing.T) {
-	b := NotILike{"name", "sq%"}
+	b := NotILike("name", "sq%")
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
@@ -422,11 +422,11 @@ func TestSqlEqOrder(t *testing.T) {
 }
 
 func TestSqlLtOrder(t *testing.T) {
-	b := Lt{"a": 1, "b": 2, "c": 3}
+	b := And{Lt("a", 1), Lt("b", 2), Lt("c", 3)}
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 
-	expectedSql := "a < ? AND b < ? AND c < ?"
+	expectedSql := "(a < ? AND b < ? AND c < ?)"
 	assert.Equal(t, expectedSql, sql)
 
 	expectedArgs := []any{1, 2, 3}
