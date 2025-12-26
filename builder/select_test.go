@@ -18,7 +18,7 @@ func TestSelectBuilderToSql(t *testing.T) {
 		AddColumn("c").
 		AddColumn("IF(d IN ("+Placeholders(3)+"), 1, 0) as stat_column", 1, 2, 3).
 		AddColumn(Expr("a > ?", 100)).
-		AddColumn(Alias(In{"b", []int{101, 102, 103}}, "b_alias")).
+		AddColumn(Alias(In("b", []int{101, 102, 103}), "b_alias")).
 		AddColumn(Alias(subQ, "subq")).
 		From("e").
 		JoinClause("CROSS JOIN j1").
@@ -30,7 +30,7 @@ func TestSelectBuilderToSql(t *testing.T) {
 		Where("f = ?", 4).
 		Where(Eq{"g": 5}).
 		Where(map[string]any{"h": 6}).
-		Where(In{"i", []int{7, 8, 9}}).
+		Where(In("i", []int{7, 8, 9})).
 		Where(Or{Expr("j = ?", 10), And{Eq{"k": 11}, Expr("true")}}).
 		GroupBy("l").
 		Having("m = n").
@@ -182,10 +182,10 @@ func TestSelectBuilderFromSelect(t *testing.T) {
 func TestSelectBuilderFromSelectNestedDollarPlaceholders(t *testing.T) {
 	subQ := Select("c").
 		From("t").
-		Where(Gt{"c": 1})
+		Where(Gt("c", 1))
 	b := Select("c").
 		FromSelect(subQ, "subq").
-		Where(Lt{"c": 2})
+		Where(Lt("c", 2))
 	sql, args, err := b.ToSql()
 	assert.NoError(t, err)
 	sql, err = Dollar.ReplacePlaceholders(sql)
@@ -390,14 +390,10 @@ func ExampleSelectBuilder_Where_helpers() {
 		"company": companyId,
 	})
 
-	Select("id", "created", "first_name").From("users").Where(Gte{
-		"created": time.Now().AddDate(0, 0, -7),
-	})
+	Select("id", "created", "first_name").From("users").Where(Expr("created >= ?", time.Now().AddDate(0, 0, -7)))
 
 	Select("id", "created", "first_name").From("users").Where(And{
-		Gte{
-			"created": time.Now().AddDate(0, 0, -7),
-		},
+		Expr("created >= ?", time.Now().AddDate(0, 0, -7)),
 		Eq{
 			"company": companyId,
 		},
@@ -412,9 +408,7 @@ func ExampleSelectBuilder_Where_multiple() {
 	Select("id", "created", "first_name").
 		From("users").
 		Where("company = ?", companyId).
-		Where(Gte{
-			"created": time.Now().AddDate(0, 0, -7),
-		})
+		Where(Expr("created >= ?", time.Now().AddDate(0, 0, -7)))
 }
 
 func ExampleSelectBuilder_FromSelect() {
