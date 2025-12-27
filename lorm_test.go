@@ -259,6 +259,7 @@ func testEngine(t *testing.T, engine *Engine) {
 		From("test").
 		Columns("id").
 		Where("id < ?", 3).
+		OrderBy("id").
 		Find(ctx)
 	assert.Nil(t, err)
 	assert.Equal(t, ids, []uint64{1, 2})

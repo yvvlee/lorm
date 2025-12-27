@@ -21,3 +21,10 @@ func TestInsertSingle(t *testing.T) {
 	assert.EqualValues(t, 1, rows)
 	assert.True(t, m.ID > 0)
 }
+
+func TestInsertAllEmpty(t *testing.T) {
+	var models []*Test
+	rows, err := InsertAll(context.TODO(), &Engine{config: &Config{}}, models)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, rows)
+}

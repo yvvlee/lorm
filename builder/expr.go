@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -159,9 +160,9 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 		equalOpr = "<>"
 		nullOpr = "IS NOT"
 	}
-
-	sortedKeys := getSortedKeys(eq)
-	for _, key := range sortedKeys {
+	keys := lo.Keys(eq)
+	slices.Sort(keys)
+	for _, key := range keys {
 		var e Sqlizer
 		val := eq[key]
 

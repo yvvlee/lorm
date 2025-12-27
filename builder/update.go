@@ -18,6 +18,7 @@ type UpdateBuilder struct {
 	limit      string
 	offset     string
 	suffixes   []Sqlizer
+	returning  []string
 }
 
 type setClause struct {
@@ -101,6 +102,11 @@ func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.offset) > 0 {
 		sql.WriteString(" OFFSET ")
 		sql.WriteString(b.offset)
+	}
+
+	if len(b.returning) > 0 {
+		sql.WriteString(" RETURNING ")
+		sql.WriteString(strings.Join(b.returning, ","))
 	}
 
 	if len(b.suffixes) > 0 {
@@ -201,5 +207,11 @@ func (b *UpdateBuilder) Suffix(sql string, args ...any) *UpdateBuilder {
 // SuffixExpr adds an expression to the end of the query
 func (b *UpdateBuilder) SuffixExpr(expr Sqlizer) *UpdateBuilder {
 	b.suffixes = append(b.suffixes, expr)
+	return b
+}
+
+// Returning adds a RETURNING clause to the query.
+func (b *UpdateBuilder) Returning(columns ...string) *UpdateBuilder {
+	b.returning = append(b.returning, columns...)
 	return b
 }
