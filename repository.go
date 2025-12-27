@@ -29,10 +29,18 @@ func (r *Repository[T]) Lock(ctx context.Context, id int64) (T, error) {
 }
 
 func (r *Repository[T]) LockByField(ctx context.Context, field string, value any) (T, error) {
-	return Query[T](r.Engine).
-		Where(builder.Eq{field: value}).
-		Suffix("FOR UPDATE").
-		Get(ctx)
+	q := Query[T](r.Engine).Where(builder.Eq{field: value})
+
+	// SQLite does not support FOR UPDATE syntax
+	// In SQLite, row-level locking is automatic within transactions
+	switch r.Engine.DriverName() {
+	case "sqlite", "sqlite3", "ql":
+		// No FOR UPDATE needed for SQLite
+	default:
+		q = q.Suffix("FOR UPDATE")
+	}
+
+	return q.Get(ctx)
 }
 
 func (r *Repository[T]) Exist(ctx context.Context, id int64) (bool, error) {

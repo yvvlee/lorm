@@ -210,16 +210,19 @@ func connect(driverName, dataSourceName string) (*sql.DB, error) {
 func Placeholder(driverName string) builder.PlaceholderFormat {
 	switch driverName {
 	case //PostgreSQL
-		"postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach",
+		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres",
 		//SQLite
-		"ql":
+		"sqlite", "sqlite3", "ql":
 		return builder.Dollar
 	case //Oracle
-		"oci8", "ora", "goracle", "godror":
+		"oci8", "ora", "oracle", "goracle", "godror":
 		return builder.Colon
 	case //SQL Server
-		"sqlserver", "mssql":
+		"sqlserver", "mssql", "azuresql":
 		return builder.AtP
+	case //MySQL, MariaDB
+		"mysql", "mariadb":
+		return builder.Question
 	default:
 		return builder.Question
 	}
@@ -228,16 +231,19 @@ func Placeholder(driverName string) builder.PlaceholderFormat {
 func Escaper(driverName string) names.Escaper {
 	switch driverName {
 	case //PostgreSQL
-		"postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach",
-		//Oracle
-		"oci8", "ora", "goracle", "godror",
-		//SQLite
-		"ql":
+		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
+		return names.NewQuoter('"', '"')
+	case //Oracle
+		"oci8", "ora", "oracle", "goracle", "godror":
+		return names.NewQuoter('"', '"')
+	case //SQLite
+		"sqlite", "sqlite3", "ql":
 		return names.NewQuoter('"', '"')
 	case //SQL Server
-		"sqlserver", "mssql":
+		"sqlserver", "mssql", "azuresql":
 		return names.NewQuoter('[', ']')
-	case "mysql":
+	case //MySQL, MariaDB
+		"mysql", "mariadb":
 		return names.NewQuoter('`', '`')
 	default:
 		return names.NoEscaper
