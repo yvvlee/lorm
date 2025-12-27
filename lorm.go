@@ -65,6 +65,30 @@ func (e *Engine) Escaper() names.Escaper {
 	return e.config.escaper
 }
 
+func (e *Engine) DriverName() string {
+	return e.config.driverName
+}
+
+// SupportsReturning returns true if the database driver supports RETURNING clause
+func (e *Engine) SupportsReturning() bool {
+	switch e.config.driverName {
+	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
+		return true
+	default:
+		return false
+	}
+}
+
+// SupportsLastInsertId returns true if the database driver supports LastInsertId
+func (e *Engine) SupportsLastInsertId() bool {
+	switch e.config.driverName {
+	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
+		return false
+	default:
+		return true
+	}
+}
+
 func (e *Engine) session(ctx context.Context) *session {
 	if s, ok := ctx.Value(e).(*session); ok {
 		return s

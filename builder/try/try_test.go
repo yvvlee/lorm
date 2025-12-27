@@ -52,7 +52,7 @@ func TestRange(t *testing.T) {
 	c := Range("age", &min, &max)
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "(age >= ? AND age <= ?)", sql)
+	assert.Equal(t, "age BETWEEN ? AND ?", sql)
 	assert.Equal(t, []any{10, 20}, args)
 
 	c = Range("age", &min, nil)

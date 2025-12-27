@@ -41,17 +41,22 @@ type UnimplementedTable struct{}
 func (u UnimplementedTable) mustEmbedUnimplementedModel() {}
 func (u UnimplementedTable) mustEmbedUnimplementedTable() {}
 
-func ModelToInsertData[T Model](model T) (columns []string, values []any) {
-	fields, v := ModelsToInsertData([]T{model})
+func ModelToInsertData[T Model](model T, ignoreFields ...string) (columns []string, values []any) {
+	fields, v := ModelsToInsertData([]T{model}, ignoreFields...)
 	return fields, v[0]
 }
 
-func ModelsToInsertData[T Model](models []T) (columns []string, values [][]any) {
+func ModelsToInsertData[T Model](models []T, ignoreFields ...string) (columns []string, values [][]any) {
 	if len(models) == 0 {
 		return
 	}
 	descriptor := models[0].LormModelDescriptor()
 	columns = descriptor.AllFields()
+	if len(ignoreFields) > 0 {
+		columns = lo.Filter(columns, func(item string, _ int) bool {
+			return !slices.Contains(ignoreFields, item)
+		})
+	}
 	createdFields := descriptor.FlagFields(FlagCreated)
 	updatedFields := descriptor.FlagFields(FlagUpdated)
 	jsonFields := descriptor.FlagFields(FlagJson)

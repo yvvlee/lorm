@@ -18,6 +18,7 @@ type InsertBuilder struct {
 	values           [][]any
 	suffixes         []Sqlizer
 	selectBuilder    *SelectBuilder
+	returning        []string
 }
 
 func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
@@ -72,6 +73,11 @@ func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
 		return
 	}
 
+	if len(b.returning) > 0 {
+		sql.WriteString(" RETURNING ")
+		sql.WriteString(strings.Join(b.returning, ","))
+	}
+
 	if len(b.suffixes) > 0 {
 		sql.WriteString(" ")
 		args, err = appendToSql(b.suffixes, sql, " ", args)
@@ -88,8 +94,7 @@ func (b *InsertBuilder) appendValuesToSQL(w io.Writer, args []any) ([]any, error
 	if len(b.values) == 0 {
 		return args, errors.New("values for insert statements are not set")
 	}
-
-	io.WriteString(w, "VALUES ")
+	_, _ = io.WriteString(w, "VALUES ")
 
 	valuesStrings := make([]string, len(b.values))
 	for r, row := range b.values {
@@ -109,8 +114,7 @@ func (b *InsertBuilder) appendValuesToSQL(w io.Writer, args []any) ([]any, error
 		}
 		valuesStrings[r] = fmt.Sprintf("(%s)", strings.Join(valueStrings, ","))
 	}
-
-	io.WriteString(w, strings.Join(valuesStrings, ","))
+	_, _ = io.WriteString(w, strings.Join(valuesStrings, ","))
 
 	return args, nil
 }
@@ -205,5 +209,11 @@ func (b *InsertBuilder) Select(sb *SelectBuilder) *InsertBuilder {
 
 func (b *InsertBuilder) StatementKeyword(keyword string) *InsertBuilder {
 	b.statementKeyword = keyword
+	return b
+}
+
+// Returning adds a RETURNING clause to the query.
+func (b *InsertBuilder) Returning(columns ...string) *InsertBuilder {
+	b.returning = append(b.returning, columns...)
 	return b
 }
