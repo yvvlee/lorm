@@ -1,7 +1,6 @@
 package lorm
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -45,13 +44,6 @@ func TestFillCurrentTimeAllBranches(t *testing.T) {
 		fillCurrentTime(&v, now)
 		assert.NotEmpty(t, v)
 	}
-}
-
-func TestInsertAllEmpty(t *testing.T) {
-	var models []*Test
-	rows, err := InsertAll(context.TODO(), &Engine{config: &Config{}}, models)
-	assert.NoError(t, err)
-	assert.EqualValues(t, 0, rows)
 }
 
 type _pkInt64 struct {

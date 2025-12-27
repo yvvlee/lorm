@@ -15,6 +15,7 @@ type DeleteBuilder struct {
 	limit      string
 	offset     string
 	suffixes   []Sqlizer
+	returning  []string
 }
 
 func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
@@ -58,6 +59,11 @@ func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.offset) > 0 {
 		sql.WriteString(" OFFSET ")
 		sql.WriteString(b.offset)
+	}
+
+	if len(b.returning) > 0 {
+		sql.WriteString(" RETURNING ")
+		sql.WriteString(strings.Join(b.returning, ","))
 	}
 
 	if len(b.suffixes) > 0 {
@@ -123,5 +129,11 @@ func (b *DeleteBuilder) Suffix(sql string, args ...any) *DeleteBuilder {
 // SuffixExpr adds an expression to the end of the query
 func (b *DeleteBuilder) SuffixExpr(expr Sqlizer) *DeleteBuilder {
 	b.suffixes = append(b.suffixes, expr)
+	return b
+}
+
+// Returning adds a RETURNING clause to the query.
+func (b *DeleteBuilder) Returning(columns ...string) *DeleteBuilder {
+	b.returning = append(b.returning, columns...)
 	return b
 }

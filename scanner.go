@@ -74,6 +74,17 @@ func (m *ColsScanner[T]) Scan(rows *sql.Rows) error {
 	if len(columns) != 1 {
 		return fmt.Errorf("expected exactly one column, got %d", len(columns))
 	}
+	if len(*m.v) > 0 {
+		i := 0
+		for rows.Next() && i < len(*m.v) {
+			item := (*m.v)[i]
+			if err = rows.Scan(item); err != nil {
+				return err
+			}
+			i++
+		}
+		return nil
+	}
 	var v []T
 	for rows.Next() {
 		var item T
@@ -140,7 +151,7 @@ func (m *ColScanner[T]) Scan(row *sql.Rows) error {
 	return scanRow(row, m.v)
 }
 
-func scanRow(rows *sql.Rows, dest ...interface{}) error {
+func scanRow(rows *sql.Rows, dest ...any) error {
 	for _, dp := range dest {
 		if _, ok := dp.(*sql.RawBytes); ok {
 			return errors.New("sql: RawBytes isn't allowed on Row.Scan")
