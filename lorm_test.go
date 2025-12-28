@@ -56,6 +56,7 @@ func initEngine(t *testing.T) *Engine {
 	}
 
 	for _, sql := range strings.Split(initSQL, ";") {
+		sql = strings.TrimSpace(sql)
 		if sql == "" {
 			continue
 		}

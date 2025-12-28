@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/names"
 )
@@ -103,24 +105,33 @@ func (e *Engine) session(ctx context.Context) *session {
 	return &session{engine: e}
 }
 
+type sessionIDKey struct{}
+
 func (e *Engine) TX(ctx context.Context, fn func(context.Context) error) error {
 	// If a transaction is currently open, get the transaction session
 	if _, ok := ctx.Value(e).(session); ok {
 		return fn(ctx)
 	}
 	s, err := e.beginTxSession(ctx)
+	sessionID := uuid.NewString()
+	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID, "err", err)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err := s.close(); err != nil {
-			e.logger.ErrorContext(ctx, "lorm close transaction session error", "err", err)
+			e.logger.ErrorContext(ctx, "lorm close transaction session error", "sessionID", sessionID, "err", err)
 		}
 	}()
-	if err = fn(context.WithValue(ctx, e, s)); err != nil {
+	innerCtx := context.WithValue(ctx, e, s)
+	innerCtx = context.WithValue(innerCtx, sessionIDKey{}, sessionID)
+	if err = fn(innerCtx); err != nil {
+		e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID, "err", err)
 		return err
 	}
-	return s.commit()
+	err = s.commit()
+	e.logger.InfoContext(ctx, "COMMIT", "sessionID", sessionID, "err", err)
+	return err
 }
 
 func (e *Engine) beginTxSession(ctx context.Context) (*session, error) {
@@ -139,6 +150,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	defer func() {
 		if err != nil {
 			e.logger.ErrorContext(ctx, "lorm execute error",
+				"sessionID", ctx.Value(sessionIDKey{}),
 				"err", err,
 				"SQL", query,
 				"args", args,
@@ -147,6 +159,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 			return
 		}
 		e.logger.InfoContext(ctx, "lorm execute success",
+			"sessionID", ctx.Value(sessionIDKey{}),
 			"SQL", query,
 			"args", args,
 			"executeTime", time.Since(startTime).Seconds(),
@@ -161,6 +174,7 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 	defer func() {
 		if err != nil {
 			e.logger.ErrorContext(ctx, "lorm execute error",
+				"sessionID", ctx.Value(sessionIDKey{}),
 				"err", err,
 				"SQL", query,
 				"args", args,
@@ -169,6 +183,7 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 			return
 		}
 		e.logger.InfoContext(ctx, "lorm execute success",
+			"sessionID", ctx.Value(sessionIDKey{}),
 			"SQL", query,
 			"args", args,
 			"executeTime", time.Since(startTime).Seconds(),
