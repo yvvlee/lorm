@@ -82,9 +82,11 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 		})
 		s.builder.Where(pickMapWithEscapedKey)
 	}
+	createdFields := descriptor.FlagFields(FlagCreated)
 	updatedFields := descriptor.FlagFields(FlagUpdated)
 	jsonFields := descriptor.FlagFields(FlagJson)
 	now := time.Now()
+	fieldMap = lo.OmitByKeys(fieldMap, append(primaryKeys, createdFields...))
 	dataMap := lo.MapEntries(fieldMap, func(key string, value any) (string, any) {
 		if slices.Contains(updatedFields, key) {
 			fillCurrentTime(value, now)

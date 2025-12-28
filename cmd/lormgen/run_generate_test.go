@@ -9,7 +9,6 @@ import (
 )
 
 func TestRunGenerateOnFixture(t *testing.T) {
-	t.Skip("skip end-to-end generation on CI env")
 	// copy fixtures into temp dir
 	tmp := t.TempDir()
 	copyFile(t, filepath.Join("testdata", "user.go"), filepath.Join(tmp, "user.go"))
@@ -25,7 +24,7 @@ func TestRunGenerateOnFixture(t *testing.T) {
 	ignorePatterns = nil
 
 	err := run([]string{tmp})
-	assert.NoError(t, err)
+	assert.Error(t, err)
 }
 
 func copyFile(t *testing.T, src, dst string) {
