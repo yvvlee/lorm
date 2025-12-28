@@ -43,8 +43,10 @@ func (m *Test) LormModelDescriptor() *ModelDescriptor {
 }
 
 func (m *Test) Fields() *Test_Fields {
-	return new(Test_Fields)
+	return default_Test_Fields
 }
+
+var default_Test_Fields = new(Test_Fields)
 
 type Test_Fields struct {
 	alias string

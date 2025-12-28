@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,12 +26,4 @@ func TestRunArgsAndIgnores(t *testing.T) {
 	tempDir := t.TempDir()
 	err = run([]string{tempDir})
 	assert.Error(t, err)
-}
-
-func mustWrite(t *testing.T, p, c string) {
-	t.Helper()
-	err := os.WriteFile(p, []byte(c), 0644)
-	if err != nil {
-		t.Fatalf("write: %v", err)
-	}
 }

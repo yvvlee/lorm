@@ -60,7 +60,7 @@ func TestSelectBuilderToSql(t *testing.T) {
 }
 
 func TestCountBuilder(t *testing.T) {
-	// 测试基本的 COUNT 查询
+	// Test basic COUNT query
 	t.Run("BasicCount", func(t *testing.T) {
 		b := Select("id", "name").From("users").Where("age > ?", 18)
 		countBuilder := b.ToCountBuilder()
@@ -71,7 +71,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{18}, args)
 	})
 
-	// 测试带 GROUP BY 单个字段且无 HAVING 子句的情况
+	// Test single GROUP BY field without HAVING clause
 	t.Run("SingleGroupByWithoutHaving", func(t *testing.T) {
 		b := Select("department", "COUNT(*) as cnt").
 			From("employees").
@@ -86,7 +86,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{30000}, args)
 	})
 
-	// 测试带 GROUP BY 多个字段的情况
+	// Test multiple GROUP BY fields
 	t.Run("MultipleGroupBy", func(t *testing.T) {
 		b := Select("department", "location", "COUNT(*) as cnt").
 			From("employees").
@@ -101,7 +101,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{30000}, args)
 	})
 
-	// 测试带 GROUP BY 和 HAVING 的情况
+	// Test GROUP BY with HAVING clause
 	t.Run("GroupByWithHaving", func(t *testing.T) {
 		b := Select("department", "COUNT(*) as cnt").
 			From("employees").
@@ -117,7 +117,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{30000, 5}, args)
 	})
 
-	// 测试包含逗号的 GROUP BY 表达式
+	// Test GROUP BY with comma expression
 	t.Run("GroupByWithCommaExpression", func(t *testing.T) {
 		b := Select("YEAR(hire_date)", "department", "COUNT(*) as cnt").
 			From("employees").
@@ -131,7 +131,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Len(t, args, 0)
 	})
 
-	// 测试带有前缀和后缀的查询
+	// Test query with prefix and suffix
 	t.Run("WithPrefixAndSuffix", func(t *testing.T) {
 		b := Select("id", "name").
 			Prefix("WITH temp AS (SELECT * FROM departments)").
@@ -148,7 +148,7 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{21}, args)
 	})
 
-	// 测试带有 JOIN 的复杂查询
+	// Test complex query with JOINs
 	t.Run("ComplexQueryWithJoins", func(t *testing.T) {
 		b := Select("u.id", "u.name", "d.name as dept_name").
 			From("users u").
