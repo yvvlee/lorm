@@ -149,7 +149,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "lorm execute error",
+			e.logger.ErrorContext(ctx, "SQL execute error",
 				"sessionID", ctx.Value(sessionIDKey{}),
 				"err", err,
 				"SQL", query,
@@ -158,7 +158,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 			)
 			return
 		}
-		e.logger.InfoContext(ctx, "lorm execute success",
+		e.logger.InfoContext(ctx, "SQL execute success",
 			"sessionID", ctx.Value(sessionIDKey{}),
 			"SQL", query,
 			"args", args,
@@ -173,7 +173,7 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "lorm execute error",
+			e.logger.ErrorContext(ctx, "SQL execute error",
 				"sessionID", ctx.Value(sessionIDKey{}),
 				"err", err,
 				"SQL", query,
@@ -182,7 +182,7 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 			)
 			return
 		}
-		e.logger.InfoContext(ctx, "lorm execute success",
+		e.logger.InfoContext(ctx, "SQL execute success",
 			"sessionID", ctx.Value(sessionIDKey{}),
 			"SQL", query,
 			"args", args,
@@ -197,7 +197,7 @@ func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bo
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "lorm execute error",
+			e.logger.ErrorContext(ctx, "SQL execute error",
 				"err", err,
 				"SQL", query,
 				"args", args,
@@ -205,7 +205,7 @@ func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bo
 			)
 			return
 		}
-		e.logger.InfoContext(ctx, "lorm execute success",
+		e.logger.InfoContext(ctx, "SQL execute success",
 			"SQL", query,
 			"args", args,
 			"executeTime", time.Since(startTime).Seconds(),
