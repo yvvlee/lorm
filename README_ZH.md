@@ -1,6 +1,6 @@
-# LORM - 轻量级 Golang ORM
+# lorm - 轻量级 Golang ORM
 
-LORM 是一个为 Go 语言设计的轻量级ORM库。它提供了一种简单高效的方式来与数据库交互，同时保持高性能。
+lorm 是一个为 Go 语言设计的轻量级ORM库。它提供了一种简单高效的方式来与数据库交互，同时保持高性能。
 
 ## 特性
 
@@ -181,16 +181,259 @@ func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, pageNum, pageSi
 
 ## 配置选项
 
-LORM 支持多种配置选项：
+lorm 支持多种配置选项：
 
 ```go
 engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname",
-    lorm.WithMaxIdleConns(10),
-    lorm.WithMaxOpenConns(100),
-    lorm.WithConnMaxLifetime(time.Hour),
-    lorm.WithLogger(customLogger),
+    lorm.WithPlaceholderFormat(builder.Dollar),//设置SQL占位符，默认为"?"
+    lorm.WithEscaper(names.NewQuoter('"', '"')), //设置SQL转义符，用于转义表名和列名中的特殊字符，默认为 ``(如 select `id`,`desc`,`name` from `table`)
+    lorm.WithMaxIdleConns(10),//￼设置最大空闲连接数
+    lorm.WithMaxOpenConns(100),// 设置打开连接的最大数量
+    lorm.WithConnMaxLifetime(time.Hour),// 设置连接最大存活时长
+    lorm.WithLogger(customLogger), // 设置自定义logger
 )
 ```
+
+## lormgen 代码生成器使用
+
+lormgen 是 Lorm 的代码生成器，用于自动生成数据库表结构相关的代码。
+
+### 使用方法
+
+```bash
+lormgen [flags] <directory|file>...
+```
+它会扫描文件中嵌入了 lorm.UnimplementedTable 和 lorm.UnimplementedModel 的结构体，为其生成使用lorm必要的方法
+
+### 参数说明
+
+- `--field-mapper`: 表字段名称映射器，可选值: `snake`(蛇形命名), `camel`(驼峰命名), `same`(保持不变)，默认值: `snake`
+- `--table-mapper`: 数据库表名映射器，可选值: `snake`(蛇形命名), `camel`(驼峰命名), `same`(保持不变)，默认值: `snake`
+- `--table-prefix`: 数据库表名前缀，默认为空
+- `--table-suffix`: 数据库表名后缀，默认为空
+- `--tag-key`: 表字段标签键名，默认值: `lorm`
+- `--file-suffix`: 生成文件的后缀名，默认值: `_lorm_gen`
+- `--ignore`: 忽略文件的通配符模式，可多次指定
+
+### 使用示例
+
+```bash
+# 生成当前目录下所有 Go 文件的代码
+lormgen .
+
+# 递归生成指定目录及子目录下的代码
+lormgen ./models/...
+
+# 使用自定义参数生成代码
+lormgen --table-prefix=t_ --table-suffix=_tab --field-mapper=camel ./models
+
+# 忽略特定文件
+lormgen --ignore="*_temp.go" --ignore="*_old.go" ./models
+```
+
+### 模型定义
+定义数据表模型：
+```go
+type User struct {
+    lorm.UnimplementedTable 
+    ID                      int `lorm:"primary_key,auto_increment"`
+    Name                    string
+    Age                     int
+    CreatedAt               time.Time `lorm:"created"`
+    UpdatedAt               time.Time `lorm:"updated"`
+}
+```
+运行lorgen之后，将会生成以下代码
+```go
+// TableName 返回表名
+func (m *User) TableName() string {
+    return "user"
+}
+
+// Fields 返回User字段获取器
+func (m *User) Fields() *User_Fields {}
+
+type User_Fields struct {
+    alias string
+}
+
+func (f *User_Fields) WithAlias(alias string) *User_Fields {}
+func (f *User_Fields) ID() string {}
+//..其他字段获取方法
+
+// All 获取所有字段名
+func (f *User_Fields) All() []string {}
+```
+
+表名默认使用模型的蛇形命名，你可以通过添加lormgen的--table-mapper参数修改表名映射规则， 也可以通过给嵌入的lorm.UnimplementedTable添加tag来显示指定
+
+例如：
+```go
+type User struct {
+    lorm.UnimplementedTable `lorm:"users"`
+}
+//这将会生成以下代码：
+func (m *User) TableName() string {
+    return "users"
+}
+```
+
+数据库字段名默认使用模型的蛇形命名，你可以通过添加lormgen的--field-mapper参数修改字段名映射规则， 也可以通过给字段添加tag来显示指定
+
+例如：
+```go
+type User struct {
+    lorm.UnimplementedTable
+    Name string `lorm:"username"`
+}
+//这将会生成以下代码：
+type User_Fields struct {
+    alias string
+}
+
+func (f *User_Fields) Name() string {
+    if f.alias == "" {
+        return "username"
+    }
+    return f.alias + ".username"
+}
+```
+
+支持结构体嵌入：
+```go
+type Metadata struct {
+	ID int64
+	Name string
+}
+
+type User struct {
+    lorm.UnimplementedTable
+	
+    Metadata
+    Age int
+}
+
+//这将会生成以下代码：
+type User_Fields struct {
+    alias string
+}
+
+func (f *User_Fields) ID() string {
+    if f.alias == "" {
+        return "id"
+    }
+    return f.alias + ".id"
+}
+func (f *User_Fields) Name() string {
+    if f.alias == "" {
+        return "name"
+    }
+    return f.alias + ".name"
+}
+func (f *User_Fields) Age() string {
+    if f.alias == "" {
+        return "age"
+    }
+    return f.alias + ".age"
+}
+
+```
+给嵌入的结构体添加tag，作为内嵌字段的前缀：
+```go
+type Metadata struct {
+	ID int64
+	Name string
+}
+
+type User struct {
+    lorm.UnimplementedTable
+	
+    Metadata `lorm:"user_"`
+    Age int
+}
+
+//这将会生成以下代码：
+type User_Fields struct {
+    alias string
+}
+
+func (f *User_Fields) ID() string {
+    if f.alias == "" {
+        return "user_id"
+    }
+    return f.alias + ".user_id"
+}
+func (f *User_Fields) Name() string {
+    if f.alias == "" {
+        return "user_name"
+    }
+    return f.alias + ".user_name"
+}
+func (f *User_Fields) Age() string {
+    if f.alias == "" {
+        return "age"
+    }
+    return f.alias + ".age"
+}
+
+```
+lorm支持以下内置tag来标记字段的特殊属性：
+
+- `primary_key`: 标记字段为主键
+- `auto_increment`: 标记字段为自增字段
+- `json`: 标记字段以JSON格式存储
+- `created`: 标记字段为创建时间，插入时自动设置当前时间
+- `updated`: 标记字段为更新时间，插入和更新时自动设置当前时间
+- `version`: 标记字段为乐观锁版本号，更新时自动递增
+
+使用示例：
+```go
+type User struct {
+    lorm.UnimplementedTable
+    ID        int64     `lorm:"primary_key,auto_increment"`
+    Name      string
+    Profile   *Profile  `lorm:"json"`
+    CreatedAt time.Time `lorm:"created_time,created"`
+    UpdatedAt time.Time `lorm:"updated_time,updated"`
+    Version   int       `lorm:"version"`
+}
+
+type Profile struct {
+    Avatar string
+    Bio    string
+}
+```
+
+当前数据库查询结果需要映射为自定义模型而非数据表模型时，你只需要嵌入lorm.UnimplementedModel即可。
+它的行为和lorm.UnimplementedTable几乎一致， 但它不会生成TableName()方法，所以你在用自定义模型进行数据库操作时需要手动指定表名。
+```go
+type UserRole struct {
+    UserID int64
+	UserName string
+	RoleID int64
+	RoleName string
+}
+
+func main() {
+    engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer engine.Close()
+    ctx := context.Background()
+    models,err := Query[*UserRole](engine).
+        Select("u.id user_id","u.name user_name","r.id role_id","r.name role_name").
+        From("user").
+        Alias("u").
+        InnerJoin("role as r on u.role_id=r.id").
+        Find(ctx)
+	//SQL: select u.id user_id,u.name user_name,r.id role_id,r.name role_name
+	//     from user u
+	//     inner join role as r on u.role_id=r.id
+	
+}
+```
+
 
 ## 贡献
 

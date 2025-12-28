@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/samber/lo"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
@@ -39,8 +40,12 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 		return t, err
 	}
 	res := t.New()
-	err = s.engine.Query(ctx, NewModelScanner(res), query, args...)
+	rows, err := s.engine.Query(ctx, query, args...)
 	if err != nil {
+		return t, err
+	}
+	defer rows.Close()
+	if err = ScanModel(rows, res); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, nil
 		}
@@ -62,12 +67,16 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
-	var t []T
-	err = s.engine.Query(ctx, NewModelsScanner(&t), query, args...)
+	rows, err := s.engine.Query(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
+		return nil, err
+	}
+	defer rows.Close()
+	var t []T
+	if err = ScanModels(rows, &t); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -232,6 +241,11 @@ func (s *QueryModelStmt[T]) Where(pred any, args ...any) *QueryModelStmt[T] {
 	return s
 }
 
+func (s *QueryModelStmt[T]) ID(id any) *QueryModelStmt[T] {
+	s.builder.Where("id = ?", id)
+	return s
+}
+
 // GroupBy adds GROUP BY expressions to the query.
 func (s *QueryModelStmt[T]) GroupBy(groupBys ...string) *QueryModelStmt[T] {
 	s.builder.GroupBy(groupBys...)
@@ -311,8 +325,12 @@ func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	if err != nil {
 		return t, false, err
 	}
-	err = s.engine.Query(ctx, NewColScanner(&t), query, args...)
+	rows, err := s.engine.Query(ctx, query, args...)
 	if err != nil {
+		return t, false, err
+	}
+	defer rows.Close()
+	if err = ScanCol(rows, &t); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, false, nil
 		}
@@ -327,11 +345,15 @@ func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
 		return nil, err
 	}
 	var t []T
-	err = s.engine.Query(ctx, NewColsScanner(&t), query, args...)
+	rows, err := s.engine.Query(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
+		return nil, err
+	}
+	defer rows.Close()
+	if err = ScanCols(rows, &t); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -361,14 +383,24 @@ func (s *QueryColStmt[T]) Options(options ...string) *QueryColStmt[T] {
 	return s
 }
 
-// Columns adds result columns to the query.
-func (s *QueryColStmt[T]) Columns(columns ...string) *QueryColStmt[T] {
+// Select set result columns to the query.
+func (s *QueryColStmt[T]) Select(columns ...string) *QueryColStmt[T] {
 	s.builder.Select(columns...)
 	return s
 }
 
+// AddColumn adds a result column to the query.
+// Unlike Select, AddColumn accepts args which will be bound to placeholders in
+// the columns string, for example:
+//
+//	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
+func (s *QueryColStmt[T]) AddColumn(column any, args ...any) *QueryColStmt[T] {
+	s.builder.AddColumn(column, args...)
+	return s
+}
+
 // RemoveColumns remove all columns from query.
-// Must add a new column with Column or Columns methods, otherwise
+// Must add a new column with Column or Select methods, otherwise
 // return a error.
 func (s *QueryColStmt[T]) RemoveColumns() *QueryColStmt[T] {
 	s.builder.RemoveColumns()
@@ -376,7 +408,7 @@ func (s *QueryColStmt[T]) RemoveColumns() *QueryColStmt[T] {
 }
 
 // Column adds a result column to the query.
-// Unlike Columns, Column accepts args which will be bound to placeholders in
+// Unlike Select, Column accepts args which will be bound to placeholders in
 // the columns string, for example:
 //
 //	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)

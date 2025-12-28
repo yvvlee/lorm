@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
@@ -14,7 +15,6 @@ func TestDeleteWrappers(t *testing.T) {
 		From("test").
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).
-		Where("id = ?", 1).
 		ID(1).
 		OrderBy("id DESC").
 		Limit(10).
@@ -25,8 +25,7 @@ func TestDeleteWrappers(t *testing.T) {
 
 func TestUpdateWrappers(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_ = Update(e).
-		Table("test").
+	_ = Update[*Test](e).
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).
 		Set("str", "x").
@@ -50,6 +49,6 @@ func TestDeleteExecErrorWithInvalidPrefix(t *testing.T) {
 func TestUpdateExecErrorWithInvalidPrefix(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
-	_, err := Update(e).Table("test").Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
+	_, err := Update[*Test](e).Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }

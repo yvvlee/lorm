@@ -56,10 +56,19 @@ func TestQueryColGetFalseAndError(t *testing.T) {
 	defer e.Close()
 	ctx := context.TODO()
 
-	_, ok, err := QueryCol[uint64](e).From("test").Columns("id").Where("id < ?", 0).Limit(1).Get(ctx)
+	_, ok, err := QueryCol[uint64](e).
+		Select("id").
+		From("test").
+		Where("id < ?", 0).
+		Limit(1).
+		Get(ctx)
 	assert.Nil(t, err)
 	assert.False(t, ok)
 
-	_, _, err = QueryCol[uint64](e).Prefix("INVALID").From("test").Columns("id").Limit(1).Get(ctx)
+	_, _, err = QueryCol[uint64](e).Prefix("INVALID").
+		Select("id").
+		From("test").
+		Limit(1).
+		Get(ctx)
 	assert.Error(t, err)
 }

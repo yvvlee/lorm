@@ -46,7 +46,7 @@ func TestQueryColStmtWrappers(t *testing.T) {
 		PrefixExpr(builder.Expr("/*px*/")).
 		Distinct().
 		Options("opt").
-		Columns("id").
+		Select("id").
 		RemoveColumns().
 		Column("id").
 		From("test").

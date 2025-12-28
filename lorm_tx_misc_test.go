@@ -25,7 +25,7 @@ func TestExecQueryExistErrorLogging(t *testing.T) {
 	_, err := e.Exec(ctx, "INVALID SQL")
 	assert.Error(t, err)
 
-	err = e.Query(ctx, NewColsScanner(&[]int{}), "INVALID SQL")
+	_, err = e.Query(ctx, "INVALID SQL")
 	assert.Error(t, err)
 
 	_, err = e.Exist(ctx, "INVALID SQL")

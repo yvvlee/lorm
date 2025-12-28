@@ -256,16 +256,16 @@ func testEngine(t *testing.T, engine *Engine) {
 	assert.NotNil(t, single)
 	assert.Equal(t, single.ID, uint64(1))
 	ids, err := QueryCol[uint64](engine).
+		Select("id").
 		From("test").
-		Columns("id").
 		Where("id < ?", 3).
 		OrderBy("id").
 		Find(ctx)
 	assert.Nil(t, err)
 	assert.Equal(t, ids, []uint64{1, 2})
 	id, exist, err := QueryCol[uint64](engine).
+		Select("id").
 		From("test").
-		Columns("id").
 		Where("id < ?", 2).
 		Limit(1).
 		Get(ctx)
@@ -292,7 +292,15 @@ func testEngine(t *testing.T, engine *Engine) {
 
 	// InsertAll 单元素分支
 	t.Run("InsertAll single branch", func(t *testing.T) {
-		m := &Test{Int: 100, Str: "single", Timestamp: testTime, Datetime: testTime, Decimal: decimal.NewFromFloat(1.23), IntSlice: []int{1}, Struct: Sub{ID: 1, Name: "x"}}
+		m := &Test{
+			Int:       100,
+			Str:       "single",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(1.23),
+			IntSlice:  []int{1},
+			Struct:    Sub{ID: 1, Name: "x"},
+		}
 		rows, err := InsertAll(ctx, engine, []*Test{m})
 		assert.Nil(t, err)
 		assert.Equal(t, int64(1), rows)

@@ -59,9 +59,16 @@ func (e *Engine) init() {
 }
 
 func (e *Engine) Placeholder() builder.PlaceholderFormat {
+	if e.config.placeholderFormat == nil {
+		return builder.Question
+	}
 	return e.config.placeholderFormat
 }
+
 func (e *Engine) Escaper() names.Escaper {
+	if e.config.escaper == nil {
+		return names.NoEscaper
+	}
 	return e.config.escaper
 }
 
@@ -149,7 +156,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	return
 }
 
-func (e *Engine) Query(ctx context.Context, scanner Scanner, query string, args ...any) (err error) {
+func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
@@ -167,7 +174,7 @@ func (e *Engine) Query(ctx context.Context, scanner Scanner, query string, args 
 			"executeTime", time.Since(startTime).Seconds(),
 		)
 	}()
-	err = e.session(ctx).Query(ctx, scanner, query, args...)
+	rows, err = e.session(ctx).Query(ctx, query, args...)
 	return
 }
 

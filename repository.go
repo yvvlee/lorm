@@ -2,6 +2,7 @@ package lorm
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yvvlee/lorm/builder"
 )
@@ -15,7 +16,12 @@ func NewRepository[T Table](engine *Engine) *Repository[T] {
 }
 
 func (r *Repository[T]) Get(ctx context.Context, id int64) (T, error) {
-	return r.GetByField(ctx, "id", id)
+	var t T
+	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	if len(primaryKeys) != 1 {
+		return t, errors.New("lorm.Repository.Get() only supports tables with single-column primary keys")
+	}
+	return r.GetByField(ctx, primaryKeys[0], id)
 }
 
 func (r *Repository[T]) GetByField(ctx context.Context, field string, value any) (T, error) {
@@ -25,7 +31,12 @@ func (r *Repository[T]) GetByField(ctx context.Context, field string, value any)
 }
 
 func (r *Repository[T]) Lock(ctx context.Context, id int64) (T, error) {
-	return r.LockByField(ctx, "id", id)
+	var t T
+	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	if len(primaryKeys) != 1 {
+		return t, errors.New("lorm.Repository.Lock() only supports tables with single-column primary keys")
+	}
+	return r.LockByField(ctx, primaryKeys[0], id)
 }
 
 func (r *Repository[T]) LockByField(ctx context.Context, field string, value any) (T, error) {
@@ -54,11 +65,11 @@ func (r *Repository[T]) ExistByField(ctx context.Context, field string, value an
 }
 
 func (r *Repository[T]) Update(ctx context.Context, model T) (rowsAffected int64, err error) {
-	return Update(r.Engine).SetModel(model).Exec(ctx)
+	return Update[T](r.Engine).SetModel(model).Exec(ctx)
 }
 func (r *Repository[T]) UpdateMap(ctx context.Context, id int64, data map[string]any) (rowsAffected int64, err error) {
 	var table T
-	return Update(r.Engine).
+	return Update[T](r.Engine).
 		Table(table.TableName()).
 		ID(id).
 		SetMap(data).
@@ -74,7 +85,12 @@ func (r *Repository[T]) InsertAll(ctx context.Context, models []T) (rowsAffected
 }
 
 func (r *Repository[T]) Delete(ctx context.Context, id int64) (rowsAffected int64, err error) {
-	return r.DeleteByField(ctx, "id", id)
+	var t T
+	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	if len(primaryKeys) != 1 {
+		return 0, errors.New("lorm.Repository.Delete() only supports tables with single-column primary keys")
+	}
+	return r.DeleteByField(ctx, primaryKeys[0], id)
 }
 
 func (r *Repository[T]) DeleteByField(ctx context.Context, field string, value any) (rowsAffected int64, err error) {

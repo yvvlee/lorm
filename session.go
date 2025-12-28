@@ -30,30 +30,22 @@ func (s *session) Exec(ctx context.Context, query string, args ...any) (result s
 	return
 }
 
-func (s *session) Query(ctx context.Context, scanner Scanner, query string, args ...any) (err error) {
+func (s *session) Query(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
 	proxy := s.proxy()
-	var rows *sql.Rows
 	if len(args) == 0 {
-		rows, err = proxy.QueryContext(ctx, query)
-	} else {
-		query, err = s.engine.Placeholder().ReplacePlaceholders(query)
-		if err != nil {
-			return
-		}
-		var stmt *sql.Stmt
-		stmt, err = proxy.PrepareContext(ctx, query)
-		if err != nil {
-			return
-		}
-		defer stmt.Close()
-		rows, err = stmt.QueryContext(ctx, args...)
+		return proxy.QueryContext(ctx, query)
 	}
+	query, err = s.engine.Placeholder().ReplacePlaceholders(query)
 	if err != nil {
 		return
 	}
-	defer rows.Close()
-	err = scanner.Scan(rows)
-	return
+	var stmt *sql.Stmt
+	stmt, err = proxy.PrepareContext(ctx, query)
+	if err != nil {
+		return
+	}
+	defer stmt.Close()
+	return stmt.QueryContext(ctx, args...)
 }
 
 func (s *session) Exist(ctx context.Context, query string, args ...any) (exist bool, err error) {

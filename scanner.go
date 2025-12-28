@@ -6,23 +6,12 @@ import (
 	"fmt"
 )
 
-type Scanner interface {
-	Scan(*sql.Rows) error
-}
-
-type ModelsScanner[T Model] struct {
-	models *[]T
-}
-
-func NewModelsScanner[T Model](models *[]T) *ModelsScanner[T] {
-	return &ModelsScanner[T]{models: models}
-}
-func (m *ModelsScanner[T]) Scan(rows *sql.Rows) error {
+func ScanModels[T Model](rows *sql.Rows, models *[]T) error {
 	columns, err := rows.Columns()
 	if err != nil {
 		return err
 	}
-	var models []T
+	var res []T
 	var model T
 	jsonFields := make(map[string]struct{})
 	for _, field := range model.LormModelDescriptor().Fields {
@@ -48,25 +37,17 @@ func (m *ModelsScanner[T]) Scan(rows *sql.Rows) error {
 		if err = rows.Scan(values...); err != nil {
 			return err
 		}
-		models = append(models, item.(T))
+		res = append(res, item.(T))
 	}
 	// Check if there was an error during iteration
 	if err = rows.Err(); err != nil {
 		return err
 	}
-	*m.models = models
+	*models = res
 	return nil
 }
 
-type ColsScanner[T any] struct {
-	v *[]T
-}
-
-func NewColsScanner[T any](v *[]T) *ColsScanner[T] {
-	return &ColsScanner[T]{v: v}
-}
-
-func (m *ColsScanner[T]) Scan(rows *sql.Rows) error {
+func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	columns, err := rows.Columns()
 	if err != nil {
 		return err
@@ -74,10 +55,10 @@ func (m *ColsScanner[T]) Scan(rows *sql.Rows) error {
 	if len(columns) != 1 {
 		return fmt.Errorf("expected exactly one column, got %d", len(columns))
 	}
-	if len(*m.v) > 0 {
+	if len(*v) > 0 {
 		i := 0
-		for rows.Next() && i < len(*m.v) {
-			item := (*m.v)[i]
+		for rows.Next() && i < len(*v) {
+			item := (*v)[i]
 			if err = rows.Scan(item); err != nil {
 				return err
 			}
@@ -85,38 +66,30 @@ func (m *ColsScanner[T]) Scan(rows *sql.Rows) error {
 		}
 		return nil
 	}
-	var v []T
+	var res []T
 	for rows.Next() {
 		var item T
 		if err = rows.Scan(&item); err != nil {
 			return err
 		}
-		v = append(v, item)
+		res = append(res, item)
 	}
-	*m.v = v
+	*v = res
 	return nil
 }
 
-type ModelScanner[T Model] struct {
-	model T
-}
-
-func NewModelScanner[T Model](model T) *ModelScanner[T] {
-	return &ModelScanner[T]{model: model}
-}
-
-func (m *ModelScanner[T]) Scan(row *sql.Rows) error {
+func ScanModel[T Model](row *sql.Rows, m T) error {
 	columns, err := row.Columns()
 	if err != nil {
 		return err
 	}
 	jsonFields := make(map[string]struct{})
-	for _, field := range m.model.LormModelDescriptor().Fields {
+	for _, field := range m.LormModelDescriptor().Fields {
 		if field.Flag.HasFlag(FlagJson) {
 			jsonFields[field.DBField] = struct{}{}
 		}
 	}
-	fieldsMap := m.model.LormFieldMap()
+	fieldsMap := m.LormFieldMap()
 	values := make([]any, len(columns))
 	for i, column := range columns {
 		field, ok := fieldsMap[column]
@@ -132,15 +105,7 @@ func (m *ModelScanner[T]) Scan(row *sql.Rows) error {
 	return scanRow(row, values...)
 }
 
-type ColScanner[T any] struct {
-	v T
-}
-
-func NewColScanner[T any](v T) *ColScanner[T] {
-	return &ColScanner[T]{v: v}
-}
-
-func (m *ColScanner[T]) Scan(row *sql.Rows) error {
+func ScanCol[T any](row *sql.Rows, t T) error {
 	columns, err := row.Columns()
 	if err != nil {
 		return err
@@ -148,7 +113,7 @@ func (m *ColScanner[T]) Scan(row *sql.Rows) error {
 	if len(columns) != 1 {
 		return fmt.Errorf("expected exactly one column, got %d", len(columns))
 	}
-	return scanRow(row, m.v)
+	return scanRow(row, t)
 }
 
 func scanRow(rows *sql.Rows, dest ...any) error {

@@ -2,7 +2,6 @@ package lorm
 
 import (
 	"database/sql"
-	"slices"
 	"time"
 
 	"github.com/spf13/cast"
@@ -10,12 +9,8 @@ import (
 
 func fillModelID(table Table, result sql.Result) error {
 	descriptor := table.LormModelDescriptor()
-	primaryKeys := descriptor.FlagFields(FlagPrimaryKey)
+	primaryKeys := descriptor.FlagFields(FlagPrimaryKey | FlagAutoIncrement)
 	if len(primaryKeys) != 1 {
-		return nil
-	}
-	flagAutoIncrementFields := descriptor.FlagFields(FlagAutoIncrement)
-	if !slices.Contains(flagAutoIncrementFields, primaryKeys[0]) {
 		return nil
 	}
 	primaryPointer := table.LormFieldMap()[primaryKeys[0]]

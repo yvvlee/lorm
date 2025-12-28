@@ -3,9 +3,9 @@ package lorm
 import (
 	"context"
 	"database/sql"
-	"slices"
 
 	"github.com/samber/lo"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
@@ -19,16 +19,13 @@ func InsertAll[T Table](ctx context.Context, engine *Engine, models []T) (rowsAf
 	}
 	table := models[0]
 	descriptor := table.LormModelDescriptor()
-	primaryKeys := descriptor.FlagFields(FlagPrimaryKey)
+	primaryKeys := descriptor.FlagFields(FlagPrimaryKey | FlagAutoIncrement)
 	// Check if we can use RETURNING or LastInsertId
 	var useReturning bool
 	var pkColumn string
 	if len(primaryKeys) == 1 {
-		flagAutoIncrementFields := descriptor.FlagFields(FlagAutoIncrement)
-		if slices.Contains(flagAutoIncrementFields, primaryKeys[0]) {
-			pkColumn = primaryKeys[0]
-			useReturning = engine.SupportsReturning()
-		}
+		pkColumn = primaryKeys[0]
+		useReturning = engine.SupportsReturning()
 	}
 	if useReturning {
 		return insertsWithReturning(ctx, engine, models, pkColumn)
@@ -87,8 +84,12 @@ func insertsWithReturning[T Table](ctx context.Context, engine *Engine, models [
 	primaryPointers := lo.Map(models, func(item T, _ int) any {
 		return item.LormFieldMap()[pkColumn]
 	})
-	err = engine.Query(ctx, NewColsScanner(&primaryPointers), query, args...)
-
+	rows, err := engine.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	err = ScanCols(rows, &primaryPointers)
 	if err != nil {
 		return 0, err
 	}

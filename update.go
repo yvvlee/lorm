@@ -6,22 +6,26 @@ import (
 	"time"
 
 	"github.com/samber/lo"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
-func Update(engine *Engine) *UpdateStmt {
-	return &UpdateStmt{
+func Update[T Table](engine *Engine) *UpdateStmt[T] {
+	var t T
+	updateBuilder := new(builder.UpdateBuilder)
+	updateBuilder.Table(engine.Escaper().Escape(t.TableName()))
+	return &UpdateStmt[T]{
 		engine:  engine,
-		builder: new(builder.UpdateBuilder),
+		builder: updateBuilder,
 	}
 }
 
-type UpdateStmt struct {
+type UpdateStmt[T Table] struct {
 	engine  *Engine
 	builder *builder.UpdateBuilder
 }
 
-func (s *UpdateStmt) Exec(ctx context.Context) (rowsAffected int64, err error) {
+func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return 0, err
@@ -33,39 +37,50 @@ func (s *UpdateStmt) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	return result.RowsAffected()
 }
 
-func (s *UpdateStmt) Table(table string) *UpdateStmt {
+func (s *UpdateStmt[T]) Table(table string) *UpdateStmt[T] {
 	s.builder.Table(table)
 	return s
 }
 
 // Prefix adds an expression to the beginning of the query
-func (s *UpdateStmt) Prefix(sql string, args ...any) *UpdateStmt {
+func (s *UpdateStmt[T]) Prefix(sql string, args ...any) *UpdateStmt[T] {
 	s.builder.Prefix(sql, args...)
 	return s
 }
 
 // PrefixExpr adds an expression to the very beginning of the query
-func (s *UpdateStmt) PrefixExpr(expr builder.Sqlizer) *UpdateStmt {
+func (s *UpdateStmt[T]) PrefixExpr(expr builder.Sqlizer) *UpdateStmt[T] {
 	s.builder.PrefixExpr(expr)
 	return s
 }
 
 // Set adds SET clauses to the query.
-func (s *UpdateStmt) Set(column string, value any) *UpdateStmt {
+func (s *UpdateStmt[T]) Set(column string, value any) *UpdateStmt[T] {
 	s.builder.Set(column, value)
 	return s
 }
 
-func (s *UpdateStmt) SetModel(model Model) *UpdateStmt {
+func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 	escaper := s.engine.Escaper()
-	if t, ok := model.(Table); ok {
-		s.builder.Table(escaper.Escape(t.TableName()))
-	}
-	fieldMap := model.LormFieldMap()
-	descriptor := model.LormModelDescriptor()
+	fieldMap := t.LormFieldMap()
+	descriptor := t.LormModelDescriptor()
 	primaryKeys := descriptor.FlagFields(FlagPrimaryKey)
 	if len(primaryKeys) > 0 {
-		s.builder.Where(lo.PickByKeys(fieldMap, primaryKeys))
+		//add primary key condition
+		pickMap := lo.PickByKeys(fieldMap, primaryKeys)
+		pickMapWithEscapedKey := lo.MapKeys(pickMap, func(_ any, key string) string {
+			return escaper.Escape(key)
+		})
+		s.builder.Where(pickMapWithEscapedKey)
+	}
+	versionKeys := descriptor.FlagFields(FlagVersion)
+	if len(versionKeys) > 0 {
+		//add version condition
+		pickMap := lo.PickByKeys(fieldMap, versionKeys)
+		pickMapWithEscapedKey := lo.MapKeys(pickMap, func(_ any, key string) string {
+			return escaper.Escape(key)
+		})
+		s.builder.Where(pickMapWithEscapedKey)
 	}
 	updatedFields := descriptor.FlagFields(FlagUpdated)
 	jsonFields := descriptor.FlagFields(FlagJson)
@@ -77,6 +92,9 @@ func (s *UpdateStmt) SetModel(model Model) *UpdateStmt {
 		if slices.Contains(jsonFields, key) {
 			value = NewJSONFieldWrapper(value)
 		}
+		if slices.Contains(versionKeys, key) {
+			value = builder.Expr(escaper.Escape(key) + "+1")
+		}
 		return escaper.Escape(key), value
 	})
 	s.builder.SetMap(dataMap)
@@ -84,7 +102,7 @@ func (s *UpdateStmt) SetModel(model Model) *UpdateStmt {
 }
 
 // SetMap is a convenience method which calls .Set for each key/value pair in clauses.
-func (s *UpdateStmt) SetMap(clauses map[string]any) *UpdateStmt {
+func (s *UpdateStmt[T]) SetMap(clauses map[string]any) *UpdateStmt[T] {
 	s.builder.SetMap(clauses)
 	return s
 }
@@ -92,42 +110,42 @@ func (s *UpdateStmt) SetMap(clauses map[string]any) *UpdateStmt {
 // Where adds WHERE expressions to the query.
 //
 // See SelectBuilder.Where for more information.
-func (s *UpdateStmt) Where(pred any, args ...any) *UpdateStmt {
+func (s *UpdateStmt[T]) Where(pred any, args ...any) *UpdateStmt[T] {
 	s.builder.Where(pred, args...)
 	return s
 }
 
-func (s *UpdateStmt) ID(id any) *UpdateStmt {
+func (s *UpdateStmt[T]) ID(id any) *UpdateStmt[T] {
 	s.builder.Where("id = ?", id)
 	return s
 }
 
 // OrderBy adds ORDER BY expressions to the query.
-func (s *UpdateStmt) OrderBy(orderBys ...string) *UpdateStmt {
+func (s *UpdateStmt[T]) OrderBy(orderBys ...string) *UpdateStmt[T] {
 	s.builder.OrderBy(orderBys...)
 	return s
 }
 
 // Limit sets a LIMIT clause on the query.
-func (s *UpdateStmt) Limit(limit uint64) *UpdateStmt {
+func (s *UpdateStmt[T]) Limit(limit uint64) *UpdateStmt[T] {
 	s.builder.Limit(limit)
 	return s
 }
 
 // Offset sets a OFFSET clause on the query.
-func (s *UpdateStmt) Offset(offset uint64) *UpdateStmt {
+func (s *UpdateStmt[T]) Offset(offset uint64) *UpdateStmt[T] {
 	s.builder.Offset(offset)
 	return s
 }
 
 // Suffix adds an expression to the end of the query
-func (s *UpdateStmt) Suffix(sql string, args ...any) *UpdateStmt {
+func (s *UpdateStmt[T]) Suffix(sql string, args ...any) *UpdateStmt[T] {
 	s.builder.Suffix(sql, args...)
 	return s
 }
 
 // SuffixExpr adds an expression to the end of the query
-func (s *UpdateStmt) SuffixExpr(expr builder.Sqlizer) *UpdateStmt {
+func (s *UpdateStmt[T]) SuffixExpr(expr builder.Sqlizer) *UpdateStmt[T] {
 	s.builder.SuffixExpr(expr)
 	return s
 }
