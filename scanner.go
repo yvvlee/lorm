@@ -64,7 +64,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 			}
 			i++
 		}
-		return nil
+		return rows.Err()
 	}
 	var res []T
 	for rows.Next() {
@@ -75,7 +75,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 		res = append(res, item)
 	}
 	*v = res
-	return nil
+	return rows.Err()
 }
 
 func ScanModel[T Model](row *sql.Rows, m T) error {

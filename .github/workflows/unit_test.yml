@@ -84,5 +84,6 @@ jobs:
       - name: Run SQLite tests
         run: go test -v ./...
         env:
+          CGO_ENABLED: 1
           DB_DRIVER: sqlite3
           DB_DSN: file:test.db?cache=shared&mode=memory

@@ -13,39 +13,24 @@ type session struct {
 
 func (s *session) Exec(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
 	proxy := s.proxy()
-	if len(args) == 0 {
-		return proxy.ExecContext(ctx, query)
+	if len(args) > 0 {
+		query, err = s.engine.Placeholder().ReplacePlaceholders(query)
+		if err != nil {
+			return
+		}
 	}
-	query, err = s.engine.Placeholder().ReplacePlaceholders(query)
-	if err != nil {
-		return nil, err
-	}
-	var stmt *sql.Stmt
-	stmt, err = proxy.PrepareContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer stmt.Close()
-	result, err = stmt.ExecContext(ctx, args...)
-	return
+	return proxy.ExecContext(ctx, query, args...)
 }
 
 func (s *session) Query(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
 	proxy := s.proxy()
-	if len(args) == 0 {
-		return proxy.QueryContext(ctx, query)
+	if len(args) > 0 {
+		query, err = s.engine.Placeholder().ReplacePlaceholders(query)
+		if err != nil {
+			return
+		}
 	}
-	query, err = s.engine.Placeholder().ReplacePlaceholders(query)
-	if err != nil {
-		return
-	}
-	var stmt *sql.Stmt
-	stmt, err = proxy.PrepareContext(ctx, query)
-	if err != nil {
-		return
-	}
-	defer stmt.Close()
-	return stmt.QueryContext(ctx, args...)
+	return proxy.QueryContext(ctx, query, args...)
 }
 
 func (s *session) Exist(ctx context.Context, query string, args ...any) (exist bool, err error) {
@@ -58,13 +43,7 @@ func (s *session) Exist(ctx context.Context, query string, args ...any) (exist b
 		if err != nil {
 			return
 		}
-		var stmt *sql.Stmt
-		stmt, err = proxy.PrepareContext(ctx, query)
-		if err != nil {
-			return
-		}
-		defer stmt.Close()
-		rows, err = stmt.QueryContext(ctx, args...)
+		rows, err = proxy.QueryContext(ctx, query, args...)
 	}
 	if err != nil {
 		return

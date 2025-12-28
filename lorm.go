@@ -261,10 +261,6 @@ type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-type Preparer interface {
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
-}
-
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
@@ -272,5 +268,4 @@ type Querier interface {
 type DBProxy interface {
 	Execer
 	Querier
-	Preparer
 }
