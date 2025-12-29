@@ -215,3 +215,18 @@ func (b *UpdateBuilder) Returning(columns ...string) *UpdateBuilder {
 	b.returning = append(b.returning, columns...)
 	return b
 }
+
+// Clear resets all fields to their zero values
+func (b *UpdateBuilder) Clear() *UpdateBuilder {
+	b.prefixes = nil
+	b.table = ""
+	b.setClauses = nil
+	b.from = nil
+	b.whereParts = nil
+	b.orderBys = nil
+	b.limit = ""
+	b.offset = ""
+	b.suffixes = nil
+	b.returning = nil
+	return b
+}

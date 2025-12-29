@@ -217,3 +217,17 @@ func (b *InsertBuilder) Returning(columns ...string) *InsertBuilder {
 	b.returning = append(b.returning, columns...)
 	return b
 }
+
+// Clear resets all fields to their zero values
+func (b *InsertBuilder) Clear() *InsertBuilder {
+	b.prefixes = nil
+	b.statementKeyword = ""
+	b.options = nil
+	b.into = ""
+	b.columns = nil
+	b.values = nil
+	b.suffixes = nil
+	b.selectBuilder = nil
+	b.returning = nil
+	return b
+}

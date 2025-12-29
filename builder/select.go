@@ -351,3 +351,20 @@ func (b *SelectBuilder) SuffixExpr(expr Sqlizer) *SelectBuilder {
 	b.suffixes = append(b.suffixes, expr)
 	return b
 }
+
+// Clear resets all fields to their zero values
+func (b *SelectBuilder) Clear() *SelectBuilder {
+	b.prefixes = nil
+	b.options = nil
+	b.columns = nil
+	b.from = nil
+	b.joins = nil
+	b.whereParts = nil
+	b.groupBys = nil
+	b.havingParts = nil
+	b.orderByParts = nil
+	b.limit = ""
+	b.offset = ""
+	b.suffixes = nil
+	return b
+}
