@@ -411,7 +411,8 @@ When database query results need to be mapped to a custom model rather than a da
 It behaves almost identically to lorm.UnimplementedTable, but it won't generate a TableName() method, so you need to manually specify the table name when performing database operations with custom models.
 ```go
 type UserRole struct {
-    UserID int64
+	lorm.UnimplementedModel
+	UserID int64
 	UserName string
 	RoleID int64
 	RoleName string

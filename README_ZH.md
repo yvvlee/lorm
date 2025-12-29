@@ -408,7 +408,8 @@ type Profile struct {
 它的行为和lorm.UnimplementedTable几乎一致， 但它不会生成TableName()方法，所以你在用自定义模型进行数据库操作时需要手动指定表名。
 ```go
 type UserRole struct {
-    UserID int64
+	lorm.UnimplementedModel
+	UserID int64
 	UserName string
 	RoleID int64
 	RoleName string
