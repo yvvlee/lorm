@@ -93,6 +93,9 @@ func (e *Engine) SupportsLastInsertId() bool {
 	switch e.config.driverName {
 	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
 		return false
+	case //Oracle
+		"oci8", "ora", "oracle", "goracle", "godror":
+		return false
 	default:
 		return true
 	}

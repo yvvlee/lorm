@@ -43,6 +43,10 @@ func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 		s.builder.Suffix("ON CONFLICT DO NOTHING")
 	case "sqlite", "sqlite3":
 		s.builder.StatementKeyword("INSERT OR IGNORE")
+	case "oci8", "ora", "oracle", "goracle", "godror":
+		panic("INSERT IGNORE is not supported in Oracle")
+	case "sqlserver", "mssql", "azuresql":
+		panic("INSERT IGNORE is not supported in SQL Server")
 	default:
 		s.builder.StatementKeyword("INSERT IGNORE")
 	}
@@ -83,11 +87,10 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 		return 0, err
 	}
 
-	if len(s.models) > 1 {
-		return rowsAffected, nil
+	if len(s.models) == 1 && s.engine.SupportsLastInsertId() {
+		return rowsAffected, fillModelID(table, result)
 	}
-
-	return rowsAffected, fillModelID(table, result)
+	return rowsAffected, nil
 }
 
 func (s *InsertStmt[T]) execInsert(ctx context.Context, pkColumn string) (sql.Result, error) {

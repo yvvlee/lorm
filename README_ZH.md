@@ -12,6 +12,12 @@ lorm 是一个为 Go 语言设计的轻量级ORM库。它提供了一种简单�
 - 连接池和管理
 - 结构化日志记录
 
+## 数据库支持
+
+- 第一优先级： MySQL/MariaDB、Postgres
+- 第二优先级： SQLite
+- 其他：SQLServer、Oracle （不保证）
+
 ## 安装
 
 ```bash
