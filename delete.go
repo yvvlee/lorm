@@ -2,14 +2,21 @@ package lorm
 
 import (
 	"context"
+	"sync"
 
 	"github.com/yvvlee/lorm/builder"
 )
 
+var deleteBuilderPool = sync.Pool{
+	New: func() any {
+		return builder.Delete("")
+	},
+}
+
 func Delete(engine *Engine) *DeleteStmt {
 	return &DeleteStmt{
 		engine:  engine,
-		builder: new(builder.DeleteBuilder),
+		builder: deleteBuilderPool.Get().(*builder.DeleteBuilder),
 	}
 }
 
@@ -19,6 +26,10 @@ type DeleteStmt struct {
 }
 
 func (s *DeleteStmt) Exec(ctx context.Context) (rowsAffected int64, err error) {
+	defer func() {
+		s.builder.Clear()
+		deleteBuilderPool.Put(s.builder)
+	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return 0, err

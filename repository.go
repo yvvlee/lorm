@@ -77,11 +77,19 @@ func (r *Repository[T]) UpdateMap(ctx context.Context, id int64, data map[string
 }
 
 func (r *Repository[T]) Insert(ctx context.Context, model T) (rowsAffected int64, err error) {
-	return Insert(ctx, r.Engine, model)
+	return Insert[T](r.Engine).AddModel(model).Exec(ctx)
 }
 
 func (r *Repository[T]) InsertAll(ctx context.Context, models []T) (rowsAffected int64, err error) {
-	return InsertAll(ctx, r.Engine, models)
+	return Insert[T](r.Engine).AddModels(models...).Exec(ctx)
+}
+
+func (r *Repository[T]) InsertIgnore(ctx context.Context, model T) (rowsAffected int64, err error) {
+	return Insert[T](r.Engine).Ignore().AddModel(model).Exec(ctx)
+}
+
+func (r *Repository[T]) InsertIgnoreAll(ctx context.Context, models []T) (rowsAffected int64, err error) {
+	return Insert[T](r.Engine).Ignore().AddModels(models...).Exec(ctx)
 }
 
 func (r *Repository[T]) Delete(ctx context.Context, id int64) (rowsAffected int64, err error) {

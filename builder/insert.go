@@ -73,17 +73,17 @@ func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
 		return
 	}
 
-	if len(b.returning) > 0 {
-		sql.WriteString(" RETURNING ")
-		sql.WriteString(strings.Join(b.returning, ","))
-	}
-
 	if len(b.suffixes) > 0 {
 		sql.WriteString(" ")
 		args, err = appendToSql(b.suffixes, sql, " ", args)
 		if err != nil {
 			return
 		}
+	}
+
+	if len(b.returning) > 0 {
+		sql.WriteString(" RETURNING ")
+		sql.WriteString(strings.Join(b.returning, ","))
 	}
 
 	sqlStr = sql.String()

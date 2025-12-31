@@ -131,7 +131,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
 	})
 	if !ok {
-		//如果没有导入lorm包，则不处理
+		// If lorm package is not imported, skip processing
 		return nil
 	}
 	tokenFile := g.fileSet.File(file.Pos())
@@ -203,7 +203,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 						continue
 					}
 
-					// 遍历结构体字段
+					// Iterate through struct fields
 					for _, field := range fields {
 						if len(field.Names) == 0 {
 							// Embedded field

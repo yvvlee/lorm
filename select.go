@@ -4,11 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sync"
 
 	"github.com/samber/lo"
 
 	"github.com/yvvlee/lorm/builder"
 )
+
+var selectBuilderPool = sync.Pool{
+	New: func() any {
+		return new(builder.SelectBuilder)
+	},
+}
 
 func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	var t T
@@ -18,7 +25,8 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 			return escaper.Escape(field)
 		})
 	}
-	selectBuilder := builder.Select(fields...)
+	selectBuilder := selectBuilderPool.Get().(*builder.SelectBuilder)
+	selectBuilder.Select(fields...)
 	if table, ok := any(t).(Table); ok {
 		selectBuilder.From(table.TableName())
 	}
@@ -34,6 +42,10 @@ type QueryModelStmt[T Model] struct {
 }
 
 func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	var t T
 	query, args, err := s.builder.ToSql()
 	if err != nil {
@@ -55,6 +67,10 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 }
 
 func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return false, err
@@ -63,6 +79,10 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 }
 
 func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err
@@ -83,6 +103,10 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 }
 
 func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint64, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	if size == 0 {
 		return nil, 0, errors.New("size can not be zero")
 	}
@@ -310,7 +334,7 @@ func (s *QueryModelStmt[T]) SuffixExpr(expr builder.Sqlizer) *QueryModelStmt[T] 
 func QueryCol[T any](engine *Engine) *QueryColStmt[T] {
 	return &QueryColStmt[T]{
 		engine:  engine,
-		builder: new(builder.SelectBuilder),
+		builder: selectBuilderPool.Get().(*builder.SelectBuilder),
 	}
 }
 
@@ -320,6 +344,10 @@ type QueryColStmt[T any] struct {
 }
 
 func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	var t T
 	query, args, err := s.builder.ToSql()
 	if err != nil {
@@ -340,6 +368,10 @@ func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 }
 
 func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
+	defer func() {
+		s.builder.Clear()
+		selectBuilderPool.Put(s.builder)
+	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err

@@ -74,3 +74,57 @@ func TestInsertBuilderReplace(t *testing.T) {
 
 	assert.Equal(t, expectedSQL, sql)
 }
+
+func TestInsertBuilderReturningWithSuffix(t *testing.T) {
+	b := Insert("").
+		Into("users").
+		Columns("name", "email").
+		Values("John", "john@example.com").
+		Suffix("ON CONFLICT DO NOTHING").
+		Returning("id")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "INSERT INTO users (name,email) VALUES (?,?) ON CONFLICT DO NOTHING RETURNING id"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{"John", "john@example.com"}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestInsertBuilderReturningWithoutSuffix(t *testing.T) {
+	b := Insert("").
+		Into("users").
+		Columns("name", "email").
+		Values("John", "john@example.com").
+		Returning("id", "created_at")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "INSERT INTO users (name,email) VALUES (?,?) RETURNING id,created_at"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{"John", "john@example.com"}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestInsertBuilderReturningWithMultipleSuffixes(t *testing.T) {
+	b := Insert("").
+		Into("users").
+		Columns("name", "email").
+		Values("John", "john@example.com").
+		Suffix("ON CONFLICT (email)").
+		Suffix("DO UPDATE SET name = EXCLUDED.name").
+		Returning("id", "name")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "INSERT INTO users (name,email) VALUES (?,?) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name RETURNING id,name"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{"John", "john@example.com"}
+	assert.Equal(t, expectedArgs, args)
+}

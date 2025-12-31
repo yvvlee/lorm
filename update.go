@@ -3,6 +3,7 @@ package lorm
 import (
 	"context"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -10,13 +11,19 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+var updateBuilderPool = sync.Pool{
+	New: func() any {
+		return builder.Update("")
+	},
+}
+
 func Update[T Table](engine *Engine) *UpdateStmt[T] {
 	var t T
-	updateBuilder := new(builder.UpdateBuilder)
-	updateBuilder.Table(engine.Escaper().Escape(t.TableName()))
+	b := updateBuilderPool.Get().(*builder.UpdateBuilder)
+	b.Table(engine.Escaper().Escape(t.TableName()))
 	return &UpdateStmt[T]{
 		engine:  engine,
-		builder: updateBuilder,
+		builder: b,
 	}
 }
 
@@ -26,6 +33,10 @@ type UpdateStmt[T Table] struct {
 }
 
 func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
+	defer func() {
+		s.builder.Clear()
+		updateBuilderPool.Put(s.builder)
+	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return 0, err
@@ -36,7 +47,6 @@ func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	}
 	return result.RowsAffected()
 }
-
 func (s *UpdateStmt[T]) Table(table string) *UpdateStmt[T] {
 	s.builder.Table(table)
 	return s

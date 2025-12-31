@@ -80,3 +80,58 @@ func TestUpdateBuilderFromSelect(t *testing.T) {
 			"WHERE employees.account_id = subquery.id"
 	assert.Equal(t, expectedSql, sql)
 }
+
+func TestUpdateBuilderReturningWithSuffix(t *testing.T) {
+	b := Update("").
+		Table("users").
+		Set("name", "John").
+		Set("email", "john@example.com").
+		Where("id = ?", 1).
+		Suffix("FROM other_table").
+		Returning("id", "updated_at")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "UPDATE users SET name = ?, email = ? WHERE id = ? FROM other_table RETURNING id,updated_at"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{"John", "john@example.com", 1}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestUpdateBuilderReturningWithoutSuffix(t *testing.T) {
+	b := Update("").
+		Table("users").
+		Set("status", "active").
+		Where("id = ?", 1).
+		Returning("id", "status", "updated_at")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "UPDATE users SET status = ? WHERE id = ? RETURNING id,status,updated_at"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{"active", 1}
+	assert.Equal(t, expectedArgs, args)
+}
+
+func TestUpdateBuilderReturningWithMultipleSuffixes(t *testing.T) {
+	b := Update("").
+		Table("products").
+		Set("price", 99.99).
+		Where("category = ?", "electronics").
+		Suffix("LIMIT 10").
+		Suffix("OFFSET 5").
+		Returning("id", "name", "price")
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+
+	expectedSQL := "UPDATE products SET price = ? WHERE category = ? LIMIT 10 OFFSET 5 RETURNING id,name,price"
+	assert.Equal(t, expectedSQL, sql)
+
+	expectedArgs := []any{99.99, "electronics"}
+	assert.Equal(t, expectedArgs, args)
+}

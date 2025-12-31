@@ -60,12 +60,19 @@ lormgen ./...
 #### 插入
 
 ```go
+// 插入单个模型
 user := &User{
     Name:  "John Doe",
     Email: "john@example.com",
 }
-rowsAffected, err := lorm.Insert(ctx, engine, user)
+rowsAffected, err := lorm.Insert[*User](engine).AddModel(user).Exec(ctx)
 
+// 批量插入多个模型
+users := []*User{
+    {Name: "John Doe", Email: "john@example.com"},
+    {Name: "Jane Doe", Email: "jane@example.com"},
+}
+rowsAffected, err := lorm.Insert[*User](engine).AddModels(users...).Exec(ctx)
 ```
 
 #### 查询
@@ -114,13 +121,13 @@ rowsAffected, err := lorm.Delete(engine).
 ```go
 err := engine.TX(context.Background(), func(ctx context.Context) error {
     user1 := &User{Name: "User 1"}
-    _, err := lorm.Insert(ctx, engine, user1)
+    _, err := lorm.Insert[*User](engine).AddModel(user1).Exec(ctx)
     if err != nil {
         return err
     }
     
     user2 := &User{Name: "User 2"}
-    _, err := lorm.Insert(ctx, engine, user2)
+    _, err = lorm.Insert[*User](engine).AddModel(user2).Exec(ctx)
     if err != nil {
         return err
     }

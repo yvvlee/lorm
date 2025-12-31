@@ -35,7 +35,7 @@ func initEngine(t *testing.T) *Engine {
 	driver := os.Getenv("DB_DRIVER")
 	dsn := os.Getenv("DB_DSN")
 
-	// 如果没有设置环境变量，则默认使用MySQL进行测试
+	// If environment variables are not set, use MySQL for testing by default
 	if driver == "" || dsn == "" {
 		driver = "mysql"
 		dsn = "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
@@ -274,14 +274,14 @@ func testEngine(t *testing.T, engine *Engine) {
 	assert.True(t, exist)
 	assert.Equal(t, id, uint64(1))
 
-	// QueryModelStmt.Get 空结果
+	// QueryModelStmt.Get empty result
 	t.Run("QueryModel Get empty", func(t *testing.T) {
 		res, err := Query[*Test](engine).Where("id = ?", -1).Limit(1).Get(ctx)
 		assert.Nil(t, err)
 		assert.Nil(t, res)
 	})
 
-	// QueryModelStmt.Find 空/非空
+	// QueryModelStmt.Find empty/non-empty
 	t.Run("QueryModel Find variants", func(t *testing.T) {
 		list, err := Query[*Test](engine).Where("id = ?", -1).Find(ctx)
 		assert.Nil(t, err)
@@ -291,7 +291,7 @@ func testEngine(t *testing.T, engine *Engine) {
 		assert.True(t, len(list) > 0)
 	})
 
-	// InsertAll 单元素分支
+	// InsertAll single element branch
 	t.Run("InsertAll single branch", func(t *testing.T) {
 		m := &Test{
 			Int:       100,
@@ -302,7 +302,7 @@ func testEngine(t *testing.T, engine *Engine) {
 			IntSlice:  []int{1},
 			Struct:    Sub{ID: 1, Name: "x"},
 		}
-		rows, err := InsertAll(ctx, engine, []*Test{m})
+		rows, err := Insert[*Test](engine).AddModel(m).Exec(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, int64(1), rows)
 	})

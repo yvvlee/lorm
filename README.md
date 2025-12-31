@@ -64,11 +64,19 @@ This will generate files with the `_lorm_gen.go` suffix that contain the necessa
 #### Insert
 
 ```go
+// Insert single model
 user := &User{
     Name:  "John Doe",
     Email: "john@example.com",
 }
-rowsAffected, err := lorm.Insert(ctx, engine, user)
+rowsAffected, err := lorm.Insert[*User](engine).AddModel(user).Exec(ctx)
+
+// Insert multiple models
+users := []*User{
+    {Name: "John Doe", Email: "john@example.com"},
+    {Name: "Jane Doe", Email: "jane@example.com"},
+}
+rowsAffected, err := lorm.Insert[*User](engine).AddModels(users...).Exec(ctx)
 ```
 
 #### Query
@@ -164,13 +172,13 @@ If the callback function returns an error, the transaction will be rolled back, 
 ```go
 err := engine.TX(context.Background(), func(ctx context.Context) error {
     user1 := &User{Name: "User 1"}
-    _, err := lorm.Insert(ctx, engine, user1)
+    _, err := lorm.Insert[*User](engine).AddModel(user1).Exec(ctx)
     if err != nil {
         return err
     }
     
     user2 := &User{Name: "User 2"}
-    _, err := lorm.Insert(ctx, engine, user2)
+    _, err = lorm.Insert[*User](engine).AddModel(user2).Exec(ctx)
     if err != nil {
         return err
     }
