@@ -14,27 +14,48 @@ func (m *Test) New() Model {
 	return new(Test)
 }
 
-func (m *Test) LormFieldMap() map[string]any {
-	return map[string]any{
-		"id":          &m.ID,
-		"index":       &m.Int,
-		"int_p":       &m.IntP,
-		"bool":        &m.Bool,
-		"bool_p":      &m.BoolP,
-		"str":         &m.Str,
-		"str_p":       &m.StrP,
-		"timestamp":   &m.Timestamp,
-		"timestamp_p": &m.TimestampP,
-		"datetime":    &m.Datetime,
-		"datetime_p":  &m.DatetimeP,
-		"decimal":     &m.Decimal,
-		"decimal_p":   &m.DecimalP,
-		"int_slice":   &m.IntSlice,
-		"int_slice_p": &m.IntSliceP,
-		"struct":      &m.Struct,
-		"struct_p":    &m.StructP,
-		"created_at":  &m.CreatedAt,
-		"updated_at":  &m.UpdatedAt,
+func (m *Test) LormFieldPtr(name string) any {
+	switch name {
+	case "id":
+		return &m.ID
+	case "index":
+		return &m.Int
+	case "int_p":
+		return &m.IntP
+	case "bool":
+		return &m.Bool
+	case "bool_p":
+		return &m.BoolP
+	case "str":
+		return &m.Str
+	case "str_p":
+		return &m.StrP
+	case "timestamp":
+		return &m.Timestamp
+	case "timestamp_p":
+		return &m.TimestampP
+	case "datetime":
+		return &m.Datetime
+	case "datetime_p":
+		return &m.DatetimeP
+	case "decimal":
+		return &m.Decimal
+	case "decimal_p":
+		return &m.DecimalP
+	case "int_slice":
+		return NewJSONFieldWrapper(&m.IntSlice)
+	case "int_slice_p":
+		return NewJSONFieldWrapper(&m.IntSliceP)
+	case "struct":
+		return NewJSONFieldWrapper(&m.Struct)
+	case "struct_p":
+		return NewJSONFieldWrapper(&m.StructP)
+	case "created_at":
+		return &m.CreatedAt
+	case "updated_at":
+		return &m.UpdatedAt
+	default:
+		return nil
 	}
 }
 

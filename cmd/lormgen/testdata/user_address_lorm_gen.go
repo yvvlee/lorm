@@ -12,13 +12,20 @@ func (m *UserAddress) New() lorm.Model {
 	return new(UserAddress)
 }
 
-func (m *UserAddress) LormFieldMap() map[string]any {
-	return map[string]any{
-		"id":             &m.ID,
-		"int64_alias":    &m.Int64Alias,
-		"strings":        &m.Strings,
-		"addr_address":   &m.Address.Address,
-		"addr_post_code": &m.Address.PostCode,
+func (m *UserAddress) LormFieldPtr(name string) any {
+	switch name {
+	case "id":
+		return &m.ID
+	case "int64_alias":
+		return &m.Int64Alias
+	case "strings":
+		return lorm.NewJSONFieldWrapper(&m.Strings)
+	case "addr_address":
+		return &m.Address.Address
+	case "addr_post_code":
+		return &m.Address.PostCode
+	default:
+		return nil
 	}
 }
 

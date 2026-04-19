@@ -42,6 +42,15 @@ func TestEscaperBranches(t *testing.T) {
 	assert.Equal(t, "x", q.Escape("x"))
 }
 
+func TestSupportsForUpdateBranches(t *testing.T) {
+	assert.True(t, (&Engine{config: &Config{driverName: "mysql"}}).SupportsForUpdate())
+	assert.True(t, (&Engine{config: &Config{driverName: "postgres"}}).SupportsForUpdate())
+	assert.True(t, (&Engine{config: &Config{driverName: "oracle"}}).SupportsForUpdate())
+	assert.False(t, (&Engine{config: &Config{driverName: "sqlite3"}}).SupportsForUpdate())
+	assert.False(t, (&Engine{config: &Config{driverName: "sqlserver"}}).SupportsForUpdate())
+	assert.False(t, (&Engine{config: &Config{driverName: "unknown"}}).SupportsForUpdate())
+}
+
 func TestConnectErrorBranches(t *testing.T) {
 	// Unregistered driver should return error immediately
 	_, err := connect("__invalid_driver__", "dsn")

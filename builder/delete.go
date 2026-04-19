@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// DeleteBuilder builds DELETE statements clause by clause.
 type DeleteBuilder struct {
 	prefixes   []Sqlizer
 	from       string
@@ -18,6 +19,7 @@ type DeleteBuilder struct {
 	returning  []string
 }
 
+// ToSql renders the DELETE statement and its bound arguments.
 func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.from) == 0 {
 		err = fmt.Errorf("delete statements must specify a from table")
@@ -138,15 +140,15 @@ func (b *DeleteBuilder) Returning(columns ...string) *DeleteBuilder {
 	return b
 }
 
-// Clear resets all fields to their zero values
+// Clear resets all fields while preserving slice capacity for reuse.
 func (b *DeleteBuilder) Clear() *DeleteBuilder {
-	b.prefixes = nil
+	b.prefixes = resetSlice(b.prefixes)
 	b.from = ""
-	b.whereParts = nil
-	b.orderBys = nil
+	b.whereParts = resetSlice(b.whereParts)
+	b.orderBys = resetSlice(b.orderBys)
 	b.limit = ""
 	b.offset = ""
-	b.suffixes = nil
-	b.returning = nil
+	b.suffixes = resetSlice(b.suffixes)
+	b.returning = resetSlice(b.returning)
 	return b
 }

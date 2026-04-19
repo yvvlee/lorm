@@ -9,7 +9,6 @@ import (
 	"go/format"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/yvvlee/lorm"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 
 	"github.com/yvvlee/lorm/names"
 )
@@ -32,6 +32,7 @@ var (
 	modelTpl    = template.Must(template.New("main").Parse(modelTplStr))
 )
 
+// Generator loads Go packages, extracts Lorm model metadata, and writes companion files.
 type Generator struct {
 	tableMapper names.Mapper
 	fieldMapper names.Mapper
@@ -56,6 +57,7 @@ func NewGenerator(
 	}
 }
 
+// Generate emits one generated file for each source file that declares Lorm models.
 func (g *Generator) Generate(files []string) error {
 	pkgs, err := g.load(files)
 	if err != nil {
@@ -83,11 +85,11 @@ func (g *Generator) generateFile(file *lorm.FileDescriptor) (string, error) {
 		return "", err
 	}
 	generatedFilePath := g.generatedFilePath(file.Path)
-	err = os.WriteFile(generatedFilePath, content, 0644)
+	formatted, err := imports.Process(generatedFilePath, content, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to format generated code: %w", err)
 	}
-	err = exec.Command("goimports", "-w", generatedFilePath).Run()
+	err = os.WriteFile(generatedFilePath, formatted, 0644)
 	if err != nil {
 		return "", err
 	}
@@ -99,6 +101,7 @@ func (g *Generator) generatedFilePath(originFile string) string {
 }
 
 func (g *Generator) load(files []string) ([]*packages.Package, error) {
+	// Request syntax plus type information so embedded structs and imported marker types can be resolved together.
 	// Configure loading options
 	cfg := &packages.Config{
 		Mode: packages.NeedName | // Package name required
@@ -125,7 +128,7 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 	return pkgs, nil
 }
 
-// extractFile extracts struct information from AST file
+// extractFile turns one parsed Go file into a descriptor when it imports lorm.
 func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 	lormImportSpec, ok := lo.Find(file.Imports, func(item *ast.ImportSpec) bool {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
@@ -136,8 +139,10 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 	}
 	tokenFile := g.fileSet.File(file.Pos())
 	filePath := tokenFile.Name()
+	// packages.Load records absolute paths; keep descriptors stable relative to where the CLI was invoked.
 	fileRefPath, _ := filepath.Rel(wd, filePath)
 
+	// Respect import aliases both when detecting embedded markers and when generating method bodies.
 	lormName := "lorm"
 	if lormImportSpec.Name != nil {
 		lormName = lormImportSpec.Name.Name
@@ -180,7 +185,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 					}
 					var hasModel bool
 					fields := lo.Filter(structType.Fields.List, func(field *ast.Field, _ int) bool {
-						// Check if lorm.UnimplementedTable or lorm.UnimplementedModel is embedded
+						// Embedded marker fields opt the struct into generation and may carry table metadata.
 						if len(field.Names) > 0 {
 							return true
 						}
@@ -206,7 +211,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 					// Iterate through struct fields
 					for _, field := range fields {
 						if len(field.Names) == 0 {
-							// Embedded field
+							// Flatten named embedded structs so generated field accessors can treat them like direct members.
 							embedFieldPrefix, _ := parseTag(field, g.tagKey)
 							if ident, ok := field.Type.(*ast.Ident); ok {
 								if ts, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
@@ -242,6 +247,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 	return &fileInfo
 }
 
+// parseField expands grouped declarations like "A, B string" into one descriptor per field name.
 func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
 	dbField, flag := parseTag(field, g.tagKey)
 	var fields []*lorm.FieldDescriptor
@@ -265,6 +271,7 @@ func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
 	return fields
 }
 
+// parseTag splits the lorm tag into an optional database field name and any flag tokens.
 func parseTag(field *ast.Field, tagKey string) (filed string, flag lorm.FieldFlag) {
 	if field == nil || field.Tag == nil {
 		return
@@ -277,6 +284,7 @@ func parseTag(field *ast.Field, tagKey string) (filed string, flag lorm.FieldFla
 		}
 	}
 	if len(flags) > 0 {
+		// After flag tokens are removed, the first remaining value is the explicit database field name.
 		filed = flags[0]
 	}
 	return
@@ -288,7 +296,7 @@ func parseFlag(flags *[]string, key string) bool {
 	return length != len(*flags)
 }
 
-// exprToString converts an expression to a string
+// exprToString normalizes the subset of Go field types that descriptors need to serialize.
 func exprToString(expr ast.Expr) string {
 	switch x := expr.(type) {
 	case *ast.Ident:
@@ -306,7 +314,7 @@ func exprToString(expr ast.Expr) string {
 	}
 }
 
-// generateCode generates code for structs
+// generateCode renders the template and applies gofmt before the file hits disk.
 func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
 	var buf bytes.Buffer
 	err := modelTpl.Execute(&buf, fileInfo)

@@ -14,6 +14,52 @@ func TestModelToInsertData(t *testing.T) {
 	assert.NotEmpty(t, vals)
 }
 
+func TestModelsToInsertDataTransformsFields(t *testing.T) {
+	m := &Test{
+		Int:      7,
+		Str:      "insert-data",
+		IntSlice: []int{1, 2, 3},
+		Struct:   Sub{ID: 1, Name: "json"},
+	}
+
+	cols, vals := ModelToInsertData(m, "id")
+	assert.NotContains(t, cols, "id")
+	assert.False(t, m.CreatedAt.IsZero())
+	assert.False(t, m.UpdatedAt.IsZero())
+
+	indexByColumn := make(map[string]int, len(cols))
+	for i, col := range cols {
+		indexByColumn[col] = i
+	}
+
+	assert.Same(t, &m.Str, vals[indexByColumn["str"]])
+	assert.Same(t, &m.CreatedAt, vals[indexByColumn["created_at"]])
+	assert.Same(t, &m.UpdatedAt, vals[indexByColumn["updated_at"]])
+
+	intSliceWrapper, ok := vals[indexByColumn["int_slice"]].(*JSONFieldWrapper)
+	assert.True(t, ok)
+	assert.Same(t, &m.IntSlice, intSliceWrapper.v)
+
+	structWrapper, ok := vals[indexByColumn["struct"]].(*JSONFieldWrapper)
+	assert.True(t, ok)
+	assert.Same(t, &m.Struct, structWrapper.v)
+}
+
+func TestGeneratedModelLormFieldPtr(t *testing.T) {
+	m := &Test{}
+
+	assert.Same(t, &m.Str, m.LormFieldPtr("str"))
+	assert.Nil(t, m.LormFieldPtr("missing"))
+
+	intSliceWrapper, ok := m.LormFieldPtr("int_slice").(*JSONFieldWrapper)
+	assert.True(t, ok)
+	assert.Same(t, &m.IntSlice, intSliceWrapper.v)
+
+	structWrapper, ok := m.LormFieldPtr("struct").(*JSONFieldWrapper)
+	assert.True(t, ok)
+	assert.Same(t, &m.Struct, structWrapper.v)
+}
+
 func TestJSONFieldWrapperStringAndUnmarshal(t *testing.T) {
 	var v []int
 	w := NewJSONFieldWrapper(&v)

@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-// PlaceholderFormat is the interface that wraps the ReplacePlaceholders method.
-//
-// ReplacePlaceholders takes a SQL statement and replaces each question mark
-// placeholderFormat with a (possibly different) SQL placeholderFormat.
+// PlaceholderFormat rewrites question-mark placeholders into a dialect-specific form.
 type PlaceholderFormat interface {
 	ReplacePlaceholders(sql string) (string, error)
 	PlaceholderString() string
@@ -91,7 +88,8 @@ func replacePositionalPlaceholders(sql, prefix string) (string, error) {
 			break
 		}
 
-		if len(sql[p:]) > 1 && sql[p:p+2] == "??" { // escape ?? => ?
+		// "??" escapes a literal question mark, so only a single "?" is copied through.
+		if len(sql[p:]) > 1 && sql[p:p+2] == "??" {
 			buf.WriteString(sql[:p])
 			buf.WriteString("?")
 			if len(sql[p:]) == 1 {

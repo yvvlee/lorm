@@ -109,6 +109,12 @@ rowsAffected, err := lorm.Update(engine).
 #### Delete
 
 ```go
+// Delete by primary key with typed helper
+rowsAffected, err := lorm.DeleteModel[*User](engine).
+    ID(1).
+    Exec(ctx)
+
+// Delete with custom conditions
 var u User
 rowsAffected, err := lorm.Delete(engine).
     From(u.TableName()).
@@ -117,6 +123,7 @@ rowsAffected, err := lorm.Delete(engine).
 ```
 
 > **Note**: These operations require the code generation step to be completed first.
+> Statement builders are lightweight and created per call. Start a new `Query`/`Insert`/`Update`/`Delete` chain for each operation, and do not share the same statement across goroutines.
 
 ## Recommended: Using Repository
 

@@ -2,41 +2,34 @@ package lorm
 
 import (
 	"context"
-	"slices"
-	"sync"
+	"errors"
 	"time"
-
-	"github.com/samber/lo"
 
 	"github.com/yvvlee/lorm/builder"
 )
 
-var updateBuilderPool = sync.Pool{
-	New: func() any {
-		return builder.Update("")
-	},
-}
-
+// Update builds an UPDATE statement for table T.
 func Update[T Table](engine *Engine) *UpdateStmt[T] {
 	var t T
-	b := updateBuilderPool.Get().(*builder.UpdateBuilder)
-	b.Table(engine.Escaper().Escape(t.TableName()))
+	b := builder.Update(engine.Escaper().Escape(t.TableName()))
 	return &UpdateStmt[T]{
 		engine:  engine,
 		builder: b,
 	}
 }
 
+// UpdateStmt is a fluent UPDATE builder for table T.
 type UpdateStmt[T Table] struct {
 	engine  *Engine
 	builder *builder.UpdateBuilder
+	err     error
 }
 
+// Exec executes the built UPDATE statement.
 func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
-	defer func() {
-		s.builder.Clear()
-		updateBuilderPool.Put(s.builder)
-	}()
+	if s.err != nil {
+		return 0, s.err
+	}
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return 0, err
@@ -47,6 +40,8 @@ func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	}
 	return result.RowsAffected()
 }
+
+// Table overrides the target table name.
 func (s *UpdateStmt[T]) Table(table string) *UpdateStmt[T] {
 	s.builder.Table(table)
 	return s
@@ -70,45 +65,51 @@ func (s *UpdateStmt[T]) Set(column string, value any) *UpdateStmt[T] {
 	return s
 }
 
+// SetModel maps model fields into SET and WHERE clauses using descriptor metadata.
 func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
+	if s.err != nil {
+		return s
+	}
 	escaper := s.engine.Escaper()
-	fieldMap := t.LormFieldMap()
 	descriptor := t.LormModelDescriptor()
-	primaryKeys := descriptor.FlagFields(FlagPrimaryKey)
-	if len(primaryKeys) > 0 {
-		//add primary key condition
-		pickMap := lo.PickByKeys(fieldMap, primaryKeys)
-		pickMapWithEscapedKey := lo.MapKeys(pickMap, func(_ any, key string) string {
-			return escaper.Escape(key)
-		})
-		s.builder.Where(pickMapWithEscapedKey)
-	}
-	versionKeys := descriptor.FlagFields(FlagVersion)
-	if len(versionKeys) > 0 {
-		//add version condition
-		pickMap := lo.PickByKeys(fieldMap, versionKeys)
-		pickMapWithEscapedKey := lo.MapKeys(pickMap, func(_ any, key string) string {
-			return escaper.Escape(key)
-		})
-		s.builder.Where(pickMapWithEscapedKey)
-	}
-	createdFields := descriptor.FlagFields(FlagCreated)
-	updatedFields := descriptor.FlagFields(FlagUpdated)
-	jsonFields := descriptor.FlagFields(FlagJson)
-	now := time.Now()
-	fieldMap = lo.OmitByKeys(fieldMap, append(primaryKeys, createdFields...))
-	dataMap := lo.MapEntries(fieldMap, func(key string, value any) (string, any) {
-		if slices.Contains(updatedFields, key) {
+	var (
+		hasPrimaryKey bool
+		now           = time.Now()
+		dataMap       = make(map[string]any, len(descriptor.Fields))
+	)
+
+	for _, field := range descriptor.Fields {
+		value := t.LormFieldPtr(field.DBField)
+		if value == nil {
+			continue
+		}
+
+		if field.Flag.HasFlag(FlagPrimaryKey) {
+			// Primary keys identify the row to update instead of becoming SET values.
+			hasPrimaryKey = true
+			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
+			continue
+		}
+		if field.Flag.HasFlag(FlagVersion) {
+			// Version fields participate in optimistic locking and auto-increment.
+			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
+			dataMap[escaper.Escape(field.DBField)] = builder.Expr(escaper.Escape(field.DBField) + "+1")
+			continue
+		}
+		if field.Flag.HasFlag(FlagCreated) {
+			continue
+		}
+		if field.Flag.HasFlag(FlagUpdated) {
+			// Only backfill updated timestamps when the model has not set them.
 			fillCurrentTime(value, now)
 		}
-		if slices.Contains(jsonFields, key) {
-			value = NewJSONFieldWrapper(value)
-		}
-		if slices.Contains(versionKeys, key) {
-			value = builder.Expr(escaper.Escape(key) + "+1")
-		}
-		return escaper.Escape(key), value
-	})
+		dataMap[escaper.Escape(field.DBField)] = value
+	}
+
+	if !hasPrimaryKey {
+		s.err = errors.New("lorm.Update().SetModel() requires tables with at least one primary key")
+		return s
+	}
 	s.builder.SetMap(dataMap)
 	return s
 }
@@ -127,8 +128,19 @@ func (s *UpdateStmt[T]) Where(pred any, args ...any) *UpdateStmt[T] {
 	return s
 }
 
+// ID adds a single-column primary key predicate derived from the model metadata.
 func (s *UpdateStmt[T]) ID(id any) *UpdateStmt[T] {
-	s.builder.Where("id = ?", id)
+	if s.err != nil {
+		return s
+	}
+	var t T
+	primaryKeys := t.LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	escaper := s.engine.Escaper()
+	if len(primaryKeys) != 1 {
+		s.err = errors.New("lorm.Update().ID() only supports tables with single-column primary keys")
+		return s
+	}
+	s.builder.Where(builder.Eq{escaper.Escape(primaryKeys[0]): id})
 	return s
 }
 

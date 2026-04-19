@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// UpdateBuilder builds UPDATE statements clause by clause.
 type UpdateBuilder struct {
 	prefixes   []Sqlizer
 	table      string
@@ -26,6 +27,7 @@ type setClause struct {
 	value  any
 }
 
+// ToSql renders the UPDATE statement and its bound arguments.
 func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.table) == 0 {
 		err = fmt.Errorf("update statements must specify a table")
@@ -60,6 +62,7 @@ func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 				return "", nil, err
 			}
 			if _, ok := vs.(*SelectBuilder); ok {
+				// Subqueries in SET need parentheses, while other Sqlizers can provide their own syntax.
 				valSql = fmt.Sprintf("(%s)", vsql)
 			} else {
 				valSql = vsql
@@ -160,8 +163,7 @@ func (b *UpdateBuilder) SetMap(clauses map[string]any) *UpdateBuilder {
 	return b
 }
 
-// From adds FROM clause to the query
-// FROM is valid construct in postgresql only.
+// From adds a PostgreSQL-style FROM clause to the query.
 func (b *UpdateBuilder) From(from string) *UpdateBuilder {
 	b.from = newPart(from)
 	return b
@@ -216,17 +218,17 @@ func (b *UpdateBuilder) Returning(columns ...string) *UpdateBuilder {
 	return b
 }
 
-// Clear resets all fields to their zero values
+// Clear resets all fields while preserving slice capacity for reuse.
 func (b *UpdateBuilder) Clear() *UpdateBuilder {
-	b.prefixes = nil
+	b.prefixes = resetSlice(b.prefixes)
 	b.table = ""
-	b.setClauses = nil
+	b.setClauses = resetSlice(b.setClauses)
 	b.from = nil
-	b.whereParts = nil
-	b.orderBys = nil
+	b.whereParts = resetSlice(b.whereParts)
+	b.orderBys = resetSlice(b.orderBys)
 	b.limit = ""
 	b.offset = ""
-	b.suffixes = nil
-	b.returning = nil
+	b.suffixes = resetSlice(b.suffixes)
+	b.returning = resetSlice(b.returning)
 	return b
 }

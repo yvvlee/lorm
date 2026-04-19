@@ -2,11 +2,15 @@ package lorm
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/yvvlee/lorm/builder"
+	"github.com/yvvlee/lorm/names"
 )
 
 func TestInsertSingle(t *testing.T) {
@@ -133,4 +137,85 @@ func TestInsertIgnoreAll(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, int(111), result.Int)
 	assert.Equal(t, "batch_insert_1", result.Str)
+}
+
+func TestInsertIgnoreReturningRowsAffected(t *testing.T) {
+	engine := initReturningCompatibleEngine(t)
+	defer engine.Close()
+	ctx := context.TODO()
+
+	testTime, _ := time.ParseInLocation(time.DateTime, "2025-01-23 16:17:18", time.Local)
+	existing := &Test{
+		Int:       444,
+		Str:       "returning_duplicate_key",
+		Timestamp: testTime,
+		Datetime:  testTime,
+		Decimal:   decimal.NewFromFloat(4.44),
+		IntSlice:  []int{4},
+		Struct:    Sub{ID: 4, Name: "existing"},
+	}
+
+	rows, err := Insert[*Test](engine).AddModel(existing).Exec(ctx)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, rows)
+	assert.True(t, existing.ID > 0)
+
+	models := []*Test{
+		{
+			Int:       555,
+			Str:       existing.Str,
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(5.55),
+			IntSlice:  []int{5},
+			Struct:    Sub{ID: 5, Name: "conflict"},
+		},
+		{
+			Int:       666,
+			Str:       "returning_inserted",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(6.66),
+			IntSlice:  []int{6},
+			Struct:    Sub{ID: 6, Name: "inserted"},
+		},
+	}
+
+	rows, err = Insert[*Test](engine).Ignore().AddModels(models...).Exec(ctx)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, rows)
+	assert.Zero(t, models[0].ID)
+	assert.Zero(t, models[1].ID)
+
+	inserted, err := Query[*Test](engine).Where("str = ?", "returning_inserted").Get(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, inserted)
+	assert.True(t, inserted.ID > 0)
+}
+
+func initReturningCompatibleEngine(t *testing.T) *Engine {
+	t.Helper()
+
+	engine, err := NewEngine(
+		"sqlite3",
+		"file:lorm_returning_test.db?cache=shared&mode=memory",
+		WithPlaceholderFormat(builder.Dollar),
+		WithEscaper(names.NewQuoter('"', '"')),
+	)
+	assert.NoError(t, err)
+
+	ctx := context.TODO()
+	for _, sql := range strings.Split(sqliteInitSQL, ";") {
+		sql = strings.TrimSpace(sql)
+		if sql == "" {
+			continue
+		}
+		_, err = engine.Exec(ctx, sql)
+		assert.NoError(t, err)
+	}
+	_, err = engine.Exec(ctx, "CREATE UNIQUE INDEX idx_test_str_unique ON test(str)")
+	assert.NoError(t, err)
+
+	engine.config.driverName = "postgres"
+	return engine
 }

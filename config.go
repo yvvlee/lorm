@@ -7,6 +7,7 @@ import (
 	"github.com/yvvlee/lorm/names"
 )
 
+// Config holds engine settings assembled from Option values.
 type Config struct {
 	// driverName is the name of the database driver (e.g. "mysql", "postgres", etc.)
 	driverName string
@@ -28,6 +29,7 @@ type Config struct {
 	connMaxIdleTime time.Duration
 }
 
+// Option mutates Config during engine construction.
 type Option func(*Config)
 
 // WithPlaceholderFormat sets the placeholder format

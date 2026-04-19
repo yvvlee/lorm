@@ -4,19 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync"
 
 	"github.com/samber/lo"
 
 	"github.com/yvvlee/lorm/builder"
 )
 
-var selectBuilderPool = sync.Pool{
-	New: func() any {
-		return new(builder.SelectBuilder)
-	},
-}
-
+// Query builds a SELECT statement that scans rows into models of T.
 func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	var t T
 	fields := t.LormModelDescriptor().AllFields()
@@ -25,7 +19,7 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 			return escaper.Escape(field)
 		})
 	}
-	selectBuilder := selectBuilderPool.Get().(*builder.SelectBuilder)
+	selectBuilder := new(builder.SelectBuilder)
 	selectBuilder.Select(fields...)
 	if table, ok := any(t).(Table); ok {
 		selectBuilder.From(table.TableName())
@@ -36,17 +30,19 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	}
 }
 
+// QueryModelStmt is a fluent SELECT builder that scans rows into models of T.
 type QueryModelStmt[T Model] struct {
 	engine  *Engine
 	builder *builder.SelectBuilder
+	err     error
 }
 
+// Get returns the first matching model or the zero value when no row matches.
 func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
 	var t T
+	if s.err != nil {
+		return t, s.err
+	}
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return t, err
@@ -66,11 +62,11 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 	return res.(T), nil
 }
 
+// Exist reports whether the query returns at least one row.
 func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
+	if s.err != nil {
+		return false, s.err
+	}
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return false, err
@@ -78,11 +74,11 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 	return s.engine.Exist(ctx, query, args...)
 }
 
+// Find returns all matching models.
 func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
+	if s.err != nil {
+		return nil, s.err
+	}
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err
@@ -102,11 +98,11 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 	return t, nil
 }
 
+// Page returns the requested page of results together with the total row count.
 func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint64, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
+	if s.err != nil {
+		return nil, 0, s.err
+	}
 	if size == 0 {
 		return nil, 0, errors.New("size can not be zero")
 	}
@@ -116,6 +112,7 @@ func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, u
 	offset := (page - 1) * size
 	s.builder.Limit(size).Offset(offset)
 	countStmt := QueryCol[uint64](s.engine)
+	// Count on a cloned builder so filters stay in sync with the data query.
 	countStmt.builder = s.builder.ToCountBuilder()
 	count, ok, err := countStmt.Get(ctx)
 	if err != nil {
@@ -265,8 +262,15 @@ func (s *QueryModelStmt[T]) Where(pred any, args ...any) *QueryModelStmt[T] {
 	return s
 }
 
+// ID adds a single-column primary key predicate derived from the model metadata.
 func (s *QueryModelStmt[T]) ID(id any) *QueryModelStmt[T] {
-	s.builder.Where("id = ?", id)
+	var t T
+	primaryKeys := t.LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	if len(primaryKeys) != 1 {
+		s.err = errors.New("lorm.Query().ID() only supports models with single-column primary keys")
+		return s
+	}
+	s.builder.Where(builder.Eq{primaryKeys[0]: id})
 	return s
 }
 
@@ -286,7 +290,7 @@ func (s *QueryModelStmt[T]) Having(pred any, rest ...any) *QueryModelStmt[T] {
 
 // OrderByClause adds ORDER BY clause to the query.
 func (s *QueryModelStmt[T]) OrderByClause(pred any, args ...any) *QueryModelStmt[T] {
-	s.builder.Having(pred, args...)
+	s.builder.OrderByClause(pred, args...)
 	return s
 }
 
@@ -302,6 +306,7 @@ func (s *QueryModelStmt[T]) Limit(limit uint64) *QueryModelStmt[T] {
 	return s
 }
 
+// RemoveLimit removes the LIMIT clause.
 func (s *QueryModelStmt[T]) RemoveLimit() *QueryModelStmt[T] {
 	s.builder.RemoveLimit()
 	return s
@@ -331,23 +336,22 @@ func (s *QueryModelStmt[T]) SuffixExpr(expr builder.Sqlizer) *QueryModelStmt[T] 
 	return s
 }
 
+// QueryCol builds a SELECT statement that scans into a single column of T.
 func QueryCol[T any](engine *Engine) *QueryColStmt[T] {
 	return &QueryColStmt[T]{
 		engine:  engine,
-		builder: selectBuilderPool.Get().(*builder.SelectBuilder),
+		builder: new(builder.SelectBuilder),
 	}
 }
 
+// QueryColStmt is a fluent SELECT builder that scans scalar values of T.
 type QueryColStmt[T any] struct {
 	engine  *Engine
 	builder *builder.SelectBuilder
 }
 
+// Get returns the first column value and whether a row was found.
 func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
 	var t T
 	query, args, err := s.builder.ToSql()
 	if err != nil {
@@ -367,11 +371,8 @@ func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	return t, true, nil
 }
 
+// Find returns all values from the first selected column.
 func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
-	defer func() {
-		s.builder.Clear()
-		selectBuilderPool.Put(s.builder)
-	}()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err
@@ -538,7 +539,7 @@ func (s *QueryColStmt[T]) Having(pred any, rest ...any) *QueryColStmt[T] {
 
 // OrderByClause adds ORDER BY clause to the query.
 func (s *QueryColStmt[T]) OrderByClause(pred any, args ...any) *QueryColStmt[T] {
-	s.builder.Having(pred, args...)
+	s.builder.OrderByClause(pred, args...)
 	return s
 }
 
@@ -554,6 +555,7 @@ func (s *QueryColStmt[T]) Limit(limit uint64) *QueryColStmt[T] {
 	return s
 }
 
+// RemoveLimit removes the LIMIT clause.
 func (s *QueryColStmt[T]) RemoveLimit() *QueryColStmt[T] {
 	s.builder.RemoveLimit()
 	return s

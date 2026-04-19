@@ -21,11 +21,18 @@ import (
         return new({{$struct.Name}})
     }
 
-    func (m *{{$struct.Name}}) LormFieldMap() map[string]any {
-        return map[string]any{
+    func (m *{{$struct.Name}}) LormFieldPtr(name string) any {
+        switch name {
             {{- range $struct.Fields}}
-                "{{.DBField}}": &m.{{.FullName}},
+            case "{{.DBField}}":
+                {{- if .Flag.HasFlag 4 }}
+                return {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})
+                {{- else }}
+                return &m.{{.FullName}}
+                {{- end }}
             {{- end}}
+        default:
+            return nil
         }
     }
 
@@ -70,6 +77,7 @@ import (
 
 const {{.RawVarPrefix}}_raw = `{{.JsonMarshal}}`
 
+{{/* Build one shared descriptor map per generated file so model methods can return metadata without reparsing JSON. */}}
 var {{.RawVarPrefix}}_model_descriptor_map = func() map[string]*{{$.LormImportAlias}}.ModelDescriptor {
     var file {{$.LormImportAlias}}.FileDescriptor
     _ = json.UnmarshalString({{.RawVarPrefix}}_raw ,&file)

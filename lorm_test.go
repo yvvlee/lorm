@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
@@ -47,7 +47,7 @@ func initEngine(t *testing.T) *Engine {
 
 	var initSQL string
 	switch engine.config.driverName {
-	case "postgres":
+	case "postgres", "pgx":
 		initSQL = postgresInitSQL
 	case "sqlite3":
 		initSQL = sqliteInitSQL
@@ -230,6 +230,11 @@ func testEngine(t *testing.T, engine *Engine) {
 
 	// Test Lock method
 	t.Run("Lock", func(t *testing.T) {
+		if !engine.SupportsForUpdate() {
+			_, err := repo.Lock(ctx, 1)
+			assert.ErrorContains(t, err, "does not support FOR UPDATE")
+			return
+		}
 		model, err := repo.Lock(ctx, 1)
 		assert.Nil(t, err)
 		assert.NotNil(t, model)
@@ -238,6 +243,11 @@ func testEngine(t *testing.T, engine *Engine) {
 
 	// Test LockByField method
 	t.Run("LockByField", func(t *testing.T) {
+		if !engine.SupportsForUpdate() {
+			_, err := repo.LockByField(ctx, "str", "updated_by_map")
+			assert.ErrorContains(t, err, "does not support FOR UPDATE")
+			return
+		}
 		model, err := repo.LockByField(ctx, "str", "updated_by_map")
 		assert.Nil(t, err)
 		assert.NotNil(t, model)

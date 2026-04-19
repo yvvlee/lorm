@@ -11,12 +11,14 @@ import (
 	"github.com/yvvlee/lorm/names"
 )
 
+// Engine wraps a sql.DB and the driver-specific behavior lorm needs.
 type Engine struct {
 	config *Config
 	db     *sql.DB
 	logger Logger
 }
 
+// NewEngine opens a database connection and applies the provided options.
 func NewEngine(driverName, dsn string, option ...Option) (*Engine, error) {
 	db, err := connect(driverName, dsn)
 	if err != nil {
@@ -41,6 +43,7 @@ func NewEngine(driverName, dsn string, option ...Option) (*Engine, error) {
 	return engine, nil
 }
 
+// Close closes the underlying database pool.
 func (e *Engine) Close() error {
 	return e.db.Close()
 }
@@ -60,6 +63,7 @@ func (e *Engine) init() {
 	}
 }
 
+// Placeholder returns the placeholder format configured for the engine.
 func (e *Engine) Placeholder() builder.PlaceholderFormat {
 	if e.config.placeholderFormat == nil {
 		return builder.Question
@@ -67,6 +71,7 @@ func (e *Engine) Placeholder() builder.PlaceholderFormat {
 	return e.config.placeholderFormat
 }
 
+// Escaper returns the identifier escaper configured for the engine.
 func (e *Engine) Escaper() names.Escaper {
 	if e.config.escaper == nil {
 		return names.NoEscaper
@@ -74,6 +79,7 @@ func (e *Engine) Escaper() names.Escaper {
 	return e.config.escaper
 }
 
+// DriverName returns the configured database driver name.
 func (e *Engine) DriverName() string {
 	return e.config.driverName
 }
@@ -101,6 +107,18 @@ func (e *Engine) SupportsLastInsertId() bool {
 	}
 }
 
+// SupportsForUpdate returns true if the database driver supports FOR UPDATE.
+func (e *Engine) SupportsForUpdate() bool {
+	switch e.config.driverName {
+	case "mysql", "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
+		return true
+	case "oci8", "ora", "oracle", "goracle", "godror":
+		return true
+	default:
+		return false
+	}
+}
+
 func (e *Engine) session(ctx context.Context) *session {
 	if s, ok := ctx.Value(e).(*session); ok {
 		return s
@@ -110,9 +128,10 @@ func (e *Engine) session(ctx context.Context) *session {
 
 type sessionIDKey struct{}
 
+// TX runs fn in a transaction and reuses the current session for nested calls.
 func (e *Engine) TX(ctx context.Context, fn func(context.Context) error) error {
-	// If a transaction is currently open, get the transaction session
-	if _, ok := ctx.Value(e).(session); ok {
+	// If a transaction is currently open, reuse the existing session
+	if _, ok := ctx.Value(e).(*session); ok {
 		return fn(ctx)
 	}
 	s, err := e.beginTxSession(ctx)
@@ -148,6 +167,7 @@ func (e *Engine) beginTxSession(ctx context.Context) (*session, error) {
 	}, nil
 }
 
+// Exec executes a statement against the current session or transaction.
 func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
 	startTime := time.Now()
 	defer func() {
@@ -172,6 +192,7 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	return
 }
 
+// Query executes a query against the current session or transaction.
 func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
 	startTime := time.Now()
 	defer func() {
@@ -196,6 +217,7 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 	return
 }
 
+// Exist reports whether the query returns at least one row.
 func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bool, err error) {
 	startTime := time.Now()
 	defer func() {
@@ -232,6 +254,7 @@ func connect(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
+// Placeholder returns the default placeholder format for a driver name.
 func Placeholder(driverName string) builder.PlaceholderFormat {
 	switch driverName {
 	case //PostgreSQL
@@ -253,6 +276,7 @@ func Placeholder(driverName string) builder.PlaceholderFormat {
 	}
 }
 
+// Escaper returns the default identifier escaper for a driver name.
 func Escaper(driverName string) names.Escaper {
 	switch driverName {
 	case //PostgreSQL
@@ -275,14 +299,17 @@ func Escaper(driverName string) names.Escaper {
 	}
 }
 
+// Execer executes SQL statements with context.
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// Querier executes SQL queries with context.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
+// DBProxy is the common interface shared by *sql.DB and *sql.Tx.
 type DBProxy interface {
 	Execer
 	Querier

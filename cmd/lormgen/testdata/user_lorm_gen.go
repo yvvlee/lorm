@@ -16,13 +16,20 @@ func (m *User) New() lorm.Model {
 	return new(User)
 }
 
-func (m *User) LormFieldMap() map[string]any {
-	return map[string]any{
-		"id":         &m.ID,
-		"name":       &m.Name,
-		"age":        &m.Age,
-		"created_at": &m.CreatedAt,
-		"updated_at": &m.UpdatedAt,
+func (m *User) LormFieldPtr(name string) any {
+	switch name {
+	case "id":
+		return &m.ID
+	case "name":
+		return &m.Name
+	case "age":
+		return &m.Age
+	case "created_at":
+		return &m.CreatedAt
+	case "updated_at":
+		return &m.UpdatedAt
+	default:
+		return nil
 	}
 }
 

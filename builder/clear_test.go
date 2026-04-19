@@ -9,6 +9,12 @@ func TestInsertBuilderClear(t *testing.T) {
 		Prefix("WITH cte AS (SELECT 1)").
 		Suffix("RETURNING id")
 
+	prefixCap := cap(b.prefixes)
+	columnsCap := cap(b.columns)
+	valuesCap := cap(b.values)
+	suffixCap := cap(b.suffixes)
+	returningCap := cap(b.returning)
+
 	b.Clear()
 
 	if b.into != "" {
@@ -29,6 +35,12 @@ func TestInsertBuilderClear(t *testing.T) {
 	if len(b.returning) != 0 {
 		t.Errorf("Expected returning to be empty, got %v", b.returning)
 	}
+	if cap(b.prefixes) != prefixCap || cap(b.columns) != columnsCap || cap(b.values) != valuesCap || cap(b.suffixes) != suffixCap || cap(b.returning) != returningCap {
+		t.Fatalf("Expected insert builder slice capacities to be preserved")
+	}
+	assertStringSliceCleared(t, "columns", b.columns, columnsCap)
+	assert2DSliceCleared(t, "values", b.values, valuesCap)
+	assertStringSliceCleared(t, "returning", b.returning, returningCap)
 }
 
 func TestUpdateBuilderClear(t *testing.T) {
@@ -37,6 +49,10 @@ func TestUpdateBuilderClear(t *testing.T) {
 		Where("id = ?", 1).
 		OrderBy("id").
 		Limit(10)
+
+	setClausesCap := cap(b.setClauses)
+	wherePartsCap := cap(b.whereParts)
+	orderBysCap := cap(b.orderBys)
 
 	b.Clear()
 
@@ -55,6 +71,11 @@ func TestUpdateBuilderClear(t *testing.T) {
 	if b.limit != "" {
 		t.Errorf("Expected limit to be empty, got %s", b.limit)
 	}
+	if cap(b.setClauses) != setClausesCap || cap(b.whereParts) != wherePartsCap || cap(b.orderBys) != orderBysCap {
+		t.Fatalf("Expected update builder slice capacities to be preserved")
+	}
+	assertSetClauseSliceCleared(t, b.setClauses, setClausesCap)
+	assertStringSliceCleared(t, "orderBys", b.orderBys, orderBysCap)
 }
 
 func TestSelectBuilderClear(t *testing.T) {
@@ -65,6 +86,11 @@ func TestSelectBuilderClear(t *testing.T) {
 		OrderBy("id").
 		Limit(10).
 		Offset(5)
+
+	columnsCap := cap(b.columns)
+	wherePartsCap := cap(b.whereParts)
+	groupBysCap := cap(b.groupBys)
+	orderByPartsCap := cap(b.orderByParts)
 
 	b.Clear()
 
@@ -89,6 +115,10 @@ func TestSelectBuilderClear(t *testing.T) {
 	if b.offset != "" {
 		t.Errorf("Expected offset to be empty, got %s", b.offset)
 	}
+	if cap(b.columns) != columnsCap || cap(b.whereParts) != wherePartsCap || cap(b.groupBys) != groupBysCap || cap(b.orderByParts) != orderByPartsCap {
+		t.Fatalf("Expected select builder slice capacities to be preserved")
+	}
+	assertStringSliceCleared(t, "groupBys", b.groupBys, groupBysCap)
 }
 
 func TestDeleteBuilderClear(t *testing.T) {
@@ -96,6 +126,9 @@ func TestDeleteBuilderClear(t *testing.T) {
 		Where("id = ?", 1).
 		OrderBy("id").
 		Limit(10)
+
+	wherePartsCap := cap(b.whereParts)
+	orderBysCap := cap(b.orderBys)
 
 	b.Clear()
 
@@ -110,5 +143,48 @@ func TestDeleteBuilderClear(t *testing.T) {
 	}
 	if b.limit != "" {
 		t.Errorf("Expected limit to be empty, got %s", b.limit)
+	}
+	if cap(b.whereParts) != wherePartsCap || cap(b.orderBys) != orderBysCap {
+		t.Fatalf("Expected delete builder slice capacities to be preserved")
+	}
+	assertStringSliceCleared(t, "orderBys", b.orderBys, orderBysCap)
+}
+
+func assertStringSliceCleared(t *testing.T, name string, items []string, expectedCap int) {
+	t.Helper()
+	if expectedCap == 0 {
+		return
+	}
+	items = items[:expectedCap]
+	for i, item := range items {
+		if item != "" {
+			t.Fatalf("Expected %s[%d] to be cleared, got %q", name, i, item)
+		}
+	}
+}
+
+func assert2DSliceCleared(t *testing.T, name string, items [][]any, expectedCap int) {
+	t.Helper()
+	if expectedCap == 0 {
+		return
+	}
+	items = items[:expectedCap]
+	for i, item := range items {
+		if item != nil {
+			t.Fatalf("Expected %s[%d] to be cleared, got %v", name, i, item)
+		}
+	}
+}
+
+func assertSetClauseSliceCleared(t *testing.T, items []setClause, expectedCap int) {
+	t.Helper()
+	if expectedCap == 0 {
+		return
+	}
+	items = items[:expectedCap]
+	for i, item := range items {
+		if item.column != "" || item.value != nil {
+			t.Fatalf("Expected setClauses[%d] to be cleared, got %+v", i, item)
+		}
 	}
 }

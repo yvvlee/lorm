@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/samber/lo"
@@ -228,6 +227,9 @@ func (neq NotEq) ToSql() (sql string, args []any, err error) {
 	return Eq(neq).toSQL(true)
 }
 
+// In builds a field IN (...) predicate.
+//
+// An empty slice becomes a portable false expression because SQL does not allow IN ().
 func In[T any](field string, val []T) Sqlizer {
 	if len(val) == 0 {
 		return expr{sql: sqlFalse, args: []any{}}
@@ -238,6 +240,9 @@ func In[T any](field string, val []T) Sqlizer {
 	return Expr(fmt.Sprintf("%s IN (%s)", field, Placeholders(len(val))), s...)
 }
 
+// NotIn builds a field NOT IN (...) predicate.
+//
+// An empty slice becomes a portable true expression because SQL does not allow NOT IN ().
 func NotIn[T any](field string, val []T) Sqlizer {
 	if len(val) == 0 {
 		return expr{sql: sqlTrue, args: []any{}}
@@ -312,6 +317,7 @@ func Gte[T cmp.Ordered](field string, value T) Sqlizer {
 	return Expr(fmt.Sprintf("%s >= ?", field), value)
 }
 
+// Between builds a field BETWEEN ? AND ? predicate.
 func Between[T cmp.Ordered](field string, start, end T) Sqlizer {
 	return Expr(fmt.Sprintf("%s BETWEEN ? AND ?", field), start, end)
 }
@@ -339,25 +345,16 @@ func (c conj) join(sep, defaultExpr string) (sql string, args []any, err error) 
 	return
 }
 
-// And conjunction Sqlizers
+// And joins predicates with AND and wraps the result in parentheses.
 type And conj
 
 func (a And) ToSql() (string, []any, error) {
 	return conj(a).join(" AND ", sqlTrue)
 }
 
-// Or conjunction Sqlizers
+// Or joins predicates with OR and wraps the result in parentheses.
 type Or conj
 
 func (o Or) ToSql() (string, []any, error) {
 	return conj(o).join(" OR ", sqlFalse)
-}
-
-func getSortedKeys(exp map[string]any) []string {
-	sortedKeys := make([]string, 0, len(exp))
-	for k := range exp {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sort.Strings(sortedKeys)
-	return sortedKeys
 }

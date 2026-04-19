@@ -9,9 +9,15 @@ import (
 
 func TestTXExistingSessionBranch(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	s := session{engine: e}
+	s := &session{engine: e}
 	ctx := context.WithValue(context.Background(), e, s)
-	err := e.TX(ctx, func(ctx context.Context) error { return nil })
+	var called bool
+	err := e.TX(ctx, func(ctx context.Context) error {
+		called = true
+		assert.Same(t, s, ctx.Value(e))
+		return nil
+	})
+	assert.True(t, called)
 	assert.NoError(t, err)
 }
 

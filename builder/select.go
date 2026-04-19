@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// SelectBuilder builds SELECT statements clause by clause.
 type SelectBuilder struct {
 	prefixes     []Sqlizer
 	options      []string
@@ -22,6 +23,7 @@ type SelectBuilder struct {
 	suffixes     []Sqlizer
 }
 
+// ToSql renders the SELECT statement and its bound arguments.
 func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.columns) == 0 {
 		err = fmt.Errorf("select statements must have at least one result column")
@@ -121,8 +123,10 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	return
 }
 
+// ToCountBuilder rewrites the query into a COUNT query while preserving filters and joins.
 func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 	if len(b.groupBys) == 0 {
+		// A simple SELECT can count rows directly against the same FROM/WHERE clauses.
 		builder := &SelectBuilder{
 			prefixes:   b.prefixes,
 			options:    b.options,
@@ -138,6 +142,7 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 	if len(b.groupBys) == 1 &&
 		len(b.havingParts) == 0 &&
 		!strings.Contains(b.groupBys[0], ",") {
+		// A single grouping key without HAVING can be reduced to COUNT(DISTINCT key).
 		builder := &SelectBuilder{
 			prefixes:   b.prefixes,
 			options:    b.options,
@@ -150,6 +155,7 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 		return builder.Select(fmt.Sprintf("COUNT(DISTINCT %s)", b.groupBys[0]))
 	}
 
+	// Complex GROUP BY or HAVING queries must be counted from a subquery to preserve semantics.
 	subBuilder := &SelectBuilder{
 		prefixes:    b.prefixes,
 		options:     b.options,
@@ -352,19 +358,19 @@ func (b *SelectBuilder) SuffixExpr(expr Sqlizer) *SelectBuilder {
 	return b
 }
 
-// Clear resets all fields to their zero values
+// Clear resets all fields while preserving slice capacity for reuse.
 func (b *SelectBuilder) Clear() *SelectBuilder {
-	b.prefixes = nil
-	b.options = nil
-	b.columns = nil
+	b.prefixes = resetSlice(b.prefixes)
+	b.options = resetSlice(b.options)
+	b.columns = resetSlice(b.columns)
 	b.from = nil
-	b.joins = nil
-	b.whereParts = nil
-	b.groupBys = nil
-	b.havingParts = nil
-	b.orderByParts = nil
+	b.joins = resetSlice(b.joins)
+	b.whereParts = resetSlice(b.whereParts)
+	b.groupBys = resetSlice(b.groupBys)
+	b.havingParts = resetSlice(b.havingParts)
+	b.orderByParts = resetSlice(b.orderByParts)
 	b.limit = ""
 	b.offset = ""
-	b.suffixes = nil
+	b.suffixes = resetSlice(b.suffixes)
 	return b
 }

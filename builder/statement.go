@@ -31,13 +31,13 @@ func Update(table string) *UpdateBuilder {
 
 // Delete returns a new DeleteBuilder with the given table name.
 //
-// See DeleteBuilder.table.
+// See DeleteBuilder.From.
 func Delete(from string) *DeleteBuilder {
 	return new(DeleteBuilder).From(from)
 }
 
-// Case returns a new CaseBuilder
-// "what" represents case value
+// Case returns a new CASE expression builder.
+// Pass one argument for a simple CASE value, or no arguments for a searched CASE.
 func Case(what ...any) *CaseBuilder {
 	b := &CaseBuilder{}
 

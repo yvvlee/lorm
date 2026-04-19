@@ -72,3 +72,32 @@ func TestQueryColGetFalseAndError(t *testing.T) {
 		Get(ctx)
 	assert.Error(t, err)
 }
+
+func TestQueryModelGetIgnoresExtraColumns(t *testing.T) {
+	e := initEngine(t)
+	defer e.Close()
+	ctx := context.TODO()
+
+	testTime, _ := time.ParseInLocation(time.DateTime, "2025-01-23 16:17:18", time.Local)
+	model := &Test{
+		Int:       7,
+		Bool:      true,
+		Str:       "with_extra_column",
+		Timestamp: testTime,
+		Datetime:  testTime,
+		Decimal:   decimal.NewFromFloat(7.77),
+		IntSlice:  []int{7, 7, 7},
+		Struct:    Sub{ID: 7, Name: "extra"},
+	}
+	_, err := Insert[*Test](e).AddModel(model).Exec(ctx)
+	assert.NoError(t, err)
+
+	got, err := Query[*Test](e).
+		Where("id = ?", model.ID).
+		AddColumn("1 AS extra_value").
+		Get(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, got)
+	assert.Equal(t, model.ID, got.ID)
+	assert.Equal(t, model.Str, got.Str)
+}

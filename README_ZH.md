@@ -111,6 +111,12 @@ rowsAffected, err := lorm.Update(engine).
 #### 删除
 
 ```go
+// 使用 typed helper 按主键删除
+rowsAffected, err := lorm.DeleteModel[*User](engine).
+    ID(1).
+    Exec(ctx)
+
+// 自定义条件删除
 var u User
 rowsAffected, err := lorm.Delete(engine).
     From(u.TableName()).
@@ -118,6 +124,8 @@ rowsAffected, err := lorm.Delete(engine).
     Exec(ctx)
 
 ```
+
+> **说明**: Statement builder 是轻量级对象，每次调用 `Query` / `Insert` / `Update` / `Delete` 都会创建独立实例。每个数据库操作都应重新起一条链式调用，不要在多个 goroutine 间共享同一个 statement。
 
 ## 事务支持
 
@@ -200,7 +208,7 @@ lorm 支持多种配置选项：
 engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname",
     lorm.WithPlaceholderFormat(builder.Dollar),//设置SQL占位符，默认为"?"
     lorm.WithEscaper(names.NewQuoter('"', '"')), //设置SQL转义符，用于转义表名和列名中的特殊字符，默认为 ``(如 select `id`,`desc`,`name` from `table`)
-    lorm.WithMaxIdleConns(10),//￼设置最大空闲连接数
+    lorm.WithMaxIdleConns(10),// 设置最大空闲连接数
     lorm.WithMaxOpenConns(100),// 设置打开连接的最大数量
     lorm.WithConnMaxLifetime(time.Hour),// 设置连接最大存活时长
     lorm.WithLogger(customLogger), // 设置自定义logger

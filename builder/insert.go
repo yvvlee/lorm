@@ -3,12 +3,12 @@ package builder
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"sort"
 	"strings"
 )
 
+// InsertBuilder builds INSERT-style statements clause by clause.
 type InsertBuilder struct {
 	prefixes         []Sqlizer
 	statementKeyword string
@@ -21,6 +21,7 @@ type InsertBuilder struct {
 	returning        []string
 }
 
+// ToSql renders the INSERT statement and its bound arguments.
 func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.into) == 0 {
 		err = errors.New("insert statements must specify a table")
@@ -96,25 +97,30 @@ func (b *InsertBuilder) appendValuesToSQL(w io.Writer, args []any) ([]any, error
 	}
 	_, _ = io.WriteString(w, "VALUES ")
 
-	valuesStrings := make([]string, len(b.values))
 	for r, row := range b.values {
-		valueStrings := make([]string, len(row))
+		if r > 0 {
+			_, _ = io.WriteString(w, ",")
+		}
+		_, _ = io.WriteString(w, "(")
 		for v, val := range row {
+			if v > 0 {
+				_, _ = io.WriteString(w, ",")
+			}
 			if vs, ok := val.(Sqlizer); ok {
+				// Sqlizer values are embedded directly so callers can pass expressions like DEFAULT or subqueries.
 				vsql, vargs, err := vs.ToSql()
 				if err != nil {
 					return nil, err
 				}
-				valueStrings[v] = vsql
+				_, _ = io.WriteString(w, vsql)
 				args = append(args, vargs...)
 			} else {
-				valueStrings[v] = "?"
+				_, _ = io.WriteString(w, "?")
 				args = append(args, val)
 			}
 		}
-		valuesStrings[r] = fmt.Sprintf("(%s)", strings.Join(valueStrings, ","))
+		_, _ = io.WriteString(w, ")")
 	}
-	_, _ = io.WriteString(w, strings.Join(valuesStrings, ","))
 
 	return args, nil
 }
@@ -181,8 +187,7 @@ func (b *InsertBuilder) SuffixExpr(expr Sqlizer) *InsertBuilder {
 	return b
 }
 
-// SetMap set columns and values for insert builder from a map of column name and value
-// note that it will reset all previous columns and values was set if any
+// SetMap replaces the current columns and values from a column-to-value map.
 func (b *InsertBuilder) SetMap(clauses map[string]any) *InsertBuilder {
 	// Keep the columns in a consistent order by sorting the column key string.
 	cols := make([]string, 0, len(clauses))
@@ -200,13 +205,14 @@ func (b *InsertBuilder) SetMap(clauses map[string]any) *InsertBuilder {
 	return b
 }
 
-// Select set Select clause for insert query
-// If Values and Select are used, then Select has higher priority
+// Select uses a SELECT statement as the INSERT source.
+// If both Values and Select are set, Select takes precedence.
 func (b *InsertBuilder) Select(sb *SelectBuilder) *InsertBuilder {
 	b.selectBuilder = sb
 	return b
 }
 
+// StatementKeyword overrides the leading statement keyword, for example "REPLACE".
 func (b *InsertBuilder) StatementKeyword(keyword string) *InsertBuilder {
 	b.statementKeyword = keyword
 	return b
@@ -218,16 +224,16 @@ func (b *InsertBuilder) Returning(columns ...string) *InsertBuilder {
 	return b
 }
 
-// Clear resets all fields to their zero values
+// Clear resets all fields while preserving slice capacity for reuse.
 func (b *InsertBuilder) Clear() *InsertBuilder {
-	b.prefixes = nil
+	b.prefixes = resetSlice(b.prefixes)
 	b.statementKeyword = ""
-	b.options = nil
+	b.options = resetSlice(b.options)
 	b.into = ""
-	b.columns = nil
-	b.values = nil
-	b.suffixes = nil
+	b.columns = resetSlice(b.columns)
+	b.values = resetSlice(b.values)
+	b.suffixes = resetSlice(b.suffixes)
 	b.selectBuilder = nil
-	b.returning = nil
+	b.returning = resetSlice(b.returning)
 	return b
 }

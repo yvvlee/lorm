@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+// Logger is the minimal structured logger interface used by Engine.
 type Logger interface {
 	DebugContext(ctx context.Context, msg string, args ...any)
 	InfoContext(ctx context.Context, msg string, args ...any)

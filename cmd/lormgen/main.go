@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -16,7 +15,6 @@ import (
 
 func init() {
 	initWd()
-	initGoImports()
 
 	cmd.PersistentFlags().StringVar(&fieldMapper, "field-mapper", "snake", `table field name mapper (one of "snake", "camel", "same")`)
 	cmd.PersistentFlags().StringVar(&tableMapper, "table-mapper", "snake", `db table name mapper (one of "snake", "camel", "same")`)
@@ -42,7 +40,7 @@ var (
 	fileSuffix     string
 	ignorePatterns []string
 
-	wd string // current working directory
+	wd string // cached so generated descriptors can keep source paths relative to the invocation directory
 
 	cmd = &cobra.Command{
 		Use:   "lormgen",
@@ -110,6 +108,7 @@ func main() {
 	}
 }
 
+// argsToFiles normalizes file, directory, and ./... inputs into a unique set of source files.
 func argsToFiles(args []string) ([]string, error) {
 	var files []string
 	for _, arg := range args {
@@ -163,21 +162,11 @@ func isValidFile(file string) bool {
 		!strings.HasSuffix(file, "_gen.go")
 }
 
+// initWd runs before package loading so later AST-derived paths can be rewritten relative to the CLI entrypoint.
 func initWd() {
 	var err error
 	wd, err = os.Getwd()
 	if err != nil {
 		panic(err)
-	}
-}
-
-func initGoImports() {
-	path, err := exec.LookPath("goimports")
-	if err != nil || path == "" {
-		fmt.Println(`goimports not found, installing with go install golang.org/x/tools/cmd/goimports@latest`)
-		err = exec.Command("go", "install", "golang.org/x/tools/cmd/goimports@latest").Run()
-		if err != nil {
-			panic(fmt.Errorf("goimports installation failed: %+v", err))
-		}
 	}
 }
