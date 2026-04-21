@@ -27,7 +27,12 @@ func (q Quoter) Escape(fieldOrTable string) string {
 	}
 	// Quote each segment separately so schema-qualified names stay addressable.
 	items := lo.Map(strings.Split(fieldOrTable, "."), func(s string, _ int) string {
-		s = strings.TrimRight(strings.TrimLeft(s, string(q.prefix)), string(q.suffix))
+		s = strings.TrimPrefix(s, string(q.prefix))
+		s = strings.TrimSuffix(s, string(q.suffix))
+		if q.suffix != 0 {
+			escapedSuffix := string([]byte{q.suffix, q.suffix})
+			s = strings.ReplaceAll(s, string(q.suffix), escapedSuffix)
+		}
 		return string(q.prefix) + s + string(q.suffix)
 	})
 	return strings.Join(items, ".")

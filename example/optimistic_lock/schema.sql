@@ -1,0 +1,6 @@
+CREATE TABLE documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    updated_at DATETIME NOT NULL
+);

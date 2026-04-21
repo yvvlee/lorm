@@ -50,8 +50,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	if len(*v) > 0 {
 		i := 0
 		for rows.Next() && i < len(*v) {
-			item := (*v)[i]
-			if err = rows.Scan(item); err != nil {
+			if err = rows.Scan(&(*v)[i]); err != nil {
 				return err
 			}
 			i++

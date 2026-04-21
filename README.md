@@ -1,137 +1,212 @@
 # LORM - Lightweight ORM for Go
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/yvvlee/lorm)](https://goreportcard.com/report/github.com/yvvlee/lorm)
+[![Go Reference](https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg)](https://pkg.go.dev/github.com/yvvlee/lorm)
+[![Build Status](https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg)](https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 [中文](README_ZH.md)
 
-LORM is a lightweight ORM (Object-Relational Mapping) library for Go. It provides a simple and efficient way to interact with databases while maintaining high performance.
+LORM is a lightweight ORM for Go that keeps the API small, favors explicit SQL,
+and uses code generation to provide model metadata and typed field accessors.
 
-## Features
+## Table of Contents
 
-- Simple and intuitive API design
-- Support for transactions
-- Code generation tools for automatic model creation
-- Support for multiple database drivers (MySQL, PostgreSQL, SQLite, etc.)
-- Query builder with type safety
-- Connection pooling and management
-- Structured logging
+- [Why LORM](#why-lorm)
+- [Design Philosophy](#design-philosophy)
+- [Database Support](#database-support)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Examples](#examples)
+- [Transactions](#transactions)
+- [Repository Helper](#repository-helper)
+- [Custom Projection Models](#custom-projection-models)
+- [Configuration](#configuration)
+- [Benchmarks](#benchmarks)
+- [lormgen](#lormgen)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Why LORM
+
+- **Repository-first data access** for both simple CRUD and complex queries.
+- **Flexible SQL builder inside repository implementations** for queries that still need explicit control.
+- **Code-generated model metadata** instead of runtime reflection-heavy mapping.
+- **Typed field accessors** that make column names easier to reuse safely.
+- **No automatic relation loading**, implicit joins, or hidden query fan-out.
+- **Transaction helper** that automatically reuses the transactional session from `context.Context`.
+- **Structured logging** and configurable placeholder/identifier handling.
+
+## Design Philosophy
+
+LORM keeps data access behind repository interfaces.
+
+Use `Repository[T]` for simple CRUD and for most single-table business flows.
+It keeps application code short, stable, and easy to test.
+
+Keep complex reads, reports, search pages, and custom joins inside repository
+implementations as well. The SQL builder supports repository code and keeps the
+final query shape explicit and reviewable.
+
+LORM intentionally does not provide automatic relation loading, implicit eager
+loading, lazy loading, or magic model association queries. In production
+systems, those features are easy to lose control over: they can hide query
+costs, make SQL shape unpredictable, introduce accidental N+1 patterns, and
+turn simple code changes into performance regressions.
+
+LORM prefers explicit joins, explicit selected columns, and explicit query
+boundaries. Business code should stay focused on business intent, while
+repository implementations own database details.
+
+## Database Support
+
+- **First-class**: MySQL/MariaDB, PostgreSQL
+- **Secondary**: SQLite
+- **Best effort**: SQL Server, Oracle
 
 ## Installation
 
 ```bash
 go get github.com/yvvlee/lorm
+go install github.com/yvvlee/lorm/cmd/lormgen@latest
 ```
 
 ## Quick Start
 
-### 1. Initialize Engine
+### 1. Define a model
 
 ```go
-engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname")
+type User struct {
+	lorm.UnimplementedTable
+	ID        int64     `lorm:"id,primary_key,auto_increment"`
+	Name      string    `lorm:"name"`
+	Email     string    `lorm:"email"`
+	CreatedAt time.Time `lorm:"created_at,created"`
+	UpdatedAt time.Time `lorm:"updated_at,updated"`
+}
+```
+
+### 2. Generate the helper code
+
+```bash
+lormgen ./...
+```
+
+This generates `_lorm_gen.go` files with methods such as `TableName()`,
+`Fields()`, `New()`, `LormFieldPtr()`, and `LormModelDescriptor()`.
+
+### 3. Open an engine
+
+```go
+engine, err := lorm.NewEngine(
+	"mysql",
+	"user:password@tcp(localhost:3306)/dbname?parseTime=true",
+)
 if err != nil {
-    log.Fatal(err)
+	log.Fatal(err)
 }
 defer engine.Close()
 ```
 
-### 2. Define Models
+### 4. Run CRUD operations
 
 ```go
-type User struct {
-    lorm.UnimplementedTable
-    ID        int64  `lorm:"id,primary_key,auto_increment"`
-    Name      string `lorm:"name"`
-    Email     string `lorm:"email"`
-    CreatedAt time.Time `lorm:"created_at,created"`
-    UpdatedAt time.Time `lorm:"updated_at,updated"`
-}
-```
+ctx := context.Background()
+var u User
 
-### 3. Generate Code with lormgen
-
-Before performing any database operations, you need to generate code using the `lormgen` tool:
-
-```bash
-# Install lormgen
-go install github.com/yvvlee/lorm/cmd/lormgen@latest
-
-# Generate code for your models
-lormgen ./...
-```
-
-This will generate files with the `_lorm_gen.go` suffix that contain the necessary methods for database operations.
-
-### 4. CRUD Operations
-
-#### Insert
-
-```go
-// Insert single model
 user := &User{
-    Name:  "John Doe",
-    Email: "john@example.com",
+	Name:  "John Doe",
+	Email: "john@example.com",
 }
-rowsAffected, err := lorm.Insert[*User](engine).AddModel(user).Exec(ctx)
 
-// Insert multiple models
-users := []*User{
-    {Name: "John Doe", Email: "john@example.com"},
-    {Name: "Jane Doe", Email: "jane@example.com"},
-}
-rowsAffected, err := lorm.Insert[*User](engine).AddModels(users...).Exec(ctx)
+// Insert
+_, err = lorm.Insert[*User](engine).
+	AddModel(user).
+	Exec(ctx)
+
+// Query
+savedUser, err := lorm.Query[*User](engine).
+	Where(builder.Eq{u.Fields().ID(): user.ID}).
+	Get(ctx)
+
+// Update
+_, err = lorm.Update[*User](engine).
+	ID(user.ID).
+	SetMap(map[string]any{
+		u.Fields().Name(): "Jane Doe",
+	}).
+	Exec(ctx)
+
+// Delete
+_, err = lorm.DeleteModel[*User](engine).
+	ID(user.ID).
+	Exec(ctx)
 ```
 
-#### Query
+> **Note**: Code generation is required before using model-based APIs.
+
+Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
+`Update` / `Delete` chain for each operation, and do not share the same
+statement across goroutines.
+
+## Examples
+
+See [example/README.md](example/README.md) for runnable, self-contained examples.
+
+- `go run ./example/quickstart`
+- `go run ./example/repository`
+- `go run ./example/transaction`
+- `go run ./example/custom_model`
+- `go run ./example/json_field`
+- `go run ./example/pagination`
+- `go run ./example/optimistic_lock`
+- `go run ./example/query_builder`
+
+## Transactions
+
+`Engine.TX` starts a transaction, passes a transactional `context.Context` into
+the callback, and automatically commits or rolls back.
 
 ```go
-// Get by ID
-user, err := lorm.Query[*User](engine).
-    Where(builder.Eq{u.Fields().ID(): 1}).
-    Get(ctx)
+err := engine.TX(context.Background(), func(ctx context.Context) error {
+	_, err := lorm.Insert[*User](engine).
+		AddModel(&User{Name: "User 1", Email: "user1@example.com"}).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
 
-// Query with conditions
-users, err := lorm.Query[*User](engine).
-    Where(builder.Eq{u.Fields().Name(): "John"}).
-    Find(ctx)
+	_, err = lorm.Insert[*User](engine).
+		AddModel(&User{Name: "User 2", Email: "user2@example.com"}).
+		Exec(ctx)
+	return err
+})
 ```
 
-#### Update
+Nested `TX` calls reuse the existing transactional session carried by the
+incoming context instead of opening a second transaction.
 
-```go
-var u User
-rowsAffected, err := lorm.Update(engine).
-    Table(u.TableName()).
-    ID(1).
-    SetMap(map[string]any{
-        u.Fields().Name(): "Jane Doe",
-    }).
-    Exec(ctx)
-```
+## Repository Helper
 
-#### Delete
+`lorm.Repository[T]` wraps the common single-table CRUD paths. It is highly
+recommended to embed `lorm.Repository[T]` within an implementation struct and
+selectively expose methods through an interface.
 
-```go
-// Delete by primary key with typed helper
-rowsAffected, err := lorm.DeleteModel[*User](engine).
-    ID(1).
-    Exec(ctx)
+Repository is the recommended boundary for all database access:
 
-// Delete with custom conditions
-var u User
-rowsAffected, err := lorm.Delete(engine).
-    From(u.TableName()).
-    Where(builder.Eq{u.Fields().ID(): 1}).
-    Exec(ctx)
-```
+- It gives business code a stable, ORM-agnostic interface.
+- It keeps method signatures independent from transaction management.
+- It keeps SQL builder usage inside repository implementations.
+- It makes testing easier by mocking repository interfaces instead of database calls.
+- It keeps table structure, joins, and query details out of business code.
 
-> **Note**: These operations require the code generation step to be completed first.
-> Statement builders are lightweight and created per call. Start a new `Query`/`Insert`/`Update`/`Delete` chain for each operation, and do not share the same statement across goroutines.
-
-## Recommended: Using Repository
-
-lorm.Repository implements common single-table CRUD operations. You can embed lorm.Repository[*User] in UserRepositoryImpl, and then expose these common methods as needed through the UserRepository interface:
+Simple CRUD can reuse the built-in repository methods directly. Complex queries
+should still live in repository implementations, using the SQL builder
+internally when needed:
 
 ```go
 type UserRepository interface {
-	// The following methods are common methods that lorm.Repository[*User] has implemented, expose as needed
+	// Common methods implemented by lorm.Repository[*User], expose as needed
 	Get(ctx context.Context, id int64) (*User, error)
 	GetByField(ctx context.Context, field string, value any) (*User, error)
 	Lock(ctx context.Context, id int64) (*User, error)
@@ -144,15 +219,15 @@ type UserRepository interface {
 	InsertAll(ctx context.Context, users []*User) (rowsAffected int64, err error)
 	Delete(ctx context.Context, id int64) (rowsAffected int64, err error)
 	DeleteByField(ctx context.Context, field string, value any) (rowsAffected int64, err error)
-    
-	// You can also add custom methods that need to be implemented in UserRepositoryImpl
-	PageGmailUsers(ctx context.Context, pageNum, pageSize uint64) ([]*User,uint64, error)
+
+	// Custom methods to be implemented in UserRepositoryImpl
+	PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error)
 }
 
-var _ UserRepository = (*UserRepositoryImpl).(nil)
+var _ UserRepository = (*UserRepositoryImpl)(nil)
 
 type UserRepositoryImpl struct {
-	lorm.Repository[*User]
+	*lorm.Repository[*User]
 }
 
 func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
@@ -161,302 +236,168 @@ func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 	}
 }
 
-func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, pageNum, pageSize uint64) ([]*User,uint64, error)  {
+func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
 	return lorm.Query[*User](r.Engine).
-		From(u.TableName()).
 		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
-		OrderBy(r.Fields().ID()+" desc").
-		Page(pageNum, pageSize)
+		OrderBy(u.Fields().ID() + " DESC").
+		Page(ctx, page, size)
 }
 ```
 
-## Transaction Support
+## Custom Projection Models
 
-Through the TX method to start a transaction, the incoming ctx parameter of the callback function will carry the transaction session. All database operations in the callback function use this ctx, and lorm will automatically use the transaction session carried by this ctx.
-If the callback function returns an error, the transaction will be rolled back, otherwise the transaction will be automatically committed.
+When query results do not map one-to-one to a table model, embed
+`lorm.UnimplementedModel` instead of `lorm.UnimplementedTable`.
 
 ```go
-err := engine.TX(context.Background(), func(ctx context.Context) error {
-    user1 := &User{Name: "User 1"}
-    _, err := lorm.Insert[*User](engine).AddModel(user1).Exec(ctx)
-    if err != nil {
-        return err
-    }
-    
-    user2 := &User{Name: "User 2"}
-    _, err = lorm.Insert[*User](engine).AddModel(user2).Exec(ctx)
-    if err != nil {
-        return err
-    }
-    
-    return nil
-})
+type UserRole struct {
+	lorm.UnimplementedModel
+	UserID   int64
+	UserName string
+	RoleName string
+}
+
+roles, err := lorm.Query[*UserRole](engine).
+	Select(
+		"u.id AS user_id",
+		"u.name AS user_name",
+		"r.name AS role_name",
+	).
+	From("user AS u").
+	InnerJoin("role AS r ON u.role_id = r.id").
+	Find(ctx)
 ```
 
-## Configuration Options
+Unlike `UnimplementedTable`, `UnimplementedModel` does not generate a
+`TableName()` method, so you must specify `From(...)` yourself.
 
-LORM supports various configuration options:
+## Configuration
 
 ```go
-engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname",
-    lorm.WithPlaceholderFormat(builder.Dollar), // Set SQL placeholder, default is "?"
-    lorm.WithEscaper(names.NewQuoter('"', '"')), // Set SQL escaper for table and column names, default is `` (e.g., select `id`,`desc`,`name` from `table`)
-    lorm.WithMaxIdleConns(10), // Set maximum number of idle connections
-    lorm.WithMaxOpenConns(100), // Set maximum number of open connections
-    lorm.WithConnMaxLifetime(time.Hour), // Set maximum connection lifetime
-    lorm.WithLogger(customLogger), // Set custom logger
+engine, err := lorm.NewEngine(
+	"postgres",
+	"postgres://user:password@localhost:5432/dbname?sslmode=disable",
+	lorm.WithPlaceholderFormat(builder.Dollar),
+	lorm.WithEscaper(names.NewQuoter('"', '"')),
+	lorm.WithMaxIdleConns(10),
+	lorm.WithMaxOpenConns(100),
+	lorm.WithConnMaxLifetime(time.Hour),
+	lorm.WithConnMaxIdleTime(30*time.Minute),
+	lorm.WithLogger(customLogger),
 )
 ```
 
-## lormgen Code Generator Usage
+## Benchmarks
 
-lormgen is Lorm's code generator for automatically generating database table structure related code.
+The benchmark suite lives in [benchmarks/orm-crud](benchmarks/orm-crud).
 
-### Usage
+Results below were captured on April 20, 2026 with:
+
+```bash
+cd benchmarks/orm-crud
+go test -bench . -benchmem
+```
+
+Environment:
+
+- Backend: SQLite (default, `ORMCRUD_DB=sqlite`)
+- OS/arch: `linux/amd64`
+- CPU: `Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz`
+
+Single-row CRUD, `ns/op` (lower is better):
+
+| Benchmark | lorm | gorm | xorm | ent |
+| --- | ---: | ---: | ---: | ---: |
+| Create | **97,471** | 127,067 | 99,391 | 107,457 |
+| ReadByID | **31,231** | 36,679 | 45,174 | 35,275 |
+| UpdateByID | **85,727** | 104,658 | 93,461 | 123,181 |
+| DeleteByID | 79,837 | 96,848 | 84,681 | **78,846** |
+
+Batch CRUD with 100 rows, `ns/op` (lower is better):
+
+| Benchmark | lorm | gorm | xorm | ent |
+| --- | ---: | ---: | ---: | ---: |
+| BatchCreate100 | 1,139,752 | **724,101** | 4,025,133 | 853,383 |
+| BatchRead100 | **346,392** | 427,952 | 725,096 | 411,414 |
+| BatchUpdate100 | 211,472 | 211,800 | **185,189** | 186,621 |
+| BatchDelete100 | 332,062 | 326,834 | 313,968 | **313,609** |
+
+Notes from this run:
+
+- `lorm` leads single-row create, read, and update, and is effectively tied
+  with `ent` on single-row delete.
+- `lorm` is fastest for batch reads and dramatically faster than `xorm` on
+  batch create.
+- `gorm` is fastest in batch create on this machine.
+- `lorm` has the lowest `B/op` in 7 of the 8 benchmark cases in this run.
+
+Treat these numbers as directional rather than universal. Re-run the suite on
+your target database, schema, driver, and hardware before making a decision.
+
+The suite can also run against MySQL or PostgreSQL:
+
+```bash
+ORMCRUD_DB=mysql go test -bench . -benchmem
+ORMCRUD_DB=postgres go test -bench . -benchmem
+```
+
+See [benchmarks/orm-crud/README.md](benchmarks/orm-crud/README.md)
+for the benchmark scope, setup, and full result tables.
+
+## lormgen
+
+`lormgen` scans Go files that embed `lorm.UnimplementedTable` or
+`lorm.UnimplementedModel` and generates the model helper methods that LORM
+needs.
+
+Usage:
 
 ```bash
 lormgen [flags] <directory|file>...
 ```
-It scans structures that embed lorm.UnimplementedTable and lorm.UnimplementedModel, and generates the necessary methods for using lorm.
 
-### Parameters
+Common flags:
 
-- `--field-mapper`: Field name mapper, options: `snake` (snake_case), `camel` (camelCase), `same` (keep unchanged), default: `snake`
-- `--table-mapper`: Table name mapper, options: `snake` (snake_case), `camel` (camelCase), `same` (keep unchanged), default: `snake`
-- `--table-prefix`: Database table name prefix, default is empty
-- `--table-suffix`: Database table name suffix, default is empty
-- `--tag-key`: Field tag key name, default: `lorm`
-- `--file-suffix`: Generated file suffix, default: `_lorm_gen`
-- `--ignore`: Glob pattern for files to ignore, can be specified multiple times
+- `--field-mapper`: `snake`, `camel`, or `same`
+- `--table-mapper`: `snake`, `camel`, or `same`
+- `--table-prefix`: prefix added to generated table names
+- `--table-suffix`: suffix added to generated table names
+- `--tag-key`: struct tag key, default `lorm`
+- `--file-suffix`: generated file suffix, default `_lorm_gen`
+- `--ignore`: glob pattern for ignored files, repeatable
 
-### Usage Examples
+Examples:
 
 ```bash
-# Generate code for all Go files in current directory
 lormgen .
-
-# Recursively generate code for specified directory and subdirectories
 lormgen ./models/...
-
-# Generate code with custom parameters
 lormgen --table-prefix=t_ --table-suffix=_tab --field-mapper=camel ./models
-
-# Ignore specific files
 lormgen --ignore="*_temp.go" --ignore="*_old.go" ./models
 ```
 
-### Model Definition
-Define a database table model:
-```go
-type User struct {
-    lorm.UnimplementedTable 
-    ID                      int `lorm:"primary_key,auto_increment"`
-    Name                    string
-    Age                     int
-    CreatedAt               time.Time `lorm:"created"`
-    UpdatedAt               time.Time `lorm:"updated"`
-}
-```
-After running lormgen, the following code will be generated:
-```go
-// TableName returns the table name
-func (m *User) TableName() string {
-    return "user"
-}
-
-// Fields returns User field accessor
-func (m *User) Fields() *User_Fields {}
-
-type User_Fields struct {
-    alias string
-}
-
-func (f *User_Fields) WithAlias(alias string) *User_Fields {}
-func (f *User_Fields) ID() string {}
-// ...other field accessor methods
-
-// All returns all field names
-func (f *User_Fields) All() []string {}
-```
-
-By default, table names use snake_case naming of the model. You can modify the table name mapping rules by adding the --table-mapper parameter to lormgen, or explicitly specify it by adding a tag to the embedded lorm.UnimplementedTable.
-
-For example:
-```go
-type User struct {
-    lorm.UnimplementedTable `lorm:"users"`
-}
-// This will generate the following code:
-func (m *User) TableName() string {
-    return "users"
-}
-```
-
-By default, database field names use snake_case naming of the model. You can modify the field name mapping rules by adding the --field-mapper parameter to lormgen, or explicitly specify it by adding a tag to the field.
-
-For example:
-```go
-type User struct {
-    lorm.UnimplementedTable
-    Name string `lorm:"username"`
-}
-// This will generate the following code:
-type User_Fields struct {
-    alias string
-}
-
-func (f *User_Fields) Name() string {
-    if f.alias == "" {
-        return "username"
-    }
-    return f.alias + ".username"
-}
-```
-
-Supports struct embedding:
-```go
-type Metadata struct {
-	ID int64
-	Name string
-}
-
-type User struct {
-    lorm.UnimplementedTable
-	
-    Metadata
-    Age int
-}
-
-// This will generate the following code:
-type User_Fields struct {
-    alias string
-}
-
-func (f *User_Fields) ID() string {
-    if f.alias == "" {
-        return "id"
-    }
-    return f.alias + ".id"
-}
-func (f *User_Fields) Name() string {
-    if f.alias == "" {
-        return "name"
-    }
-    return f.alias + ".name"
-}
-func (f *User_Fields) Age() string {
-    if f.alias == "" {
-        return "age"
-    }
-    return f.alias + ".age"
-}
-
-```
-Add a tag to the embedded struct to use as a prefix for nested fields:
-```go
-type Metadata struct {
-	ID int64
-	Name string
-}
-
-type User struct {
-    lorm.UnimplementedTable
-	
-    Metadata `lorm:"user_"`
-    Age int
-}
-
-// This will generate the following code:
-type User_Fields struct {
-    alias string
-}
-
-func (f *User_Fields) ID() string {
-    if f.alias == "" {
-        return "user_id"
-    }
-    return f.alias + ".user_id"
-}
-func (f *User_Fields) Name() string {
-    if f.alias == "" {
-        return "user_name"
-    }
-    return f.alias + ".user_name"
-}
-func (f *User_Fields) Age() string {
-    if f.alias == "" {
-        return "age"
-    }
-    return f.alias + ".age"
-}
-
-```
 Built-in tags:
 
-lorm supports the following built-in tags to mark special field attributes:
+- `primary_key`: marks a primary key field
+- `auto_increment`: marks an auto-increment field
+- `json`: stores the field as JSON
+- `created`: fills the field on insert when it is zero-valued
+- `updated`: fills the field on insert/update when it is zero-valued
+- `version`: enables optimistic-lock style version increments on update
 
-- `primary_key`: Mark field as primary key
-- `auto_increment`: Mark field as auto-increment
-- `json`: Mark field to be stored in JSON format
-- `created`: Mark field as creation time, automatically set to current time on insert
-- `updated`: Mark field as update time, automatically set to current time on insert and update
-- `version`: Mark field as optimistic lock version number, automatically incremented on update
+Generator behavior worth knowing:
 
-Usage example:
-```go
-type User struct {
-    lorm.UnimplementedTable
-    ID        int64     `lorm:"primary_key;auto_increment"`
-    Name      string
-    Profile   *Profile  `lorm:"json"`
-    CreatedAt time.Time `lorm:"created"`
-    UpdatedAt time.Time `lorm:"updated"`
-    Version   int       `lorm:"version"`
-}
-
-type Profile struct {
-    Avatar string
-    Bio    string
-}
-```
-
-
-When database query results need to be mapped to a custom model rather than a database table model, you just need to embed lorm.UnimplementedModel.
-It behaves almost identically to lorm.UnimplementedTable, but it won't generate a TableName() method, so you need to manually specify the table name when performing database operations with custom models.
-```go
-type UserRole struct {
-	lorm.UnimplementedModel
-	UserID int64
-	UserName string
-	RoleID int64
-	RoleName string
-}
-
-func main() {
-    engine, err := lorm.NewEngine("mysql", "user:password@tcp(localhost:3306)/dbname")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer engine.Close()
-    ctx := context.Background()
-    models,err := Query[*UserRole](engine).
-        Select("u.id user_id","u.name user_name","r.id role_id","r.name role_name").
-        From("user").
-        Alias("u").
-        InnerJoin("role as r on u.role_id=r.id").
-        Find(ctx)
-	// SQL: select u.id user_id,u.name user_name,r.id role_id,r.name role_name
-	//      from user u
-	//      inner join role as r on u.role_id=r.id
-	
-}
-```
+- Table names default to snake_case and can be overridden with a tag on the
+  embedded `lorm.UnimplementedTable`.
+- Field names default to snake_case and can be overridden with field tags.
+- Embedded structs are flattened into the generated field accessors.
+- Tags on embedded structs can prepend a prefix to the flattened field names.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Feel free to open an issue or submit a pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for
+details.

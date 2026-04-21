@@ -61,6 +61,20 @@ func TestQuoter_Escape(t *testing.T) {
 			fieldOrTable: "table.field",
 			expected:     "[table].[field]",
 		},
+		{
+			name:         "escape internal quote characters",
+			prefix:       '"',
+			suffix:       '"',
+			fieldOrTable: `schema.a"b`,
+			expected:     `"schema"."a""b"`,
+		},
+		{
+			name:         "escape internal suffix characters with asymmetric quotes",
+			prefix:       '[',
+			suffix:       ']',
+			fieldOrTable: `schema.a]b`,
+			expected:     `[schema].[a]]b]`,
+		},
 	}
 
 	for _, tt := range tests {
