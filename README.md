@@ -324,7 +324,7 @@ runnable example.
 
 ```go
 engine, err := lorm.NewEngine(
-	"postgres",
+	"pgx",
 	"postgres://user:password@localhost:5432/dbname?sslmode=disable",
 	lorm.WithPlaceholderFormat(builder.Dollar),
 	lorm.WithEscaper(names.NewQuoter('"', '"')),

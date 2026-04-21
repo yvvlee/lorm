@@ -67,9 +67,14 @@ func TestConnectErrorBranches(t *testing.T) {
 	_, err := connect("__invalid_driver__", "dsn")
 	assert.Error(t, err)
 
-	// Registered driver with bad DSN: use postgres
-	// driver imported in lorm_test.go
+	// Alias without a matching registered driver should fail immediately.
 	_, err = connect("postgres", "postgres://wrong:wrong@127.0.0.1:1/db")
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, `unknown driver "postgres"`)
+
+	// Registered driver with bad DSN: use pgx.
+	// driver imported in lorm_test.go
+	_, err = connect("pgx", "postgres://wrong:wrong@127.0.0.1:1/db")
 	assert.Error(t, err)
 }
 

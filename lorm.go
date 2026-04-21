@@ -274,7 +274,7 @@ func defaultDialectConfig(driverName string) dialectConfig {
 		}
 	case //MySQL, MariaDB
 		"mysql", "mariadb":
-			return dialectConfig{
+		return dialectConfig{
 			placeholderFormat:    builder.Question,
 			escaper:              names.NewQuoter('`', '`'),
 			supportsReturning:    false,
