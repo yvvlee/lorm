@@ -15,6 +15,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/mattn/go-sqlite3"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 )
 
 //go:embed schema.sql
@@ -31,9 +32,17 @@ var benchmarkCtx = context.Background()
 var nonDatabaseName = regexp.MustCompile(`[^a-z0-9_]+`)
 
 type benchInput struct {
-	Name  string
-	Age   int
-	Email string
+	Name     string
+	Alias    *string
+	Age      int
+	AgeP     *int
+	Active   bool
+	ActiveP  *bool
+	Email    string
+	Tags     benchmodel.IntSlice
+	Meta     benchmodel.StringMap
+	Profile  benchmodel.Profile
+	Contacts benchmodel.ContactList
 }
 
 type benchmarkBackend struct {
@@ -49,10 +58,32 @@ type benchmarkDatabase struct {
 }
 
 func makeBenchInput(i int) benchInput {
+	alias := fmt.Sprintf("alias-%d", i)
+	ageP := 100 + (i % 10)
+	activeP := i%3 == 0
 	return benchInput{
-		Name:  fmt.Sprintf("user-%d", i),
-		Age:   18 + (i % 50),
-		Email: fmt.Sprintf("user-%d@example.com", i),
+		Name:    fmt.Sprintf("user-%d", i),
+		Alias:   &alias,
+		Age:     18 + (i % 50),
+		AgeP:    &ageP,
+		Active:  i%2 == 0,
+		ActiveP: &activeP,
+		Email:   fmt.Sprintf("user-%d@example.com", i),
+		Tags:    benchmodel.IntSlice{i, i + 1, i + 2},
+		Meta: benchmodel.StringMap{
+			"source": "benchmark",
+			"key":    fmt.Sprintf("meta-%d", i),
+		},
+		Profile: benchmodel.Profile{
+			ID:     i,
+			Name:   fmt.Sprintf("profile-%d", i),
+			Active: i%2 == 0,
+			Labels: []string{fmt.Sprintf("l-%d", i), fmt.Sprintf("l-%d", i+1)},
+		},
+		Contacts: benchmodel.ContactList{
+			{Kind: "email", Value: fmt.Sprintf("user-%d@example.com", i), Primary: true},
+			{Kind: "phone", Value: fmt.Sprintf("1380000%04d", i%10000), Primary: false},
+		},
 	}
 }
 

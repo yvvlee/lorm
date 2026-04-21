@@ -12,7 +12,7 @@ type FieldFlag uint8
 
 // HasFlag reports whether f includes flag.
 func (f FieldFlag) HasFlag(flag FieldFlag) bool {
-	return f&flag != 0
+	return f&flag == flag
 }
 
 // Field flag bits stored in FieldDescriptor.Flag.

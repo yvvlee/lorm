@@ -15,10 +15,26 @@ const (
 	FieldID = "id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldAlias holds the string denoting the alias field in the database.
+	FieldAlias = "alias"
 	// FieldAge holds the string denoting the age field in the database.
 	FieldAge = "age"
+	// FieldAgeP holds the string denoting the age_p field in the database.
+	FieldAgeP = "age_p"
+	// FieldActive holds the string denoting the active field in the database.
+	FieldActive = "active"
+	// FieldActiveP holds the string denoting the active_p field in the database.
+	FieldActiveP = "active_p"
 	// FieldEmail holds the string denoting the email field in the database.
 	FieldEmail = "email"
+	// FieldTags holds the string denoting the tags field in the database.
+	FieldTags = "tags"
+	// FieldMeta holds the string denoting the meta field in the database.
+	FieldMeta = "meta"
+	// FieldProfile holds the string denoting the profile field in the database.
+	FieldProfile = "profile"
+	// FieldContacts holds the string denoting the contacts field in the database.
+	FieldContacts = "contacts"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -31,8 +47,16 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldName,
+	FieldAlias,
 	FieldAge,
+	FieldAgeP,
+	FieldActive,
+	FieldActiveP,
 	FieldEmail,
+	FieldTags,
+	FieldMeta,
+	FieldProfile,
+	FieldContacts,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }

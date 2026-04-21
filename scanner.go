@@ -23,7 +23,7 @@ func ScanModels[T Model](rows *sql.Rows, models *[]T) error {
 				values[i] = new(any)
 				continue
 			}
-			values[i] = field
+			values[i] = wrapScanTarget(field)
 		}
 		if err = rows.Scan(values...); err != nil {
 			return err
@@ -50,7 +50,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	if len(*v) > 0 {
 		i := 0
 		for rows.Next() && i < len(*v) {
-			if err = rows.Scan(&(*v)[i]); err != nil {
+			if err = rows.Scan(wrapScanTarget(&(*v)[i])); err != nil {
 				return err
 			}
 			i++
@@ -60,7 +60,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	var res []T
 	for rows.Next() {
 		var item T
-		if err = rows.Scan(&item); err != nil {
+		if err = rows.Scan(wrapScanTarget(&item)); err != nil {
 			return err
 		}
 		res = append(res, item)
@@ -83,7 +83,7 @@ func ScanModel[T Model](row *sql.Rows, m T) error {
 			values[i] = new(any)
 			continue
 		}
-		values[i] = field
+		values[i] = wrapScanTarget(field)
 	}
 	return scanRow(row, values...)
 }
@@ -97,7 +97,7 @@ func ScanCol[T any](row *sql.Rows, t T) error {
 	if len(columns) != 1 {
 		return fmt.Errorf("expected exactly one column, got %d", len(columns))
 	}
-	return scanRow(row, t)
+	return scanRow(row, wrapScanTarget(t))
 }
 
 func scanRow(rows *sql.Rows, dest ...any) error {

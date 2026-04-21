@@ -136,14 +136,38 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Alias(); ok {
+		_spec.SetField(user.FieldAlias, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Age(); ok {
 		_spec.SetField(user.FieldAge, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AgeP(); ok {
+		_spec.SetField(user.FieldAgeP, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Active(); ok {
+		_spec.SetField(user.FieldActive, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ActiveP(); ok {
+		_spec.SetField(user.FieldActiveP, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.AddedAge(); ok {
 		_spec.AddField(user.FieldAge, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Tags(); ok {
+		_spec.SetField(user.FieldTags, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Meta(); ok {
+		_spec.SetField(user.FieldMeta, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Profile(); ok {
+		_spec.SetField(user.FieldProfile, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Contacts(); ok {
+		_spec.SetField(user.FieldContacts, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
@@ -306,14 +330,38 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Alias(); ok {
+		_spec.SetField(user.FieldAlias, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Age(); ok {
 		_spec.SetField(user.FieldAge, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AgeP(); ok {
+		_spec.SetField(user.FieldAgeP, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Active(); ok {
+		_spec.SetField(user.FieldActive, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ActiveP(); ok {
+		_spec.SetField(user.FieldActiveP, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.AddedAge(); ok {
 		_spec.AddField(user.FieldAge, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Tags(); ok {
+		_spec.SetField(user.FieldTags, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Meta(); ok {
+		_spec.SetField(user.FieldMeta, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Profile(); ok {
+		_spec.SetField(user.FieldProfile, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Contacts(); ok {
+		_spec.SetField(user.FieldContacts, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)

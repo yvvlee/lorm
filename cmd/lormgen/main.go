@@ -76,18 +76,10 @@ func run(args []string) error {
 		return fmt.Errorf("file parsing failed: %v\n", err)
 	}
 	if len(ignorePatterns) > 0 {
-		files = lo.Filter(files, func(item string, _ int) bool {
-			for _, pattern := range ignorePatterns {
-				matched, err := filepath.Match(pattern, item)
-				if err != nil {
-					panic(err)
-				}
-				if matched {
-					return false
-				}
-			}
-			return true
-		})
+		files, err = filterIgnoredFiles(files, ignorePatterns)
+		if err != nil {
+			return fmt.Errorf("invalid ignore pattern: %w", err)
+		}
 	}
 	if len(files) == 0 {
 		return fmt.Errorf("no matching files found")
@@ -143,8 +135,11 @@ func argsToFiles(args []string) ([]string, error) {
 					return nil, fmt.Errorf("failed to read directory: %v", err)
 				}
 				for _, item := range items {
-					if !item.IsDir() && isValidFile(item.Name()) {
-						files = append(files, filepath.Join(arg, item.Name()))
+					if !item.IsDir() {
+						fullPath := filepath.Join(arg, item.Name())
+						if isValidFile(fullPath) {
+							files = append(files, fullPath)
+						}
 					}
 				}
 			} else if isValidFile(arg) {
@@ -157,9 +152,68 @@ func argsToFiles(args []string) ([]string, error) {
 }
 
 func isValidFile(file string) bool {
+	generatedSuffix := fileSuffix
+	if generatedSuffix == "" {
+		generatedSuffix = "_lorm_gen"
+	}
 	return strings.HasSuffix(file, ".go") &&
 		!strings.HasSuffix(file, "_test.go") &&
-		!strings.HasSuffix(file, "_gen.go")
+		!strings.HasSuffix(file, "_gen.go") &&
+		!strings.HasSuffix(file, generatedSuffix+".go")
+}
+
+func filterIgnoredFiles(files []string, patterns []string) ([]string, error) {
+	if len(patterns) == 0 {
+		return files, nil
+	}
+	filtered := make([]string, 0, len(files))
+	for _, file := range files {
+		ignored, err := matchesAnyIgnorePattern(file, patterns)
+		if err != nil {
+			return nil, err
+		}
+		if !ignored {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered, nil
+}
+
+func matchesAnyIgnorePattern(file string, patterns []string) (bool, error) {
+	base := filepath.Base(file)
+	clean := filepath.Clean(file)
+	for _, pattern := range patterns {
+		matched, err := filepath.Match(pattern, base)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+		for _, candidate := range pathMatchCandidates(clean) {
+			matched, err = filepath.Match(pattern, candidate)
+			if err != nil {
+				return false, err
+			}
+			if matched {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func pathMatchCandidates(path string) []string {
+	trimmed := strings.TrimPrefix(filepath.ToSlash(path), "/")
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, "/")
+	candidates := make([]string, 0, len(parts))
+	for i := range parts {
+		candidates = append(candidates, strings.Join(parts[i:], "/"))
+	}
+	return candidates
 }
 
 // initWd runs before package loading so later AST-derived paths can be rewritten relative to the CLI entrypoint.

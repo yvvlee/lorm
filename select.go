@@ -22,7 +22,7 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	selectBuilder := new(builder.SelectBuilder)
 	selectBuilder.Select(fields...)
 	if table, ok := any(t).(Table); ok {
-		selectBuilder.From(table.TableName())
+		selectBuilder.From(engine.Escaper().Escape(table.TableName()))
 	}
 	return &QueryModelStmt[T]{
 		engine:  engine,
@@ -252,13 +252,12 @@ func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...any) *QueryModelStmt[
 // map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
 // bound to the placeholder. If the value is nil, the expression will be "<key>
-// IS NULL". If the value is an array or slice, the expression will be "<key> IN
-// (?,?,...)", with one placeholder for each item in the value. These expressions
-// are ANDed together.
+// IS NULL". Slices and arrays are not expanded automatically; use builder.In or
+// builder.NotIn explicitly when you need an IN-style predicate.
 //
 // Where will panic if pred isn't any of the above types.
 func (s *QueryModelStmt[T]) Where(pred any, args ...any) *QueryModelStmt[T] {
-	s.builder.Where(pred, args...)
+	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 
@@ -270,7 +269,7 @@ func (s *QueryModelStmt[T]) ID(id any) *QueryModelStmt[T] {
 		s.err = errors.New("lorm.Query().ID() only supports models with single-column primary keys")
 		return s
 	}
-	s.builder.Where(builder.Eq{primaryKeys[0]: id})
+	s.builder.Where(builder.Eq{s.engine.Escaper().Escape(primaryKeys[0]): id})
 	return s
 }
 
@@ -284,7 +283,7 @@ func (s *QueryModelStmt[T]) GroupBy(groupBys ...string) *QueryModelStmt[T] {
 //
 // See Where.
 func (s *QueryModelStmt[T]) Having(pred any, rest ...any) *QueryModelStmt[T] {
-	s.builder.Having(pred, rest...)
+	s.builder.Having(escapePredicate(s.engine.Escaper(), pred), rest...)
 	return s
 }
 
@@ -513,13 +512,12 @@ func (s *QueryColStmt[T]) CrossJoin(join string, rest ...any) *QueryColStmt[T] {
 // map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
 // bound to the placeholder. If the value is nil, the expression will be "<key>
-// IS NULL". If the value is an array or slice, the expression will be "<key> IN
-// (?,?,...)", with one placeholder for each item in the value. These expressions
-// are ANDed together.
+// IS NULL". Slices and arrays are not expanded automatically; use builder.In or
+// builder.NotIn explicitly when you need an IN-style predicate.
 //
 // Where will panic if pred isn't any of the above types.
 func (s *QueryColStmt[T]) Where(pred any, args ...any) *QueryColStmt[T] {
-	s.builder.Where(pred, args...)
+	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 
@@ -533,7 +531,7 @@ func (s *QueryColStmt[T]) GroupBy(groupBys ...string) *QueryColStmt[T] {
 //
 // See Where.
 func (s *QueryColStmt[T]) Having(pred any, rest ...any) *QueryColStmt[T] {
-	s.builder.Having(pred, rest...)
+	s.builder.Having(escapePredicate(s.engine.Escaper(), pred), rest...)
 	return s
 }
 

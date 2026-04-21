@@ -193,8 +193,46 @@ func TestInsertIgnoreReturningRowsAffected(t *testing.T) {
 	assert.True(t, inserted.ID > 0)
 }
 
+func TestInsertAllWithoutReturningDoesNotBackfillGeneratedIDs(t *testing.T) {
+	engine := initEngine(t)
+	if engine.SupportsReturning() {
+		t.Skip("non-returning behavior only applies to LastInsertId-style dialects")
+	}
+	defer engine.Close()
+
+	ctx := context.TODO()
+	testTime, _ := time.ParseInLocation(time.DateTime, "2025-01-23 16:17:18", time.Local)
+	models := []*Test{
+		{
+			Int:       501,
+			Str:       "batch_no_returning_1",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(5.01),
+			IntSlice:  []int{5, 1},
+			Struct:    Sub{ID: 51, Name: "b1"},
+		},
+		{
+			Int:       502,
+			Str:       "batch_no_returning_2",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(5.02),
+			IntSlice:  []int{5, 2},
+			Struct:    Sub{ID: 52, Name: "b2"},
+		},
+	}
+
+	rows, err := Insert[*Test](engine).AddModels(models...).Exec(ctx)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 2, rows)
+	assert.Zero(t, models[0].ID)
+	assert.Zero(t, models[1].ID)
+}
+
 func initReturningCompatibleEngine(t *testing.T) *Engine {
 	t.Helper()
+	skipUnlessSQLite3Available(t)
 
 	engine, err := NewEngine(
 		"sqlite3",
@@ -203,6 +241,9 @@ func initReturningCompatibleEngine(t *testing.T) *Engine {
 		WithEscaper(names.NewQuoter('"', '"')),
 	)
 	assert.NoError(t, err)
+	if err != nil {
+		return nil
+	}
 
 	ctx := context.TODO()
 	for _, sql := range strings.Split(sqliteInitSQL, ";") {
@@ -217,5 +258,8 @@ func initReturningCompatibleEngine(t *testing.T) *Engine {
 	assert.NoError(t, err)
 
 	engine.config.driverName = "postgres"
+	engine.config.supportsReturning = true
+	engine.config.supportsLastInsertID = false
+	engine.config.supportsForUpdate = true
 	return engine
 }

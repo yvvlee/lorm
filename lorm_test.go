@@ -3,7 +3,6 @@ package lorm
 import (
 	"context"
 	_ "embed"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,27 +31,18 @@ func TestEngine(t *testing.T) {
 }
 
 func initEngine(t *testing.T) *Engine {
-	driver := os.Getenv("DB_DRIVER")
-	dsn := os.Getenv("DB_DSN")
-
-	// If environment variables are not set, use MySQL for testing by default
-	if driver == "" || dsn == "" {
-		driver = "mysql"
-		dsn = "root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local"
-	}
+	t.Helper()
+	driver, dsn := mustIntegrationDriverAndDSN(t)
 
 	engine, err := NewEngine(driver, dsn)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("open test engine (%s): %v", driver, err)
+	}
 	ctx := context.TODO()
 
-	var initSQL string
-	switch engine.config.driverName {
-	case "postgres", "pgx":
-		initSQL = postgresInitSQL
-	case "sqlite3":
-		initSQL = sqliteInitSQL
-	default:
-		initSQL = mysqlInitSQL
+	initSQL, err := initIntegrationSQL(engine.config.driverName)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	for _, sql := range strings.Split(initSQL, ";") {

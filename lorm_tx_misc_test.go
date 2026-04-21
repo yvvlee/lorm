@@ -47,12 +47,12 @@ func TestTXErrorBranchAndCommit(t *testing.T) {
 	assert.Error(t, err)
 
 	// explicit begin and commit branch
-	s, err := e.beginTxSession(ctx)
+	s, err := e.beginTxSession(ctx, nil)
 	assert.NoError(t, err)
 	assert.NoError(t, s.commit())
 
 	// begin and close triggers rollback path
-	s, err = e.beginTxSession(ctx)
+	s, err = e.beginTxSession(ctx, nil)
 	assert.NoError(t, err)
 	assert.NoError(t, s.close())
 }

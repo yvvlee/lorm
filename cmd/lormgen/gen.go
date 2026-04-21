@@ -232,7 +232,7 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 						} else {
 							// Regular field
 							fieldList := g.parseField(field)
-							if len(fields) > 0 {
+							if len(fieldList) > 0 {
 								structInfo.Fields = append(structInfo.Fields, fieldList...)
 							}
 						}
@@ -272,7 +272,7 @@ func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
 }
 
 // parseTag splits the lorm tag into an optional database field name and any flag tokens.
-func parseTag(field *ast.Field, tagKey string) (filed string, flag lorm.FieldFlag) {
+func parseTag(field *ast.Field, tagKey string) (dbField string, flag lorm.FieldFlag) {
 	if field == nil || field.Tag == nil {
 		return
 	}
@@ -285,7 +285,7 @@ func parseTag(field *ast.Field, tagKey string) (filed string, flag lorm.FieldFla
 	}
 	if len(flags) > 0 {
 		// After flag tokens are removed, the first remaining value is the explicit database field name.
-		filed = flags[0]
+		dbField = flags[0]
 	}
 	return
 }

@@ -9,29 +9,24 @@ import (
 
 func TestPlaceholderBranches(t *testing.T) {
 	assert.Equal(t, builder.Dollar, Placeholder("postgres"))
+	assert.Equal(t, builder.Dollar, Placeholder("postgresql"))
 	assert.Equal(t, builder.Dollar, Placeholder("pgx"))
+	assert.Equal(t, builder.Dollar, Placeholder("pq"))
 	assert.Equal(t, builder.Dollar, Placeholder("ql"))
-	assert.Equal(t, builder.Colon, Placeholder("oci8"))
-	assert.Equal(t, builder.Colon, Placeholder("godror"))
-	assert.Equal(t, builder.AtP, Placeholder("sqlserver"))
 	assert.Equal(t, builder.Question, Placeholder("mysql"))
 	assert.Equal(t, builder.Question, Placeholder("unknown"))
 }
 
 func TestEscaperBranches(t *testing.T) {
-	// PostgreSQL / Oracle / SQLite
+	// PostgreSQL / SQLite
 	q := Escaper("postgres")
 	assert.Equal(t, "\"x\"", q.Escape("x"))
 
-	q = Escaper("oci8")
+	q = Escaper("postgresql")
 	assert.Equal(t, "\"x\"", q.Escape("x"))
 
 	q = Escaper("ql")
 	assert.Equal(t, "\"x\"", q.Escape("x"))
-
-	// SQL Server
-	q = Escaper("sqlserver")
-	assert.Equal(t, "[x]", q.Escape("x"))
 
 	// MySQL
 	q = Escaper("mysql")
@@ -43,12 +38,28 @@ func TestEscaperBranches(t *testing.T) {
 }
 
 func TestSupportsForUpdateBranches(t *testing.T) {
-	assert.True(t, (&Engine{config: &Config{driverName: "mysql"}}).SupportsForUpdate())
-	assert.True(t, (&Engine{config: &Config{driverName: "postgres"}}).SupportsForUpdate())
-	assert.True(t, (&Engine{config: &Config{driverName: "oracle"}}).SupportsForUpdate())
-	assert.False(t, (&Engine{config: &Config{driverName: "sqlite3"}}).SupportsForUpdate())
-	assert.False(t, (&Engine{config: &Config{driverName: "sqlserver"}}).SupportsForUpdate())
-	assert.False(t, (&Engine{config: &Config{driverName: "unknown"}}).SupportsForUpdate())
+	assert.True(t, newDialectTestEngine("mysql").SupportsForUpdate())
+	assert.True(t, newDialectTestEngine("postgres").SupportsForUpdate())
+	assert.True(t, newDialectTestEngine("postgresql").SupportsForUpdate())
+	assert.True(t, newDialectTestEngine("pq").SupportsForUpdate())
+	assert.False(t, newDialectTestEngine("sqlite3").SupportsForUpdate())
+	assert.False(t, newDialectTestEngine("unknown").SupportsForUpdate())
+}
+
+func TestSupportsReturningBranches(t *testing.T) {
+	assert.True(t, newDialectTestEngine("postgres").SupportsReturning())
+	assert.True(t, newDialectTestEngine("postgresql").SupportsReturning())
+	assert.True(t, newDialectTestEngine("pq").SupportsReturning())
+	assert.True(t, newDialectTestEngine("pgx").SupportsReturning())
+	assert.False(t, newDialectTestEngine("mysql").SupportsReturning())
+}
+
+func TestSupportsLastInsertIDBranches(t *testing.T) {
+	assert.False(t, newDialectTestEngine("postgres").SupportsLastInsertId())
+	assert.False(t, newDialectTestEngine("postgresql").SupportsLastInsertId())
+	assert.False(t, newDialectTestEngine("pq").SupportsLastInsertId())
+	assert.True(t, newDialectTestEngine("mysql").SupportsLastInsertId())
+	assert.True(t, newDialectTestEngine("sqlite3").SupportsLastInsertId())
 }
 
 func TestConnectErrorBranches(t *testing.T) {
@@ -60,4 +71,18 @@ func TestConnectErrorBranches(t *testing.T) {
 	// driver imported in lorm_test.go
 	_, err = connect("postgres", "postgres://wrong:wrong@127.0.0.1:1/db")
 	assert.Error(t, err)
+}
+
+func newDialectTestEngine(driverName string) *Engine {
+	dialect := defaultDialectConfig(driverName)
+	return &Engine{
+		config: &Config{
+			driverName:           driverName,
+			placeholderFormat:    dialect.placeholderFormat,
+			escaper:              dialect.escaper,
+			supportsReturning:    dialect.supportsReturning,
+			supportsLastInsertID: dialect.supportsLastInsertID,
+			supportsForUpdate:    dialect.supportsForUpdate,
+		},
+	}
 }

@@ -9,6 +9,7 @@ import (
 )
 
 func TestScanColsPreallocatedSlice(t *testing.T) {
+	skipUnlessSQLite3Available(t)
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()

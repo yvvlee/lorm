@@ -87,9 +87,7 @@ Database-specific behavior is configured on the `Engine` via options:
 - `WithPlaceholderFormat` — driver-dependent placeholder format. Current defaults are:
   - MySQL/MariaDB: `builder.Question`
   - PostgreSQL and SQLite: `builder.Dollar`
-  - Oracle: `builder.Colon`
-  - SQL Server: `builder.AtP`
-- `WithEscaper` — controls identifier quoting (backtick, double-quote, brackets)
+- `WithEscaper` — controls identifier quoting (backtick or double-quote)
 
 The `INSERT IGNORE` syntax and `RETURNING` clause are handled per-driver in `insert.go`. Repository locking uses `FOR UPDATE` only on explicitly supported drivers and returns an error otherwise.
 

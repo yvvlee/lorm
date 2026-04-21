@@ -21,6 +21,7 @@ and uses code generation to provide model metadata and typed field accessors.
 - [Transactions](#transactions)
 - [Repository Helper](#repository-helper)
 - [Custom Projection Models](#custom-projection-models)
+- [Custom Field Conversion](#custom-field-conversion)
 - [Configuration](#configuration)
 - [Benchmarks](#benchmarks)
 - [lormgen](#lormgen)
@@ -62,7 +63,6 @@ repository implementations own database details.
 
 - **First-class**: MySQL/MariaDB, PostgreSQL
 - **Secondary**: SQLite
-- **Best effort**: SQL Server, Oracle
 
 ## Installation
 
@@ -145,6 +145,16 @@ _, err = lorm.DeleteModel[*User](engine).
 
 > **Note**: Code generation is required before using model-based APIs.
 
+> **Update note**: `Update.SetModel(model)` performs a full-field update. Zero
+> values are written as well, so prefer `SetMap` / `Set` for partial updates.
+
+> **Where note**: `builder.Eq` does not expand slices into `IN (...)`. Use
+> `builder.In` / `builder.NotIn` explicitly for membership predicates.
+
+> **Insert note**: batch inserts only backfill generated IDs when the driver
+> returns one generated value per inserted row. `LastInsertId`-only dialects do
+> not infer per-row IDs for multi-row inserts.
+
 Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
 `Update` / `Delete` chain for each operation, and do not share the same
 statement across goroutines.
@@ -157,6 +167,7 @@ See [example/README.md](example/README.md) for runnable, self-contained examples
 - `go run ./example/repository`
 - `go run ./example/transaction`
 - `go run ./example/custom_model`
+- `go run ./example/custom_conversion`
 - `go run ./example/json_field`
 - `go run ./example/pagination`
 - `go run ./example/optimistic_lock`
@@ -186,6 +197,10 @@ err := engine.TX(context.Background(), func(ctx context.Context) error {
 Nested `TX` calls reuse the existing transactional session carried by the
 incoming context instead of opening a second transaction.
 
+Use `Engine.TXWithOptions` when you need to pass `sql.TxOptions` such as
+isolation level or read-only mode. Nested calls still reuse the current
+transaction from context.
+
 ## Repository Helper
 
 `lorm.Repository[T]` wraps the common single-table CRUD paths. It is highly
@@ -207,17 +222,17 @@ internally when needed:
 ```go
 type UserRepository interface {
 	// Common methods implemented by lorm.Repository[*User], expose as needed
-	Get(ctx context.Context, id int64) (*User, error)
+	Get(ctx context.Context, id any) (*User, error)
 	GetByField(ctx context.Context, field string, value any) (*User, error)
-	Lock(ctx context.Context, id int64) (*User, error)
+	Lock(ctx context.Context, id any) (*User, error)
 	LockByField(ctx context.Context, field string, value any) (*User, error)
-	Exist(ctx context.Context, id int64) (bool, error)
+	Exist(ctx context.Context, id any) (bool, error)
 	ExistByField(ctx context.Context, field string, value any) (bool, error)
 	Update(ctx context.Context, user *User) (rowsAffected int64, err error)
-	UpdateMap(ctx context.Context, id int64, data map[string]any) (rowsAffected int64, err error)
+	UpdateMap(ctx context.Context, id any, data map[string]any) (rowsAffected int64, err error)
 	Insert(ctx context.Context, user *User) (rowsAffected int64, err error)
 	InsertAll(ctx context.Context, users []*User) (rowsAffected int64, err error)
-	Delete(ctx context.Context, id int64) (rowsAffected int64, err error)
+	Delete(ctx context.Context, id any) (rowsAffected int64, err error)
 	DeleteByField(ctx context.Context, field string, value any) (rowsAffected int64, err error)
 
 	// Custom methods to be implemented in UserRepositoryImpl
@@ -271,6 +286,39 @@ roles, err := lorm.Query[*UserRole](engine).
 
 Unlike `UnimplementedTable`, `UnimplementedModel` does not generate a
 `TableName()` method, so you must specify `From(...)` yourself.
+
+## Custom Field Conversion
+
+For fields that should not be stored as plain values or JSON, implement
+`lorm.Conversion` on the field type itself.
+
+```go
+type CSVInts []int
+
+func (c CSVInts) ToDB() ([]byte, error) {
+	return []byte("1,2,3"), nil
+}
+
+func (c *CSVInts) FromDB(data []byte) error {
+	// decode "1,2,3" back into the slice
+	return nil
+}
+
+type Report struct {
+	lorm.UnimplementedTable
+	ID     int64   `lorm:"id,primary_key,auto_increment"`
+	Title  string  `lorm:"title"`
+	Scores CSVInts `lorm:"scores"`
+}
+```
+
+LORM will call:
+
+- `ToDB()` before writing query arguments to the database
+- `FromDB()` when scanning the field back from query results
+
+See [example/custom_conversion/main.go](example/custom_conversion/main.go) for a
+runnable example.
 
 ## Configuration
 

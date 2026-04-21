@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 	"github.com/yvvlee/lorm/benchmarks/orm-crud/ent/user"
 )
 
@@ -19,10 +20,26 @@ type User struct {
 	ID int `json:"id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
+	// Alias holds the value of the "alias" field.
+	Alias *string `json:"alias,omitempty"`
 	// Age holds the value of the "age" field.
 	Age int `json:"age,omitempty"`
+	// AgeP holds the value of the "age_p" field.
+	AgeP *int `json:"age_p,omitempty"`
+	// Active holds the value of the "active" field.
+	Active bool `json:"active,omitempty"`
+	// ActiveP holds the value of the "active_p" field.
+	ActiveP *bool `json:"active_p,omitempty"`
 	// Email holds the value of the "email" field.
 	Email string `json:"email,omitempty"`
+	// Tags holds the value of the "tags" field.
+	Tags benchmodel.IntSlice `json:"tags,omitempty"`
+	// Meta holds the value of the "meta" field.
+	Meta benchmodel.StringMap `json:"meta,omitempty"`
+	// Profile holds the value of the "profile" field.
+	Profile benchmodel.Profile `json:"profile,omitempty"`
+	// Contacts holds the value of the "contacts" field.
+	Contacts benchmodel.ContactList `json:"contacts,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -35,9 +52,11 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldID, user.FieldAge:
+		case user.FieldID, user.FieldAge, user.FieldAgeP:
 			values[i] = new(sql.NullInt64)
-		case user.FieldName, user.FieldEmail:
+		case user.FieldActive, user.FieldActiveP:
+			values[i] = new(sql.NullBool)
+		case user.FieldName, user.FieldAlias, user.FieldEmail, user.FieldTags, user.FieldMeta, user.FieldProfile, user.FieldContacts:
 			values[i] = new(sql.NullString)
 		case user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -68,17 +87,76 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Name = value.String
 			}
+		case user.FieldAlias:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field alias", values[i])
+			} else if value.Valid {
+				v := value.String
+				_m.Alias = &v
+			}
 		case user.FieldAge:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field age", values[i])
 			} else if value.Valid {
 				_m.Age = int(value.Int64)
 			}
+		case user.FieldAgeP:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field age_p", values[i])
+			} else if value.Valid {
+				v := int(value.Int64)
+				_m.AgeP = &v
+			}
+		case user.FieldActive:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field active", values[i])
+			} else if value.Valid {
+				_m.Active = value.Bool
+			}
+		case user.FieldActiveP:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field active_p", values[i])
+			} else if value.Valid {
+				v := value.Bool
+				_m.ActiveP = &v
+			}
 		case user.FieldEmail:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field email", values[i])
 			} else if value.Valid {
 				_m.Email = value.String
+			}
+		case user.FieldTags:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field tags", values[i])
+			} else if value.Valid {
+				if err := _m.Tags.Scan(value.String); err != nil {
+					return err
+				}
+			}
+		case user.FieldMeta:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field meta", values[i])
+			} else if value.Valid {
+				if err := _m.Meta.Scan(value.String); err != nil {
+					return err
+				}
+			}
+		case user.FieldProfile:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field profile", values[i])
+			} else if value.Valid {
+				if err := _m.Profile.Scan(value.String); err != nil {
+					return err
+				}
+			}
+		case user.FieldContacts:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field contacts", values[i])
+			} else if value.Valid {
+				if err := _m.Contacts.Scan(value.String); err != nil {
+					return err
+				}
 			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -131,8 +209,16 @@ func (_m *User) String() string {
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
+	builder.WriteString("alias=")
+	if _m.Alias != nil {
+		builder.WriteString(*_m.Alias)
+	}
+	builder.WriteString(", ")
 	builder.WriteString("age=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Age))
+	builder.WriteString(", ")
+	builder.WriteString("active=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Active))
 	builder.WriteString(", ")
 	builder.WriteString("email=")
 	builder.WriteString(_m.Email)

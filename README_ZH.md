@@ -37,7 +37,6 @@ LORM 有意不提供自动关联加载、隐式 eager loading、lazy loading，�
 
 - 第一优先级：MySQL/MariaDB、PostgreSQL
 - 第二优先级：SQLite
-- 尽力支持：SQL Server、Oracle
 
 ## 安装
 
@@ -116,6 +115,15 @@ _, err = lorm.DeleteModel[*User](engine).
 
 使用基于模型的 API 前，必须先完成代码生成。
 
+> **更新说明**：`Update.SetModel(model)` 会执行整行更新。零值字段也会被写回，
+> 所以做部分更新时应优先使用 `SetMap` 或 `Set`。
+
+> **Where 说明**：`builder.Eq` 不会把切片自动展开成 `IN (...)`。需要这类条件
+> 时，请显式使用 `builder.In` 或 `builder.NotIn`。
+
+> **Insert 说明**：批量插入只有在驱动能逐行返回生成主键时才会回填 ID。只支持
+> `LastInsertId` 的方言不会为多行插入推算每条记录的主键。
+
 Statement builder 是轻量级对象。每次数据库操作都应重新创建一条新的
 `Query` / `Insert` / `Update` / `Delete` 调用链，不要在多个 goroutine
 之间共享同一个 statement。
@@ -128,6 +136,7 @@ Statement builder 是轻量级对象。每次数据库操作都应重新创建�
 - `go run ./example/repository`
 - `go run ./example/transaction`
 - `go run ./example/custom_model`
+- `go run ./example/custom_conversion`
 - `go run ./example/json_field`
 - `go run ./example/pagination`
 - `go run ./example/optimistic_lock`
@@ -157,6 +166,9 @@ err := engine.TX(context.Background(), func(ctx context.Context) error {
 如果在事务回调内部再次调用 `TX`，LORM 会复用当前 `context` 里的事务
 session，而不是再开启一个新事务。
 
+如果需要传入 `sql.TxOptions`，比如隔离级别或只读事务，请使用
+`Engine.TXWithOptions`。嵌套调用时仍然会复用当前 `context` 中已有的事务。
+
 ## Repository 辅助类型
 
 `lorm.Repository[T]` 封装了常见的单表 CRUD 路径。强烈推荐在实现结构体中
@@ -176,17 +188,17 @@ Repository 是推荐的数据访问边界：
 ```go
 type UserRepository interface {
 	// 以下方法为常用方法，lorm.Repository[*User] 已实现，按需暴露
-	Get(ctx context.Context, id int64) (*User, error)
+	Get(ctx context.Context, id any) (*User, error)
 	GetByField(ctx context.Context, field string, value any) (*User, error)
-	Lock(ctx context.Context, id int64) (*User, error)
+	Lock(ctx context.Context, id any) (*User, error)
 	LockByField(ctx context.Context, field string, value any) (*User, error)
-	Exist(ctx context.Context, id int64) (bool, error)
+	Exist(ctx context.Context, id any) (bool, error)
 	ExistByField(ctx context.Context, field string, value any) (bool, error)
 	Update(ctx context.Context, user *User) (rowsAffected int64, err error)
-	UpdateMap(ctx context.Context, id int64, data map[string]any) (rowsAffected int64, err error)
+	UpdateMap(ctx context.Context, id any, data map[string]any) (rowsAffected int64, err error)
 	Insert(ctx context.Context, user *User) (rowsAffected int64, err error)
 	InsertAll(ctx context.Context, users []*User) (rowsAffected int64, err error)
-	Delete(ctx context.Context, id int64) (rowsAffected int64, err error)
+	Delete(ctx context.Context, id any) (rowsAffected int64, err error)
 	DeleteByField(ctx context.Context, field string, value any) (rowsAffected int64, err error)
 
 	// 自定义方法，需在 UserRepositoryImpl 中自行实现
@@ -240,6 +252,39 @@ roles, err := lorm.Query[*UserRole](engine).
 
 与 `UnimplementedTable` 不同，`UnimplementedModel` 不会生成 `TableName()`
 方法，所以这类查询需要显式调用 `From(...)`。
+
+## 自定义字段转换
+
+如果某个字段不适合直接按普通值或 JSON 存储，可以让字段类型自己实现
+`lorm.Conversion`。
+
+```go
+type CSVInts []int
+
+func (c CSVInts) ToDB() ([]byte, error) {
+	return []byte("1,2,3"), nil
+}
+
+func (c *CSVInts) FromDB(data []byte) error {
+	// 把 "1,2,3" 还原成切片
+	return nil
+}
+
+type Report struct {
+	lorm.UnimplementedTable
+	ID     int64   `lorm:"id,primary_key,auto_increment"`
+	Title  string  `lorm:"title"`
+	Scores CSVInts `lorm:"scores"`
+}
+```
+
+LORM 会：
+
+- 在写入数据库前调用 `ToDB()`
+- 在查询结果回填字段时调用 `FromDB()`
+
+可运行示例见
+[example/custom_conversion/main.go](example/custom_conversion/main.go)。
 
 ## 配置
 

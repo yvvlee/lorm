@@ -158,13 +158,45 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
+	if value, ok := _c.mutation.Alias(); ok {
+		_spec.SetField(user.FieldAlias, field.TypeString, value)
+		_node.Alias = &value
+	}
 	if value, ok := _c.mutation.Age(); ok {
 		_spec.SetField(user.FieldAge, field.TypeInt, value)
 		_node.Age = value
 	}
+	if value, ok := _c.mutation.AgeP(); ok {
+		_spec.SetField(user.FieldAgeP, field.TypeInt, value)
+		_node.AgeP = &value
+	}
+	if value, ok := _c.mutation.Active(); ok {
+		_spec.SetField(user.FieldActive, field.TypeBool, value)
+		_node.Active = value
+	}
+	if value, ok := _c.mutation.ActiveP(); ok {
+		_spec.SetField(user.FieldActiveP, field.TypeBool, value)
+		_node.ActiveP = &value
+	}
 	if value, ok := _c.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 		_node.Email = value
+	}
+	if value, ok := _c.mutation.Tags(); ok {
+		_spec.SetField(user.FieldTags, field.TypeString, value)
+		_node.Tags = value
+	}
+	if value, ok := _c.mutation.Meta(); ok {
+		_spec.SetField(user.FieldMeta, field.TypeString, value)
+		_node.Meta = value
+	}
+	if value, ok := _c.mutation.Profile(); ok {
+		_spec.SetField(user.FieldProfile, field.TypeString, value)
+		_node.Profile = value
+	}
+	if value, ok := _c.mutation.Contacts(); ok {
+		_spec.SetField(user.FieldContacts, field.TypeString, value)
+		_node.Contacts = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(user.FieldCreatedAt, field.TypeTime, value)

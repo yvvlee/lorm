@@ -2,11 +2,13 @@ package ormcrud
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/yvvlee/lorm"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 	entbench "github.com/yvvlee/lorm/benchmarks/orm-crud/ent"
 	entuser "github.com/yvvlee/lorm/benchmarks/orm-crud/ent/user"
 	"github.com/yvvlee/lorm/builder"
@@ -20,6 +22,12 @@ import (
 
 const batchSize = 100
 
+var (
+	benchmarkSinkInt    int
+	benchmarkSinkBool   bool
+	benchmarkSinkString string
+)
+
 func BenchmarkCreate(b *testing.B) {
 	b.Run("lorm", benchmarkCreateLorm)
 	b.Run("gorm", benchmarkCreateGorm)
@@ -32,6 +40,13 @@ func BenchmarkReadByID(b *testing.B) {
 	b.Run("gorm", benchmarkReadByIDGorm)
 	b.Run("xorm", benchmarkReadByIDXorm)
 	b.Run("ent", benchmarkReadByIDEnt)
+}
+
+func BenchmarkReadByIDComplex(b *testing.B) {
+	b.Run("lorm", benchmarkReadByIDComplexLorm)
+	b.Run("gorm", benchmarkReadByIDComplexGorm)
+	b.Run("xorm", benchmarkReadByIDComplexXorm)
+	b.Run("ent", benchmarkReadByIDComplexEnt)
 }
 
 func BenchmarkUpdateByID(b *testing.B) {
@@ -60,6 +75,13 @@ func BenchmarkBatchRead100(b *testing.B) {
 	b.Run("gorm", benchmarkBatchReadGorm)
 	b.Run("xorm", benchmarkBatchReadXorm)
 	b.Run("ent", benchmarkBatchReadEnt)
+}
+
+func BenchmarkBatchRead100Complex(b *testing.B) {
+	b.Run("lorm", benchmarkBatchReadComplexLorm)
+	b.Run("gorm", benchmarkBatchReadComplexGorm)
+	b.Run("xorm", benchmarkBatchReadComplexXorm)
+	b.Run("ent", benchmarkBatchReadComplexEnt)
 }
 
 func BenchmarkBatchUpdate100(b *testing.B) {
@@ -192,7 +214,7 @@ func benchmarkCreateLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &LormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newLormUser(input)
 		if _, err := repo.Insert(benchmarkCtx, user); err != nil {
 			b.Fatalf("lorm create: %v", err)
 		}
@@ -205,7 +227,7 @@ func benchmarkCreateGorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &GormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newGormUser(input)
 		if err := db.Create(user).Error; err != nil {
 			b.Fatalf("gorm create: %v", err)
 		}
@@ -218,7 +240,7 @@ func benchmarkCreateXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &XormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newXormUser(input)
 		if _, err := engine.Insert(user); err != nil {
 			b.Fatalf("xorm create: %v", err)
 		}
@@ -231,7 +253,9 @@ func benchmarkCreateEnt(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		if _, err := client.User.Create().SetName(input.Name).SetAge(input.Age).SetEmail(input.Email).Save(benchmarkCtx); err != nil {
+		create := client.User.Create()
+		applyEntBenchInputCreate(create, input)
+		if _, err := create.Save(benchmarkCtx); err != nil {
 			b.Fatalf("ent create: %v", err)
 		}
 	}
@@ -241,7 +265,7 @@ func benchmarkReadByIDLorm(b *testing.B) {
 	engine := setupLorm(b, "read")
 	repo := lorm.NewRepository[*LormUser](engine)
 	seed := makeBenchInput(0)
-	user := &LormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newLormUser(seed)
 	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
 		b.Fatalf("seed lorm read: %v", err)
 	}
@@ -257,7 +281,7 @@ func benchmarkReadByIDLorm(b *testing.B) {
 func benchmarkReadByIDGorm(b *testing.B) {
 	db := setupGorm(b, "read")
 	seed := makeBenchInput(0)
-	user := &GormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newGormUser(seed)
 	if err := db.Create(user).Error; err != nil {
 		b.Fatalf("seed gorm read: %v", err)
 	}
@@ -274,9 +298,13 @@ func benchmarkReadByIDGorm(b *testing.B) {
 func benchmarkReadByIDXorm(b *testing.B) {
 	engine := setupXorm(b, "read")
 	seed := makeBenchInput(0)
-	user := &XormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newXormUser(seed)
 	if _, err := engine.Insert(user); err != nil {
 		b.Fatalf("seed xorm read: %v", err)
+	}
+	user, err := fetchXormUserByEmail(engine, user.Email)
+	if err != nil {
+		b.Fatalf("seed xorm read fetch: %v", err)
 	}
 
 	b.ResetTimer()
@@ -295,7 +323,9 @@ func benchmarkReadByIDXorm(b *testing.B) {
 func benchmarkReadByIDEnt(b *testing.B) {
 	client := setupEnt(b, "read")
 	seed := makeBenchInput(0)
-	user, err := client.User.Create().SetName(seed.Name).SetAge(seed.Age).SetEmail(seed.Email).Save(benchmarkCtx)
+	create := client.User.Create()
+	applyEntBenchInputCreate(create, seed)
+	user, err := create.Save(benchmarkCtx)
 	if err != nil {
 		b.Fatalf("seed ent read: %v", err)
 	}
@@ -308,11 +338,94 @@ func benchmarkReadByIDEnt(b *testing.B) {
 	}
 }
 
+func benchmarkReadByIDComplexLorm(b *testing.B) {
+	engine := setupLorm(b, "read_complex")
+	repo := lorm.NewRepository[*LormUser](engine)
+	seed := makeComplexBenchInput(0)
+	user := newLormUser(seed)
+	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
+		b.Fatalf("seed lorm complex read: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out, err := repo.Get(benchmarkCtx, user.ID)
+		if err != nil {
+			b.Fatalf("lorm complex read: %v", err)
+		}
+		consumeLormUser(out)
+	}
+}
+
+func benchmarkReadByIDComplexGorm(b *testing.B) {
+	db := setupGorm(b, "read_complex")
+	seed := makeComplexBenchInput(0)
+	user := newGormUser(seed)
+	if err := db.Create(user).Error; err != nil {
+		b.Fatalf("seed gorm complex read: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var out GormUser
+		if err := db.First(&out, user.ID).Error; err != nil {
+			b.Fatalf("gorm complex read: %v", err)
+		}
+		consumeGormUser(&out)
+	}
+}
+
+func benchmarkReadByIDComplexXorm(b *testing.B) {
+	engine := setupXorm(b, "read_complex")
+	seed := makeComplexBenchInput(0)
+	user := newXormUser(seed)
+	if _, err := engine.Insert(user); err != nil {
+		b.Fatalf("seed xorm complex read: %v", err)
+	}
+	user, err := fetchXormUserByEmail(engine, user.Email)
+	if err != nil {
+		b.Fatalf("seed xorm complex read fetch: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var out XormUser
+		has, err := engine.ID(user.ID).Get(&out)
+		if err != nil {
+			b.Fatalf("xorm complex read: %v", err)
+		}
+		if !has {
+			b.Fatal("xorm complex read: row not found")
+		}
+		consumeXormUser(&out)
+	}
+}
+
+func benchmarkReadByIDComplexEnt(b *testing.B) {
+	client := setupEnt(b, "read_complex")
+	seed := makeComplexBenchInput(0)
+	create := client.User.Create()
+	applyEntBenchInputCreate(create, seed)
+	user, err := create.Save(benchmarkCtx)
+	if err != nil {
+		b.Fatalf("seed ent complex read: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out, err := client.User.Get(benchmarkCtx, user.ID)
+		if err != nil {
+			b.Fatalf("ent complex read: %v", err)
+		}
+		consumeEntUser(out)
+	}
+}
+
 func benchmarkUpdateByIDLorm(b *testing.B) {
 	engine := setupLorm(b, "update")
 	repo := lorm.NewRepository[*LormUser](engine)
 	seed := makeBenchInput(0)
-	user := &LormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newLormUser(seed)
 	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
 		b.Fatalf("seed lorm update: %v", err)
 	}
@@ -322,7 +435,19 @@ func benchmarkUpdateByIDLorm(b *testing.B) {
 		input := makeBenchInput(i + 1)
 		if _, err := lorm.Update[*LormUser](engine).
 			ID(user.ID).
-			SetMap(map[string]any{"name": input.Name, "age": input.Age, "email": input.Email}).
+			SetMap(map[string]any{
+				"name":     input.Name,
+				"alias":    input.Alias,
+				"age":      input.Age,
+				"age_p":    input.AgeP,
+				"active":   input.Active,
+				"active_p": input.ActiveP,
+				"email":    input.Email,
+				"tags":     input.Tags,
+				"meta":     input.Meta,
+				"profile":  input.Profile,
+				"contacts": input.Contacts,
+			}).
 			Exec(benchmarkCtx); err != nil {
 			b.Fatalf("lorm update: %v", err)
 		}
@@ -332,7 +457,7 @@ func benchmarkUpdateByIDLorm(b *testing.B) {
 func benchmarkUpdateByIDGorm(b *testing.B) {
 	db := setupGorm(b, "update")
 	seed := makeBenchInput(0)
-	user := &GormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newGormUser(seed)
 	if err := db.Create(user).Error; err != nil {
 		b.Fatalf("seed gorm update: %v", err)
 	}
@@ -341,9 +466,17 @@ func benchmarkUpdateByIDGorm(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
 		if err := db.Model(&GormUser{}).Where("id = ?", user.ID).Updates(map[string]any{
-			"name":  input.Name,
-			"age":   input.Age,
-			"email": input.Email,
+			"name":     input.Name,
+			"alias":    input.Alias,
+			"age":      input.Age,
+			"age_p":    input.AgeP,
+			"active":   input.Active,
+			"active_p": input.ActiveP,
+			"email":    input.Email,
+			"tags":     input.Tags,
+			"meta":     input.Meta,
+			"profile":  input.Profile,
+			"contacts": input.Contacts,
 		}).Error; err != nil {
 			b.Fatalf("gorm update: %v", err)
 		}
@@ -353,19 +486,22 @@ func benchmarkUpdateByIDGorm(b *testing.B) {
 func benchmarkUpdateByIDXorm(b *testing.B) {
 	engine := setupXorm(b, "update")
 	seed := makeBenchInput(0)
-	user := &XormUser{Name: seed.Name, Age: seed.Age, Email: seed.Email}
+	user := newXormUser(seed)
 	if _, err := engine.Insert(user); err != nil {
 		b.Fatalf("seed xorm update: %v", err)
+	}
+	user, err := fetchXormUserByEmail(engine, user.Email)
+	if err != nil {
+		b.Fatalf("seed xorm update fetch: %v", err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		if _, err := engine.ID(user.ID).Cols("name", "age", "email").Update(&XormUser{
-			Name:  input.Name,
-			Age:   input.Age,
-			Email: input.Email,
-		}); err != nil {
+		if _, err := engine.ID(user.ID).Cols(
+			"name", "alias", "age", "age_p", "active", "active_p",
+			"email", "tags", "meta", "profile", "contacts",
+		).Update(newXormUser(input)); err != nil {
 			b.Fatalf("xorm update: %v", err)
 		}
 	}
@@ -374,7 +510,9 @@ func benchmarkUpdateByIDXorm(b *testing.B) {
 func benchmarkUpdateByIDEnt(b *testing.B) {
 	client := setupEnt(b, "update")
 	seed := makeBenchInput(0)
-	user, err := client.User.Create().SetName(seed.Name).SetAge(seed.Age).SetEmail(seed.Email).Save(benchmarkCtx)
+	create := client.User.Create()
+	applyEntBenchInputCreate(create, seed)
+	user, err := create.Save(benchmarkCtx)
 	if err != nil {
 		b.Fatalf("seed ent update: %v", err)
 	}
@@ -382,7 +520,9 @@ func benchmarkUpdateByIDEnt(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		if _, err := client.User.UpdateOneID(user.ID).SetName(input.Name).SetAge(input.Age).SetEmail(input.Email).Save(benchmarkCtx); err != nil {
+		update := client.User.UpdateOneID(user.ID)
+		applyEntBenchInputUpdateOne(update, input)
+		if _, err := update.Save(benchmarkCtx); err != nil {
 			b.Fatalf("ent update: %v", err)
 		}
 	}
@@ -394,7 +534,7 @@ func benchmarkDeleteByIDLorm(b *testing.B) {
 	ids := make([]int64, b.N)
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &LormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newLormUser(input)
 		if _, err := repo.Insert(benchmarkCtx, user); err != nil {
 			b.Fatalf("seed lorm delete: %v", err)
 		}
@@ -414,7 +554,7 @@ func benchmarkDeleteByIDGorm(b *testing.B) {
 	ids := make([]int64, b.N)
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &GormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newGormUser(input)
 		if err := db.Create(user).Error; err != nil {
 			b.Fatalf("seed gorm delete: %v", err)
 		}
@@ -434,9 +574,13 @@ func benchmarkDeleteByIDXorm(b *testing.B) {
 	ids := make([]int64, b.N)
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user := &XormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		user := newXormUser(input)
 		if _, err := engine.Insert(user); err != nil {
 			b.Fatalf("seed xorm delete: %v", err)
+		}
+		user, err := fetchXormUserByEmail(engine, user.Email)
+		if err != nil {
+			b.Fatalf("seed xorm delete fetch: %v", err)
 		}
 		ids[i] = user.ID
 	}
@@ -454,7 +598,9 @@ func benchmarkDeleteByIDEnt(b *testing.B) {
 	ids := make([]int, b.N)
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
-		user, err := client.User.Create().SetName(input.Name).SetAge(input.Age).SetEmail(input.Email).Save(benchmarkCtx)
+		create := client.User.Create()
+		applyEntBenchInputCreate(create, input)
+		user, err := create.Save(benchmarkCtx)
 		if err != nil {
 			b.Fatalf("seed ent delete: %v", err)
 		}
@@ -601,6 +747,93 @@ func benchmarkBatchReadEnt(b *testing.B) {
 	}
 }
 
+func benchmarkBatchReadComplexLorm(b *testing.B) {
+	engine := setupLorm(b, "batch_read_complex")
+	repo := lorm.NewRepository[*LormUser](engine)
+	users := makeComplexLormUsers(0, batchSize)
+	if _, err := repo.InsertAll(benchmarkCtx, users); err != nil {
+		b.Fatalf("seed lorm batch complex read: %v", err)
+	}
+	emails := lormEmails(users)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out, err := lorm.Query[*LormUser](engine).
+			Where(builder.In("email", emails)).
+			Find(benchmarkCtx)
+		if err != nil {
+			b.Fatalf("lorm batch complex read: %v", err)
+		}
+		if len(out) != batchSize {
+			b.Fatalf("lorm batch complex read: got %d rows", len(out))
+		}
+		consumeLormUsers(out)
+	}
+}
+
+func benchmarkBatchReadComplexGorm(b *testing.B) {
+	db := setupGorm(b, "batch_read_complex")
+	users := makeComplexGormUsers(0, batchSize)
+	if err := db.CreateInBatches(users, batchSize).Error; err != nil {
+		b.Fatalf("seed gorm batch complex read: %v", err)
+	}
+	emails := gormEmails(users)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var out []GormUser
+		if err := db.Where("email IN ?", emails).Find(&out).Error; err != nil {
+			b.Fatalf("gorm batch complex read: %v", err)
+		}
+		if len(out) != batchSize {
+			b.Fatalf("gorm batch complex read: got %d rows", len(out))
+		}
+		consumeGormUsers(out)
+	}
+}
+
+func benchmarkBatchReadComplexXorm(b *testing.B) {
+	engine := setupXorm(b, "batch_read_complex")
+	users := makeComplexXormUsers(0, batchSize)
+	if _, err := engine.Insert(&users); err != nil {
+		b.Fatalf("seed xorm batch complex read: %v", err)
+	}
+	emails := xormEmails(users)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var out []XormUser
+		if err := engine.In("email", emails).Find(&out); err != nil {
+			b.Fatalf("xorm batch complex read: %v", err)
+		}
+		if len(out) != batchSize {
+			b.Fatalf("xorm batch complex read: got %d rows", len(out))
+		}
+		consumeXormUsers(out)
+	}
+}
+
+func benchmarkBatchReadComplexEnt(b *testing.B) {
+	client := setupEnt(b, "batch_read_complex")
+	created, err := client.User.CreateBulk(makeComplexEntCreateBuilders(client, 0, batchSize)...).Save(benchmarkCtx)
+	if err != nil {
+		b.Fatalf("seed ent batch complex read: %v", err)
+	}
+	emails := entEmails(created)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out, err := client.User.Query().Where(entuser.EmailIn(emails...)).All(benchmarkCtx)
+		if err != nil {
+			b.Fatalf("ent batch complex read: %v", err)
+		}
+		if len(out) != batchSize {
+			b.Fatalf("ent batch complex read: got %d rows", len(out))
+		}
+		consumeEntUsers(out)
+	}
+}
+
 func benchmarkBatchUpdateLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_update")
 	repo := lorm.NewRepository[*LormUser](engine)
@@ -612,9 +845,20 @@ func benchmarkBatchUpdateLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		input := makeBenchInput(i + 10_000)
 		if _, err := lorm.Update[*LormUser](engine).
 			Where(builder.In("email", emails)).
-			SetMap(map[string]any{"age": 100 + i}).
+			SetMap(map[string]any{
+				"alias":    input.Alias,
+				"age":      input.Age,
+				"age_p":    input.AgeP,
+				"active":   input.Active,
+				"active_p": input.ActiveP,
+				"tags":     input.Tags,
+				"meta":     input.Meta,
+				"profile":  input.Profile,
+				"contacts": input.Contacts,
+			}).
 			Exec(benchmarkCtx); err != nil {
 			b.Fatalf("lorm batch update: %v", err)
 		}
@@ -631,7 +875,18 @@ func benchmarkBatchUpdateGorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := db.Model(&GormUser{}).Where("email IN ?", emails).Updates(map[string]any{"age": 100 + i}).Error; err != nil {
+		input := makeBenchInput(i + 10_000)
+		if err := db.Model(&GormUser{}).Where("email IN ?", emails).Updates(map[string]any{
+			"alias":    input.Alias,
+			"age":      input.Age,
+			"age_p":    input.AgeP,
+			"active":   input.Active,
+			"active_p": input.ActiveP,
+			"tags":     input.Tags,
+			"meta":     input.Meta,
+			"profile":  input.Profile,
+			"contacts": input.Contacts,
+		}).Error; err != nil {
 			b.Fatalf("gorm batch update: %v", err)
 		}
 	}
@@ -647,7 +902,18 @@ func benchmarkBatchUpdateXorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := engine.Table("bench_users").In("email", emails).Update(map[string]any{"age": 100 + i}); err != nil {
+		input := makeBenchInput(i + 10_000)
+		if _, err := engine.Table("bench_users").In("email", emails).Update(map[string]any{
+			"alias":    input.Alias,
+			"age":      input.Age,
+			"age_p":    input.AgeP,
+			"active":   input.Active,
+			"active_p": input.ActiveP,
+			"tags":     input.Tags,
+			"meta":     input.Meta,
+			"profile":  input.Profile,
+			"contacts": input.Contacts,
+		}); err != nil {
 			b.Fatalf("xorm batch update: %v", err)
 		}
 	}
@@ -663,7 +929,10 @@ func benchmarkBatchUpdateEnt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := client.User.Update().Where(entuser.EmailIn(emails...)).SetAge(100 + i).Save(benchmarkCtx); err != nil {
+		input := makeBenchInput(i + 10_000)
+		update := client.User.Update().Where(entuser.EmailIn(emails...))
+		applyEntBenchInputBatchUpdate(update, input)
+		if _, err := update.Save(benchmarkCtx); err != nil {
 			b.Fatalf("ent batch update: %v", err)
 		}
 	}
@@ -775,7 +1044,16 @@ func makeLormUsers(offset, size int) []*LormUser {
 	users := make([]*LormUser, size)
 	for i := 0; i < size; i++ {
 		input := makeBenchInput(offset + i)
-		users[i] = &LormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		users[i] = newLormUser(input)
+	}
+	return users
+}
+
+func makeComplexLormUsers(offset, size int) []*LormUser {
+	users := make([]*LormUser, size)
+	for i := 0; i < size; i++ {
+		input := makeComplexBenchInput(offset + i)
+		users[i] = newLormUser(input)
 	}
 	return users
 }
@@ -784,7 +1062,16 @@ func makeGormUsers(offset, size int) []GormUser {
 	users := make([]GormUser, size)
 	for i := 0; i < size; i++ {
 		input := makeBenchInput(offset + i)
-		users[i] = GormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		users[i] = *newGormUser(input)
+	}
+	return users
+}
+
+func makeComplexGormUsers(offset, size int) []GormUser {
+	users := make([]GormUser, size)
+	for i := 0; i < size; i++ {
+		input := makeComplexBenchInput(offset + i)
+		users[i] = *newGormUser(input)
 	}
 	return users
 }
@@ -793,7 +1080,16 @@ func makeXormUsers(offset, size int) []XormUser {
 	users := make([]XormUser, size)
 	for i := 0; i < size; i++ {
 		input := makeBenchInput(offset + i)
-		users[i] = XormUser{Name: input.Name, Age: input.Age, Email: input.Email}
+		users[i] = *newXormUser(input)
+	}
+	return users
+}
+
+func makeComplexXormUsers(offset, size int) []XormUser {
+	users := make([]XormUser, size)
+	for i := 0; i < size; i++ {
+		input := makeComplexBenchInput(offset + i)
+		users[i] = *newXormUser(input)
 	}
 	return users
 }
@@ -802,7 +1098,18 @@ func makeEntCreateBuilders(client *entbench.Client, offset, size int) []*entbenc
 	builders := make([]*entbench.UserCreate, size)
 	for i := 0; i < size; i++ {
 		input := makeBenchInput(offset + i)
-		builders[i] = client.User.Create().SetName(input.Name).SetAge(input.Age).SetEmail(input.Email)
+		builders[i] = client.User.Create()
+		applyEntBenchInputCreate(builders[i], input)
+	}
+	return builders
+}
+
+func makeComplexEntCreateBuilders(client *entbench.Client, offset, size int) []*entbench.UserCreate {
+	builders := make([]*entbench.UserCreate, size)
+	for i := 0; i < size; i++ {
+		input := makeComplexBenchInput(offset + i)
+		builders[i] = client.User.Create()
+		applyEntBenchInputCreate(builders[i], input)
 	}
 	return builders
 }
@@ -869,4 +1176,247 @@ func entEmails(users []*entbench.User) []string {
 		emails[i] = user.Email
 	}
 	return emails
+}
+
+func applyEntBenchInputCreate(create *entbench.UserCreate, input benchInput) {
+	create.SetName(input.Name)
+	create.SetAge(input.Age)
+	create.SetEmail(input.Email)
+	m := create.Mutation()
+	if input.Alias != nil {
+		_ = m.SetField(entuser.FieldAlias, *input.Alias)
+	}
+	if input.AgeP != nil {
+		_ = m.SetField(entuser.FieldAgeP, *input.AgeP)
+	}
+	_ = m.SetField(entuser.FieldActive, input.Active)
+	if input.ActiveP != nil {
+		_ = m.SetField(entuser.FieldActiveP, *input.ActiveP)
+	}
+	_ = m.SetField(entuser.FieldTags, input.Tags)
+	_ = m.SetField(entuser.FieldMeta, input.Meta)
+	_ = m.SetField(entuser.FieldProfile, input.Profile)
+	_ = m.SetField(entuser.FieldContacts, input.Contacts)
+}
+
+func applyEntBenchInputUpdateOne(update *entbench.UserUpdateOne, input benchInput) {
+	update.SetName(input.Name)
+	update.SetAge(input.Age)
+	update.SetEmail(input.Email)
+	m := update.Mutation()
+	if input.Alias != nil {
+		_ = m.SetField(entuser.FieldAlias, *input.Alias)
+	}
+	if input.AgeP != nil {
+		_ = m.SetField(entuser.FieldAgeP, *input.AgeP)
+	}
+	_ = m.SetField(entuser.FieldActive, input.Active)
+	if input.ActiveP != nil {
+		_ = m.SetField(entuser.FieldActiveP, *input.ActiveP)
+	}
+	_ = m.SetField(entuser.FieldTags, input.Tags)
+	_ = m.SetField(entuser.FieldMeta, input.Meta)
+	_ = m.SetField(entuser.FieldProfile, input.Profile)
+	_ = m.SetField(entuser.FieldContacts, input.Contacts)
+}
+
+func applyEntBenchInputUpdate(update *entbench.UserUpdate, input benchInput) {
+	update.SetName(input.Name)
+	update.SetAge(input.Age)
+	update.SetEmail(input.Email)
+	m := update.Mutation()
+	if input.Alias != nil {
+		_ = m.SetField(entuser.FieldAlias, *input.Alias)
+	}
+	if input.AgeP != nil {
+		_ = m.SetField(entuser.FieldAgeP, *input.AgeP)
+	}
+	_ = m.SetField(entuser.FieldActive, input.Active)
+	if input.ActiveP != nil {
+		_ = m.SetField(entuser.FieldActiveP, *input.ActiveP)
+	}
+	_ = m.SetField(entuser.FieldTags, input.Tags)
+	_ = m.SetField(entuser.FieldMeta, input.Meta)
+	_ = m.SetField(entuser.FieldProfile, input.Profile)
+	_ = m.SetField(entuser.FieldContacts, input.Contacts)
+}
+
+func applyEntBenchInputBatchUpdate(update *entbench.UserUpdate, input benchInput) {
+	update.SetName(input.Name)
+	update.SetAge(input.Age)
+	m := update.Mutation()
+	if input.Alias != nil {
+		_ = m.SetField(entuser.FieldAlias, *input.Alias)
+	}
+	if input.AgeP != nil {
+		_ = m.SetField(entuser.FieldAgeP, *input.AgeP)
+	}
+	_ = m.SetField(entuser.FieldActive, input.Active)
+	if input.ActiveP != nil {
+		_ = m.SetField(entuser.FieldActiveP, *input.ActiveP)
+	}
+	_ = m.SetField(entuser.FieldTags, input.Tags)
+	_ = m.SetField(entuser.FieldMeta, input.Meta)
+	_ = m.SetField(entuser.FieldProfile, input.Profile)
+	_ = m.SetField(entuser.FieldContacts, input.Contacts)
+}
+
+func makeComplexBenchInput(i int) benchInput {
+	input := makeBenchInput(i)
+	input.Tags = make([]int, 0, 16)
+	for n := 0; n < 16; n++ {
+		input.Tags = append(input.Tags, i+n)
+	}
+	input.Meta = benchmodel.StringMap{
+		"source": "benchmark",
+		"key":    fmt.Sprintf("meta-%d", i),
+		"group":  fmt.Sprintf("group-%d", i%8),
+		"zone":   fmt.Sprintf("zone-%d", i%4),
+		"tenant": fmt.Sprintf("tenant-%d", i%3),
+		"batch":  fmt.Sprintf("batch-%d", i/10),
+	}
+	input.Profile = benchmodel.Profile{
+		ID:     i,
+		Name:   fmt.Sprintf("profile-%d", i),
+		Active: i%2 == 0,
+		Labels: []string{
+			fmt.Sprintf("l-%d", i),
+			fmt.Sprintf("l-%d", i+1),
+			fmt.Sprintf("l-%d", i+2),
+			fmt.Sprintf("l-%d", i+3),
+			fmt.Sprintf("l-%d", i+4),
+			fmt.Sprintf("l-%d", i+5),
+		},
+	}
+	input.Contacts = benchmodel.ContactList{
+		{Kind: "email", Value: fmt.Sprintf("user-%d@example.com", i), Primary: true},
+		{Kind: "phone", Value: fmt.Sprintf("1380000%04d", i%10000), Primary: false},
+		{Kind: "slack", Value: fmt.Sprintf("user-%d", i), Primary: false},
+		{Kind: "wechat", Value: fmt.Sprintf("wx_%d", i), Primary: false},
+	}
+	return input
+}
+
+func consumeLormUser(user *LormUser) {
+	benchmarkSinkInt += len(user.Tags) + len(user.Meta) + len(user.Profile.Labels) + len(user.Contacts) + user.Age
+	if user.Alias != nil {
+		benchmarkSinkString = *user.Alias
+	}
+	if user.ActiveP != nil {
+		benchmarkSinkBool = *user.ActiveP
+	}
+}
+
+func consumeGormUser(user *GormUser) {
+	benchmarkSinkInt += len(user.Tags) + len(user.Meta) + len(user.Profile.Labels) + len(user.Contacts) + user.Age
+	if user.Alias != nil {
+		benchmarkSinkString = *user.Alias
+	}
+	if user.ActiveP != nil {
+		benchmarkSinkBool = *user.ActiveP
+	}
+}
+
+func consumeXormUser(user *XormUser) {
+	benchmarkSinkInt += len(user.Tags) + len(user.Meta) + len(user.Profile.Labels) + len(user.Contacts) + user.Age
+	if user.Alias != nil {
+		benchmarkSinkString = *user.Alias
+	}
+	if user.ActiveP != nil {
+		benchmarkSinkBool = *user.ActiveP
+	}
+}
+
+func consumeEntUser(user *entbench.User) {
+	benchmarkSinkInt += len(user.Tags) + len(user.Meta) + len(user.Profile.Labels) + len(user.Contacts) + user.Age
+	if user.Alias != nil {
+		benchmarkSinkString = *user.Alias
+	}
+	if user.ActiveP != nil {
+		benchmarkSinkBool = *user.ActiveP
+	}
+}
+
+func consumeLormUsers(users []*LormUser) {
+	for _, user := range users {
+		consumeLormUser(user)
+	}
+}
+
+func consumeGormUsers(users []GormUser) {
+	for i := range users {
+		consumeGormUser(&users[i])
+	}
+}
+
+func consumeXormUsers(users []XormUser) {
+	for i := range users {
+		consumeXormUser(&users[i])
+	}
+}
+
+func consumeEntUsers(users []*entbench.User) {
+	for _, user := range users {
+		consumeEntUser(user)
+	}
+}
+
+func newLormUser(input benchInput) *LormUser {
+	return &LormUser{
+		Name:     input.Name,
+		Alias:    input.Alias,
+		Age:      input.Age,
+		AgeP:     input.AgeP,
+		Active:   input.Active,
+		ActiveP:  input.ActiveP,
+		Email:    input.Email,
+		Tags:     input.Tags,
+		Meta:     input.Meta,
+		Profile:  input.Profile,
+		Contacts: input.Contacts,
+	}
+}
+
+func newGormUser(input benchInput) *GormUser {
+	return &GormUser{
+		Name:     input.Name,
+		Alias:    input.Alias,
+		Age:      input.Age,
+		AgeP:     input.AgeP,
+		Active:   input.Active,
+		ActiveP:  input.ActiveP,
+		Email:    input.Email,
+		Tags:     input.Tags,
+		Meta:     input.Meta,
+		Profile:  input.Profile,
+		Contacts: input.Contacts,
+	}
+}
+
+func newXormUser(input benchInput) *XormUser {
+	return &XormUser{
+		Name:     input.Name,
+		Alias:    input.Alias,
+		Age:      input.Age,
+		AgeP:     input.AgeP,
+		Active:   input.Active,
+		ActiveP:  input.ActiveP,
+		Email:    input.Email,
+		Tags:     input.Tags,
+		Meta:     input.Meta,
+		Profile:  input.Profile,
+		Contacts: input.Contacts,
+	}
+}
+
+func fetchXormUserByEmail(engine *xorm.Engine, email string) (*XormUser, error) {
+	var out XormUser
+	has, err := engine.Where("email = ?", email).Get(&out)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, fmt.Errorf("xorm seed row not found for email %s", email)
+	}
+	return &out, nil
 }

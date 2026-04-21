@@ -10,6 +10,12 @@ import (
 )
 
 func TestIsValidFile(t *testing.T) {
+	originalSuffix := fileSuffix
+	fileSuffix = "_lorm_gen"
+	t.Cleanup(func() {
+		fileSuffix = originalSuffix
+	})
+
 	tests := []struct {
 		name     string
 		input    string
@@ -51,6 +57,12 @@ func TestIsValidFile(t *testing.T) {
 }
 
 func TestArgsToFiles(t *testing.T) {
+	originalSuffix := fileSuffix
+	fileSuffix = "_lorm_gen"
+	t.Cleanup(func() {
+		fileSuffix = originalSuffix
+	})
+
 	// Create a temporary directory structure for testing
 	tempDir := t.TempDir()
 
@@ -146,6 +158,12 @@ func TestArgsToFilesWithNonExistentPath(t *testing.T) {
 }
 
 func TestArgsToFilesRecursive(t *testing.T) {
+	originalSuffix := fileSuffix
+	fileSuffix = "_lorm_gen"
+	t.Cleanup(func() {
+		fileSuffix = originalSuffix
+	})
+
 	// Create a test structure with subdirectories
 	tempDir := t.TempDir()
 
@@ -186,4 +204,33 @@ func TestArgsToFilesRecursive(t *testing.T) {
 	assert.Contains(t, fileBasenames, "submodel.go")
 	assert.NotContains(t, fileBasenames, "model_test.go")
 	assert.NotContains(t, fileBasenames, "model_gen.go")
+}
+
+func TestIsValidFileRespectsCustomFileSuffix(t *testing.T) {
+	originalSuffix := fileSuffix
+	fileSuffix = "_custom_gen"
+	t.Cleanup(func() {
+		fileSuffix = originalSuffix
+	})
+
+	assert.False(t, isValidFile("model_custom_gen.go"))
+	assert.False(t, isValidFile("model_lorm_gen.go"))
+	assert.True(t, isValidFile("model_regular.go"))
+}
+
+func TestFilterIgnoredFilesMatchesBasenameAndPath(t *testing.T) {
+	files := []string{
+		"/tmp/a/model_keep.go",
+		"/tmp/a/model_skip.go",
+		"/tmp/b/skip/model_path.go",
+	}
+
+	filtered, err := filterIgnoredFiles(files, []string{"*_skip.go", "*/skip/*"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"/tmp/a/model_keep.go"}, filtered)
+}
+
+func TestFilterIgnoredFilesReturnsPatternError(t *testing.T) {
+	_, err := filterIgnoredFiles([]string{"model.go"}, []string{"["})
+	assert.Error(t, err)
 }

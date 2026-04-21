@@ -61,11 +61,14 @@ func (s *UpdateStmt[T]) PrefixExpr(expr builder.Sqlizer) *UpdateStmt[T] {
 
 // Set adds SET clauses to the query.
 func (s *UpdateStmt[T]) Set(column string, value any) *UpdateStmt[T] {
-	s.builder.Set(column, value)
+	s.builder.Set(s.engine.Escaper().Escape(column), value)
 	return s
 }
 
 // SetModel maps model fields into SET and WHERE clauses using descriptor metadata.
+//
+// SetModel performs a full-field update for regular columns. Zero values are not
+// ignored automatically, so partial updates should prefer SetMap/Set.
 func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 	if s.err != nil {
 		return s
@@ -116,7 +119,7 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 
 // SetMap is a convenience method which calls .Set for each key/value pair in clauses.
 func (s *UpdateStmt[T]) SetMap(clauses map[string]any) *UpdateStmt[T] {
-	s.builder.SetMap(clauses)
+	s.builder.SetMap(escapeMap(s.engine.Escaper(), clauses))
 	return s
 }
 
@@ -124,7 +127,7 @@ func (s *UpdateStmt[T]) SetMap(clauses map[string]any) *UpdateStmt[T] {
 //
 // See SelectBuilder.Where for more information.
 func (s *UpdateStmt[T]) Where(pred any, args ...any) *UpdateStmt[T] {
-	s.builder.Where(pred, args...)
+	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 

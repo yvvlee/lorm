@@ -139,5 +139,5 @@ func (s *JSONFieldWrapper) Scan(src any) error {
 	case nil:
 		return nil
 	}
-	return fmt.Errorf("cannot unmarshal %v into %t", src, s.v)
+	return fmt.Errorf("cannot unmarshal %v into %T", src, s.v)
 }

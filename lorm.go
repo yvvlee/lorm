@@ -18,18 +18,30 @@ type Engine struct {
 	logger Logger
 }
 
+type dialectConfig struct {
+	placeholderFormat    builder.PlaceholderFormat
+	escaper              names.Escaper
+	supportsReturning    bool
+	supportsLastInsertID bool
+	supportsForUpdate    bool
+}
+
 // NewEngine opens a database connection and applies the provided options.
 func NewEngine(driverName, dsn string, option ...Option) (*Engine, error) {
 	db, err := connect(driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
+	dialect := defaultDialectConfig(driverName)
 	config := &Config{
-		driverName:        driverName,
-		dsn:               dsn,
-		placeholderFormat: Placeholder(driverName),
-		escaper:           Escaper(driverName),
-		logger:            defaultLogger,
+		driverName:           driverName,
+		dsn:                  dsn,
+		placeholderFormat:    dialect.placeholderFormat,
+		escaper:              dialect.escaper,
+		supportsReturning:    dialect.supportsReturning,
+		supportsLastInsertID: dialect.supportsLastInsertID,
+		supportsForUpdate:    dialect.supportsForUpdate,
+		logger:               defaultLogger,
 	}
 	for _, o := range option {
 		o(config)
@@ -86,37 +98,17 @@ func (e *Engine) DriverName() string {
 
 // SupportsReturning returns true if the database driver supports RETURNING clause
 func (e *Engine) SupportsReturning() bool {
-	switch e.config.driverName {
-	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
-		return true
-	default:
-		return false
-	}
+	return e.config.supportsReturning
 }
 
 // SupportsLastInsertId returns true if the database driver supports LastInsertId
 func (e *Engine) SupportsLastInsertId() bool {
-	switch e.config.driverName {
-	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
-		return false
-	case //Oracle
-		"oci8", "ora", "oracle", "goracle", "godror":
-		return false
-	default:
-		return true
-	}
+	return e.config.supportsLastInsertID
 }
 
 // SupportsForUpdate returns true if the database driver supports FOR UPDATE.
 func (e *Engine) SupportsForUpdate() bool {
-	switch e.config.driverName {
-	case "mysql", "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
-		return true
-	case "oci8", "ora", "oracle", "goracle", "godror":
-		return true
-	default:
-		return false
-	}
+	return e.config.supportsForUpdate
 }
 
 func (e *Engine) session(ctx context.Context) *session {
@@ -130,16 +122,28 @@ type sessionIDKey struct{}
 
 // TX runs fn in a transaction and reuses the current session for nested calls.
 func (e *Engine) TX(ctx context.Context, fn func(context.Context) error) error {
+	return e.tx(ctx, nil, fn)
+}
+
+// TXWithOptions runs fn in a transaction using the provided sql.TxOptions.
+//
+// Nested calls still reuse the existing transaction from the incoming context.
+func (e *Engine) TXWithOptions(ctx context.Context, opts *sql.TxOptions, fn func(context.Context) error) error {
+	return e.tx(ctx, opts, fn)
+}
+
+func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Context) error) error {
 	// If a transaction is currently open, reuse the existing session
 	if _, ok := ctx.Value(e).(*session); ok {
 		return fn(ctx)
 	}
-	s, err := e.beginTxSession(ctx)
-	sessionID := uuid.NewString()
-	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID, "err", err)
+	s, err := e.beginTxSession(ctx, opts)
 	if err != nil {
+		e.logger.ErrorContext(ctx, "BEGIN TRANSACTION failed", "err", err)
 		return err
 	}
+	sessionID := uuid.NewString()
+	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID)
 	defer func() {
 		if err := s.close(); err != nil {
 			e.logger.ErrorContext(ctx, "lorm close transaction session error", "sessionID", sessionID, "err", err)
@@ -156,8 +160,8 @@ func (e *Engine) TX(ctx context.Context, fn func(context.Context) error) error {
 	return err
 }
 
-func (e *Engine) beginTxSession(ctx context.Context) (*session, error) {
-	tx, err := e.db.BeginTx(ctx, nil)
+func (e *Engine) beginTxSession(ctx context.Context, opts *sql.TxOptions) (*session, error) {
+	tx, err := e.db.BeginTx(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -172,21 +176,10 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "SQL execute error",
-				"sessionID", ctx.Value(sessionIDKey{}),
-				"err", err,
-				"SQL", query,
-				"args", args,
-				"executeTime", time.Since(startTime).Seconds(),
-			)
+			e.logger.ErrorContext(ctx, "SQL execute error", e.sqlLogFields(ctx, query, args, err, time.Since(startTime))...)
 			return
 		}
-		e.logger.InfoContext(ctx, "SQL execute success",
-			"sessionID", ctx.Value(sessionIDKey{}),
-			"SQL", query,
-			"args", args,
-			"executeTime", time.Since(startTime).Seconds(),
-		)
+		e.logger.InfoContext(ctx, "SQL execute success", e.sqlLogFields(ctx, query, args, nil, time.Since(startTime))...)
 	}()
 	result, err = e.session(ctx).Exec(ctx, query, args...)
 	return
@@ -197,21 +190,10 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "SQL execute error",
-				"sessionID", ctx.Value(sessionIDKey{}),
-				"err", err,
-				"SQL", query,
-				"args", args,
-				"executeTime", time.Since(startTime).Seconds(),
-			)
+			e.logger.ErrorContext(ctx, "SQL execute error", e.sqlLogFields(ctx, query, args, err, time.Since(startTime))...)
 			return
 		}
-		e.logger.InfoContext(ctx, "SQL execute success",
-			"sessionID", ctx.Value(sessionIDKey{}),
-			"SQL", query,
-			"args", args,
-			"executeTime", time.Since(startTime).Seconds(),
-		)
+		e.logger.InfoContext(ctx, "SQL execute success", e.sqlLogFields(ctx, query, args, nil, time.Since(startTime))...)
 	}()
 	rows, err = e.session(ctx).Query(ctx, query, args...)
 	return
@@ -222,22 +204,28 @@ func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bo
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			e.logger.ErrorContext(ctx, "SQL execute error",
-				"err", err,
-				"SQL", query,
-				"args", args,
-				"executeTime", time.Since(startTime).Seconds(),
-			)
+			e.logger.ErrorContext(ctx, "SQL execute error", e.sqlLogFields(ctx, query, args, err, time.Since(startTime))...)
 			return
 		}
-		e.logger.InfoContext(ctx, "SQL execute success",
-			"SQL", query,
-			"args", args,
-			"executeTime", time.Since(startTime).Seconds(),
-		)
+		e.logger.InfoContext(ctx, "SQL execute success", e.sqlLogFields(ctx, query, args, nil, time.Since(startTime))...)
 	}()
 	exist, err = e.session(ctx).Exist(ctx, query, args...)
 	return
+}
+
+func (e *Engine) sqlLogFields(ctx context.Context, query string, args []any, err error, elapsed time.Duration) []any {
+	fields := []any{
+		"sessionID", ctx.Value(sessionIDKey{}),
+		"SQL", query,
+	}
+	if err != nil {
+		fields = append(fields, "err", err)
+	}
+	if e.config != nil && e.config.logSQLArgs {
+		fields = append(fields, "args", args)
+	}
+	fields = append(fields, "executeTime", elapsed.Seconds())
+	return fields
 }
 
 // connect to a database and verify with a ping.
@@ -256,46 +244,51 @@ func connect(driverName, dataSourceName string) (*sql.DB, error) {
 
 // Placeholder returns the default placeholder format for a driver name.
 func Placeholder(driverName string) builder.PlaceholderFormat {
-	switch driverName {
-	case //PostgreSQL
-		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres",
-		//SQLite
-		"sqlite", "sqlite3", "ql":
-		return builder.Dollar
-	case //Oracle
-		"oci8", "ora", "oracle", "goracle", "godror":
-		return builder.Colon
-	case //SQL Server
-		"sqlserver", "mssql", "azuresql":
-		return builder.AtP
-	case //MySQL, MariaDB
-		"mysql", "mariadb":
-		return builder.Question
-	default:
-		return builder.Question
-	}
+	return defaultDialectConfig(driverName).placeholderFormat
 }
 
 // Escaper returns the default identifier escaper for a driver name.
 func Escaper(driverName string) names.Escaper {
+	return defaultDialectConfig(driverName).escaper
+}
+
+func defaultDialectConfig(driverName string) dialectConfig {
 	switch driverName {
 	case //PostgreSQL
 		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
-		return names.NewQuoter('"', '"')
-	case //Oracle
-		"oci8", "ora", "oracle", "goracle", "godror":
-		return names.NewQuoter('"', '"')
+		return dialectConfig{
+			placeholderFormat:    builder.Dollar,
+			escaper:              names.NewQuoter('"', '"'),
+			supportsReturning:    true,
+			supportsLastInsertID: false,
+			supportsForUpdate:    true,
+		}
 	case //SQLite
 		"sqlite", "sqlite3", "ql":
-		return names.NewQuoter('"', '"')
-	case //SQL Server
-		"sqlserver", "mssql", "azuresql":
-		return names.NewQuoter('[', ']')
+		return dialectConfig{
+			placeholderFormat:    builder.Dollar,
+			escaper:              names.NewQuoter('"', '"'),
+			supportsReturning:    false,
+			supportsLastInsertID: true,
+			supportsForUpdate:    false,
+		}
 	case //MySQL, MariaDB
 		"mysql", "mariadb":
-		return names.NewQuoter('`', '`')
+			return dialectConfig{
+			placeholderFormat:    builder.Question,
+			escaper:              names.NewQuoter('`', '`'),
+			supportsReturning:    false,
+			supportsLastInsertID: true,
+			supportsForUpdate:    true,
+		}
 	default:
-		return names.NoEscaper
+		return dialectConfig{
+			placeholderFormat:    builder.Question,
+			escaper:              names.NoEscaper,
+			supportsReturning:    false,
+			supportsLastInsertID: true,
+			supportsForUpdate:    false,
+		}
 	}
 }
 

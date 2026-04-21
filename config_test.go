@@ -26,6 +26,10 @@ func TestConfigOptions(t *testing.T) {
 	WithConnMaxLifetime(30 * time.Second)(c)
 	WithConnMaxIdleTime(10 * time.Second)(c)
 	WithLogger(testLogger{})(c)
+	WithLogSQLArgs(true)(c)
+	WithSupportsReturning(true)(c)
+	WithSupportsLastInsertID(false)(c)
+	WithSupportsForUpdate(true)(c)
 
 	assert.Equal(t, builder.Dollar, c.placeholderFormat)
 	assert.NotNil(t, c.escaper)
@@ -33,6 +37,10 @@ func TestConfigOptions(t *testing.T) {
 	assert.Equal(t, 9, c.maxOpenConns)
 	assert.Equal(t, 30*time.Second, c.connMaxLifetime)
 	assert.Equal(t, 10*time.Second, c.connMaxIdleTime)
+	assert.True(t, c.logSQLArgs)
+	assert.True(t, c.supportsReturning)
+	assert.False(t, c.supportsLastInsertID)
+	assert.True(t, c.supportsForUpdate)
 	_, ok := c.logger.(testLogger)
 	assert.True(t, ok)
 }

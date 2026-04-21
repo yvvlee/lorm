@@ -72,7 +72,7 @@ func (s *DeleteStmt) PrefixExpr(expr builder.Sqlizer) *DeleteStmt {
 //
 // See SelectBuilder.Where for more information.
 func (s *DeleteStmt) Where(pred any, args ...any) *DeleteStmt {
-	s.builder.Where(pred, args...)
+	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 
@@ -112,7 +112,7 @@ func (s *DeleteModelStmt[T]) PrefixExpr(expr builder.Sqlizer) *DeleteModelStmt[T
 
 // Where adds WHERE expressions to the query.
 func (s *DeleteModelStmt[T]) Where(pred any, args ...any) *DeleteModelStmt[T] {
-	s.builder.Where(pred, args...)
+	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 

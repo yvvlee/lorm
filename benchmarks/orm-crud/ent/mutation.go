@@ -11,6 +11,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 	"github.com/yvvlee/lorm/benchmarks/orm-crud/ent/predicate"
 	"github.com/yvvlee/lorm/benchmarks/orm-crud/ent/user"
 )
@@ -34,9 +35,17 @@ type UserMutation struct {
 	typ           string
 	id            *int
 	name          *string
+	alias         *string
 	age           *int
+	age_p         *int
 	addage        *int
+	active        *bool
+	active_p      *bool
 	email         *string
+	tags          *benchmodel.IntSlice
+	meta          *benchmodel.StringMap
+	profile       *benchmodel.Profile
+	contacts      *benchmodel.ContactList
 	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -179,6 +188,25 @@ func (m *UserMutation) ResetName() {
 	m.name = nil
 }
 
+// SetAlias sets the "alias" field.
+func (m *UserMutation) SetAlias(s string) {
+	m.alias = &s
+}
+
+// Alias returns the value of the "alias" field in the mutation.
+func (m *UserMutation) Alias() (r string, exists bool) {
+	v := m.alias
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAlias resets all changes to the "alias" field.
+func (m *UserMutation) ResetAlias() {
+	m.alias = nil
+}
+
 // SetAge sets the "age" field.
 func (m *UserMutation) SetAge(i int) {
 	m.age = &i
@@ -235,6 +263,63 @@ func (m *UserMutation) ResetAge() {
 	m.addage = nil
 }
 
+// SetAgeP sets the "age_p" field.
+func (m *UserMutation) SetAgeP(i int) {
+	m.age_p = &i
+}
+
+// AgeP returns the value of the "age_p" field in the mutation.
+func (m *UserMutation) AgeP() (r int, exists bool) {
+	v := m.age_p
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAgeP resets all changes to the "age_p" field.
+func (m *UserMutation) ResetAgeP() {
+	m.age_p = nil
+}
+
+// SetActive sets the "active" field.
+func (m *UserMutation) SetActive(v bool) {
+	m.active = &v
+}
+
+// Active returns the value of the "active" field in the mutation.
+func (m *UserMutation) Active() (r bool, exists bool) {
+	v := m.active
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActive resets all changes to the "active" field.
+func (m *UserMutation) ResetActive() {
+	m.active = nil
+}
+
+// SetActiveP sets the "active_p" field.
+func (m *UserMutation) SetActiveP(v bool) {
+	m.active_p = &v
+}
+
+// ActiveP returns the value of the "active_p" field in the mutation.
+func (m *UserMutation) ActiveP() (r bool, exists bool) {
+	v := m.active_p
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetActiveP resets all changes to the "active_p" field.
+func (m *UserMutation) ResetActiveP() {
+	m.active_p = nil
+}
+
 // SetEmail sets the "email" field.
 func (m *UserMutation) SetEmail(s string) {
 	m.email = &s
@@ -269,6 +354,82 @@ func (m *UserMutation) OldEmail(ctx context.Context) (v string, err error) {
 // ResetEmail resets all changes to the "email" field.
 func (m *UserMutation) ResetEmail() {
 	m.email = nil
+}
+
+// SetTags sets the "tags" field.
+func (m *UserMutation) SetTags(v benchmodel.IntSlice) {
+	m.tags = &v
+}
+
+// Tags returns the value of the "tags" field in the mutation.
+func (m *UserMutation) Tags() (r benchmodel.IntSlice, exists bool) {
+	v := m.tags
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTags resets all changes to the "tags" field.
+func (m *UserMutation) ResetTags() {
+	m.tags = nil
+}
+
+// SetMeta sets the "meta" field.
+func (m *UserMutation) SetMeta(v benchmodel.StringMap) {
+	m.meta = &v
+}
+
+// Meta returns the value of the "meta" field in the mutation.
+func (m *UserMutation) Meta() (r benchmodel.StringMap, exists bool) {
+	v := m.meta
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMeta resets all changes to the "meta" field.
+func (m *UserMutation) ResetMeta() {
+	m.meta = nil
+}
+
+// SetProfile sets the "profile" field.
+func (m *UserMutation) SetProfile(v benchmodel.Profile) {
+	m.profile = &v
+}
+
+// Profile returns the value of the "profile" field in the mutation.
+func (m *UserMutation) Profile() (r benchmodel.Profile, exists bool) {
+	v := m.profile
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProfile resets all changes to the "profile" field.
+func (m *UserMutation) ResetProfile() {
+	m.profile = nil
+}
+
+// SetContacts sets the "contacts" field.
+func (m *UserMutation) SetContacts(v benchmodel.ContactList) {
+	m.contacts = &v
+}
+
+// Contacts returns the value of the "contacts" field in the mutation.
+func (m *UserMutation) Contacts() (r benchmodel.ContactList, exists bool) {
+	v := m.contacts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetContacts resets all changes to the "contacts" field.
+func (m *UserMutation) ResetContacts() {
+	m.contacts = nil
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -377,15 +538,39 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 13)
 	if m.name != nil {
 		fields = append(fields, user.FieldName)
+	}
+	if m.alias != nil {
+		fields = append(fields, user.FieldAlias)
 	}
 	if m.age != nil {
 		fields = append(fields, user.FieldAge)
 	}
+	if m.age_p != nil {
+		fields = append(fields, user.FieldAgeP)
+	}
+	if m.active != nil {
+		fields = append(fields, user.FieldActive)
+	}
+	if m.active_p != nil {
+		fields = append(fields, user.FieldActiveP)
+	}
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
+	}
+	if m.tags != nil {
+		fields = append(fields, user.FieldTags)
+	}
+	if m.meta != nil {
+		fields = append(fields, user.FieldMeta)
+	}
+	if m.profile != nil {
+		fields = append(fields, user.FieldProfile)
+	}
+	if m.contacts != nil {
+		fields = append(fields, user.FieldContacts)
 	}
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
@@ -403,10 +588,26 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case user.FieldName:
 		return m.Name()
+	case user.FieldAlias:
+		return m.Alias()
 	case user.FieldAge:
 		return m.Age()
+	case user.FieldAgeP:
+		return m.AgeP()
+	case user.FieldActive:
+		return m.Active()
+	case user.FieldActiveP:
+		return m.ActiveP()
 	case user.FieldEmail:
 		return m.Email()
+	case user.FieldTags:
+		return m.Tags()
+	case user.FieldMeta:
+		return m.Meta()
+	case user.FieldProfile:
+		return m.Profile()
+	case user.FieldContacts:
+		return m.Contacts()
 	case user.FieldCreatedAt:
 		return m.CreatedAt()
 	case user.FieldUpdatedAt:
@@ -446,6 +647,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetName(v)
 		return nil
+	case user.FieldAlias:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlias(v)
+		return nil
 	case user.FieldAge:
 		v, ok := value.(int)
 		if !ok {
@@ -453,12 +661,61 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAge(v)
 		return nil
+	case user.FieldAgeP:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAgeP(v)
+		return nil
+	case user.FieldActive:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActive(v)
+		return nil
+	case user.FieldActiveP:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActiveP(v)
+		return nil
 	case user.FieldEmail:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEmail(v)
+		return nil
+	case user.FieldTags:
+		v, ok := value.(benchmodel.IntSlice)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTags(v)
+		return nil
+	case user.FieldMeta:
+		v, ok := value.(benchmodel.StringMap)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMeta(v)
+		return nil
+	case user.FieldProfile:
+		v, ok := value.(benchmodel.Profile)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProfile(v)
+		return nil
+	case user.FieldContacts:
+		v, ok := value.(benchmodel.ContactList)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContacts(v)
 		return nil
 	case user.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -541,11 +798,35 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldName:
 		m.ResetName()
 		return nil
+	case user.FieldAlias:
+		m.ResetAlias()
+		return nil
 	case user.FieldAge:
 		m.ResetAge()
 		return nil
+	case user.FieldAgeP:
+		m.ResetAgeP()
+		return nil
+	case user.FieldActive:
+		m.ResetActive()
+		return nil
+	case user.FieldActiveP:
+		m.ResetActiveP()
+		return nil
 	case user.FieldEmail:
 		m.ResetEmail()
+		return nil
+	case user.FieldTags:
+		m.ResetTags()
+		return nil
+	case user.FieldMeta:
+		m.ResetMeta()
+		return nil
+	case user.FieldProfile:
+		m.ResetProfile()
+		return nil
+	case user.FieldContacts:
+		m.ResetContacts()
 		return nil
 	case user.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -3,7 +3,6 @@ package lorm
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/samber/lo"
@@ -51,10 +50,6 @@ func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 		s.builder.Suffix("ON CONFLICT DO NOTHING")
 	case "sqlite", "sqlite3":
 		s.builder.StatementKeyword("INSERT OR IGNORE")
-	case "oci8", "ora", "oracle", "goracle", "godror":
-		s.err = errors.New("INSERT IGNORE is not supported in Oracle")
-	case "sqlserver", "mssql", "azuresql":
-		s.err = errors.New("INSERT IGNORE is not supported in SQL Server")
 	default:
 		s.builder.StatementKeyword("INSERT IGNORE")
 	}
@@ -62,6 +57,10 @@ func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 }
 
 // Exec executes the INSERT and backfills generated primary keys when possible.
+//
+// Generated primary keys are only backfilled when the driver can return a stable
+// one-to-one mapping between inserted rows and generated values. Batch inserts on
+// LastInsertId-only dialects intentionally do not infer or synthesize per-row IDs.
 func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	if s.err != nil {
 		return 0, s.err
@@ -176,11 +175,21 @@ func (s *InsertStmt[T]) execWithReturning(ctx context.Context, pkColumn string) 
 	return rowsAffected, nil
 }
 
+// Columns overrides the INSERT column list.
+//
+// Prefer AddModel/AddModels for model-based inserts. When Columns/Values are used
+// together with AddModel/AddModels, the model-derived values still take effect
+// during Exec.
 func (s *InsertStmt[T]) Columns(columns ...string) *InsertStmt[T] {
 	s.builder.Columns(columns...)
 	return s
 }
 
+// Values appends a raw VALUES row to the underlying builder.
+//
+// Prefer AddModel/AddModels for model-based inserts. When Columns/Values are used
+// together with AddModel/AddModels, the model-derived values still take effect
+// during Exec.
 func (s *InsertStmt[T]) Values(values ...any) *InsertStmt[T] {
 	s.builder.Values(values...)
 	return s

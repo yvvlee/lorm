@@ -17,8 +17,16 @@ type Config struct {
 	placeholderFormat builder.PlaceholderFormat
 	// escaper is used to escape special characters in table names and column names
 	escaper names.Escaper
+	// supportsReturning indicates whether the dialect supports RETURNING clauses
+	supportsReturning bool
+	// supportsLastInsertID indicates whether the dialect supports LastInsertId
+	supportsLastInsertID bool
+	// supportsForUpdate indicates whether the dialect supports FOR UPDATE
+	supportsForUpdate bool
 	// logger is the logger instance used for logging database operations
 	logger Logger
+	// logSQLArgs controls whether SQL argument values are included in engine logs
+	logSQLArgs bool
 	// maxIdleConns is the maximum number of idle connections in the connection pool
 	maxIdleConns int
 	// maxOpenConns is the maximum number of open connections to the database
@@ -43,6 +51,27 @@ func WithPlaceholderFormat(format builder.PlaceholderFormat) Option {
 func WithEscaper(escaper names.Escaper) Option {
 	return func(c *Config) {
 		c.escaper = escaper
+	}
+}
+
+// WithSupportsReturning overrides RETURNING support detection.
+func WithSupportsReturning(enabled bool) Option {
+	return func(c *Config) {
+		c.supportsReturning = enabled
+	}
+}
+
+// WithSupportsLastInsertID overrides LastInsertId support detection.
+func WithSupportsLastInsertID(enabled bool) Option {
+	return func(c *Config) {
+		c.supportsLastInsertID = enabled
+	}
+}
+
+// WithSupportsForUpdate overrides FOR UPDATE support detection.
+func WithSupportsForUpdate(enabled bool) Option {
+	return func(c *Config) {
+		c.supportsForUpdate = enabled
 	}
 }
 
@@ -78,5 +107,12 @@ func WithConnMaxIdleTime(connMaxIdleTime time.Duration) Option {
 func WithLogger(logger Logger) Option {
 	return func(c *Config) {
 		c.logger = logger
+	}
+}
+
+// WithLogSQLArgs controls whether engine logs include SQL argument values.
+func WithLogSQLArgs(enabled bool) Option {
+	return func(c *Config) {
+		c.logSQLArgs = enabled
 	}
 }
