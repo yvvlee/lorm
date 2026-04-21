@@ -44,14 +44,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("first update rows=%d version(before)=%d\n", rowsAffected, firstCopy.Version)
+	fmt.Printf("first update rows=%d version(in memory)=%d\n", rowsAffected, firstCopy.Version)
 
 	staleCopy.Title = "Stale Write"
 	rowsAffected, err = lorm.Update[*Document](engine).SetModel(staleCopy).Exec(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("stale update rows=%d version(before)=%d\n", rowsAffected, staleCopy.Version)
+	fmt.Printf("stale update rows=%d version(in memory)=%d\n", rowsAffected, staleCopy.Version)
 
 	current, err := repo.Get(ctx, doc.ID)
 	if err != nil {

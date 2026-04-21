@@ -87,3 +87,56 @@ func fillCurrentTime(value any, now time.Time) {
 		}
 	}
 }
+
+func newUpdatedFieldValue(value any, now time.Time) (updatedValue any, syncValue func(), ok bool) {
+	switch v := value.(type) {
+	case *time.Time:
+		updated := now
+		return &updated, func() { *v = updated }, true
+	case *int64:
+		updated := now.Unix()
+		return &updated, func() { *v = updated }, true
+	case *uint64:
+		updated := uint64(now.Unix())
+		return &updated, func() { *v = updated }, true
+	case *int32:
+		updated := int32(now.Unix())
+		return &updated, func() { *v = updated }, true
+	case *uint32:
+		updated := uint32(now.Unix())
+		return &updated, func() { *v = updated }, true
+	case *int:
+		updated := int(now.Unix())
+		return &updated, func() { *v = updated }, true
+	case *string:
+		updated := now.Format(time.DateTime)
+		return &updated, func() { *v = updated }, true
+	default:
+		return nil, nil, false
+	}
+}
+
+func incrementVersionValue(value any) {
+	switch v := value.(type) {
+	case *uint64:
+		*v++
+	case *int64:
+		*v++
+	case *uint32:
+		*v++
+	case *int32:
+		*v++
+	case *uint16:
+		*v++
+	case *int16:
+		*v++
+	case *uint8:
+		*v++
+	case *int8:
+		*v++
+	case *uint:
+		*v++
+	case *int:
+		*v++
+	}
+}

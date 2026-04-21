@@ -34,7 +34,7 @@ func main() {
 
 	var p Post
 	pageRows, total, err := lorm.Query[*Post](engine).
-		OrderBy(p.Fields().ID() + " ASC").
+		OrderBy(p.Fields().ID()+" ASC").
 		Page(ctx, 2, 2)
 	if err != nil {
 		log.Fatal(err)

@@ -22,6 +22,7 @@ func Update[T Table](engine *Engine) *UpdateStmt[T] {
 type UpdateStmt[T Table] struct {
 	engine  *Engine
 	builder *builder.UpdateBuilder
+	after   []func(rowsAffected int64)
 	err     error
 }
 
@@ -38,7 +39,14 @@ func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	rowsAffected, err = result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	for _, fn := range s.after {
+		fn(rowsAffected)
+	}
+	return rowsAffected, nil
 }
 
 // Table overrides the target table name.
@@ -97,14 +105,26 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 			// Version fields participate in optimistic locking and auto-increment.
 			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
 			dataMap[escaper.Escape(field.DBField)] = builder.Expr(escaper.Escape(field.DBField) + "+1")
+			s.after = append(s.after, func(rowsAffected int64) {
+				if rowsAffected > -1 {
+					incrementVersionValue(value)
+				}
+			})
 			continue
 		}
 		if field.Flag.HasFlag(FlagCreated) {
 			continue
 		}
 		if field.Flag.HasFlag(FlagUpdated) {
-			// Only backfill updated timestamps when the model has not set them.
-			fillCurrentTime(value, now)
+			if updatedValue, syncValue, ok := newUpdatedFieldValue(value, now); ok {
+				dataMap[escaper.Escape(field.DBField)] = updatedValue
+				s.after = append(s.after, func(rowsAffected int64) {
+					if rowsAffected > 0 {
+						syncValue()
+					}
+				})
+				continue
+			}
 		}
 		dataMap[escaper.Escape(field.DBField)] = value
 	}
