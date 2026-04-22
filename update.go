@@ -106,7 +106,7 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
 			dataMap[escaper.Escape(field.DBField)] = builder.Expr(escaper.Escape(field.DBField) + "+1")
 			s.after = append(s.after, func(rowsAffected int64) {
-				if rowsAffected > -1 {
+				if rowsAffected > 0 {
 					incrementVersionValue(value)
 				}
 			})

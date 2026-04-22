@@ -38,21 +38,11 @@ func TestExecQueryExistErrorLogging(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestTXErrorBranchAndCommit(t *testing.T) {
+func TestTXErrorBranch(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 	// error branch: fn returns error
 	err := e.TX(ctx, func(ctx context.Context) error { return assert.AnError })
 	assert.Error(t, err)
-
-	// explicit begin and commit branch
-	s, err := e.beginTxSession(ctx, nil)
-	assert.NoError(t, err)
-	assert.NoError(t, s.commit())
-
-	// begin and close triggers rollback path
-	s, err = e.beginTxSession(ctx, nil)
-	assert.NoError(t, err)
-	assert.NoError(t, s.close())
 }

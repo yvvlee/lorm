@@ -174,7 +174,7 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 			r := reflect.ValueOf(val)
 			if r.Kind() == reflect.Slice || r.Kind() == reflect.Array {
 				if _, ok := val.([]byte); !ok {
-					err = fmt.Errorf("cannot use array or slice with Eq operators")
+					err = fmt.Errorf("cannot use array or slice with Eq; use builder.In() for IN predicates")
 					return
 				}
 			}

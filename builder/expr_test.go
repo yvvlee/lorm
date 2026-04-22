@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const eqSliceError = "cannot use array or slice with Eq; use builder.In() for IN predicates"
+
 type stringValuer string
 
 func (v stringValuer) Value() (driver.Value, error) {
@@ -58,28 +60,28 @@ func TestEqInToSql(t *testing.T) {
 	b := Eq{"id": []int{1, 2, 3}}
 	_, _, err := b.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 }
 
 func TestEqNotInToSql(t *testing.T) {
 	b := NotEq{"id": []int{1, 2, 3}}
 	_, _, err := b.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 }
 
 func TestEqInEmptyToSql(t *testing.T) {
 	b := Eq{"id": []int{}}
 	_, _, err := b.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 }
 
 func TestNotEqInEmptyToSql(t *testing.T) {
 	b := NotEq{"id": []int{}}
 	_, _, err := b.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 }
 
 func TestNotEqToSql(t *testing.T) {
@@ -326,24 +328,24 @@ func TestNotNilPointer(t *testing.T) {
 	eq = Eq{"id": ids}
 	_, _, err = eq.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 
 	neq = NotEq{"id": ids}
 	_, _, err = neq.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 
 	a := [3]int{1, 2, 3}
 	ida := &a
 	eq = Eq{"id": ida}
 	_, _, err = eq.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 
 	neq = NotEq{"id": ida}
 	_, _, err = neq.ToSql()
 	assert.Error(t, err)
-	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+	assert.Equal(t, eqSliceError, err.Error())
 }
 
 func TestNilNestedDriverValuerPointer(t *testing.T) {

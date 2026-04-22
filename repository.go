@@ -10,7 +10,8 @@ import (
 
 // Repository provides common CRUD helpers for table T.
 type Repository[T Table] struct {
-	Engine *Engine
+	Engine     *Engine
+	descriptor *ModelDescriptor
 }
 
 // NewRepository creates a Repository backed by engine.
@@ -18,10 +19,22 @@ func NewRepository[T Table](engine *Engine) *Repository[T] {
 	return &Repository[T]{Engine: engine}
 }
 
+func (r *Repository[T]) modelDescriptor() *ModelDescriptor {
+	if r.descriptor == nil {
+		var t T
+		r.descriptor = t.New().LormModelDescriptor()
+	}
+	return r.descriptor
+}
+
+func (r *Repository[T]) primaryKeys() []string {
+	return r.modelDescriptor().FlagFields(FlagPrimaryKey)
+}
+
 // Get loads a row by its single-column primary key.
 func (r *Repository[T]) Get(ctx context.Context, id any) (T, error) {
 	var t T
-	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	primaryKeys := r.primaryKeys()
 	if len(primaryKeys) != 1 {
 		return t, errors.New("lorm.Repository.Get() only supports tables with single-column primary keys")
 	}
@@ -38,7 +51,7 @@ func (r *Repository[T]) GetByField(ctx context.Context, field string, value any)
 // Lock loads a row by primary key and appends FOR UPDATE when supported.
 func (r *Repository[T]) Lock(ctx context.Context, id any) (T, error) {
 	var t T
-	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	primaryKeys := r.primaryKeys()
 	if len(primaryKeys) != 1 {
 		return t, errors.New("lorm.Repository.Lock() only supports tables with single-column primary keys")
 	}
@@ -59,8 +72,7 @@ func (r *Repository[T]) LockByField(ctx context.Context, field string, value any
 
 // Exist reports whether a row with the given primary key exists.
 func (r *Repository[T]) Exist(ctx context.Context, id any) (bool, error) {
-	var t T
-	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	primaryKeys := r.primaryKeys()
 	if len(primaryKeys) != 1 {
 		return false, errors.New("lorm.Repository.Exist() only supports tables with single-column primary keys")
 	}
@@ -76,8 +88,7 @@ func (r *Repository[T]) ExistByField(ctx context.Context, field string, value an
 
 // Update updates model using its primary key fields.
 func (r *Repository[T]) Update(ctx context.Context, model T) (rowsAffected int64, err error) {
-	var t T
-	if len(t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)) == 0 {
+	if len(r.primaryKeys()) == 0 {
 		return 0, errors.New("lorm.Repository.Update() requires tables with at least one primary key")
 	}
 	return Update[T](r.Engine).SetModel(model).Exec(ctx)
@@ -113,8 +124,7 @@ func (r *Repository[T]) InsertIgnoreAll(ctx context.Context, models []T) (rowsAf
 
 // Delete deletes a row by its single-column primary key.
 func (r *Repository[T]) Delete(ctx context.Context, id any) (rowsAffected int64, err error) {
-	var t T
-	primaryKeys := t.New().LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	primaryKeys := r.primaryKeys()
 	if len(primaryKeys) != 1 {
 		return 0, errors.New("lorm.Repository.Delete() only supports tables with single-column primary keys")
 	}
@@ -123,7 +133,7 @@ func (r *Repository[T]) Delete(ctx context.Context, id any) (rowsAffected int64,
 
 // DeleteByField deletes rows matching field = value.
 func (r *Repository[T]) DeleteByField(ctx context.Context, field string, value any) (rowsAffected int64, err error) {
-	return DeleteModel[T](r.Engine).
+	return Delete[T](r.Engine).
 		Where(builder.Eq{field: value}).
 		Exec(ctx)
 }

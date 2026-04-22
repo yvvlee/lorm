@@ -255,17 +255,22 @@ roles, err := lorm.Query[*UserRole](engine).
 
 ## 自定义字段转换
 
-如果某个字段不适合直接按普通值或 JSON 存储，可以让字段类型自己实现
-`lorm.Conversion`。
+如果某个字段不适合直接按普通值或 JSON 存储，就让字段类型实现标准库的
+数据库接口：
+
+- 写入时实现 `driver.Valuer`
+- 读取时实现 `sql.Scanner`
 
 ```go
+import "database/sql/driver"
+
 type CSVInts []int
 
-func (c CSVInts) ToDB() ([]byte, error) {
+func (c CSVInts) Value() (driver.Value, error) {
 	return []byte("1,2,3"), nil
 }
 
-func (c *CSVInts) FromDB(data []byte) error {
+func (c *CSVInts) Scan(src any) error {
 	// 把 "1,2,3" 还原成切片
 	return nil
 }
@@ -278,10 +283,8 @@ type Report struct {
 }
 ```
 
-LORM 会：
-
-- 在写入数据库前调用 `ToDB()`
-- 在查询结果回填字段时调用 `FromDB()`
+LORM 写参数时会走 `driver.Valuer`。
+查结果时会走 `sql.Scanner`。
 
 可运行示例见
 [example/custom_conversion/main.go](example/custom_conversion/main.go)。

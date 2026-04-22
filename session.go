@@ -6,9 +6,8 @@ import (
 )
 
 type session struct {
-	engine   *Engine
-	tx       *sql.Tx
-	isClosed bool
+	engine *Engine
+	tx     *sql.Tx
 }
 
 func (s *session) Exec(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
@@ -65,25 +64,4 @@ func (s *session) proxy() DBProxy {
 		return s.tx
 	}
 	return s.engine.db
-}
-
-func (s *session) close() error {
-	if s.isClosed {
-		return nil
-	}
-	s.isClosed = true
-	if s.tx == nil {
-		return nil
-	}
-	return s.tx.Rollback()
-}
-func (s *session) commit() error {
-	if s.isClosed {
-		return nil
-	}
-	s.isClosed = true
-	if s.tx == nil {
-		return nil
-	}
-	return s.tx.Commit()
 }

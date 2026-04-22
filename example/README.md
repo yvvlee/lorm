@@ -32,7 +32,7 @@ go generate ./example/...
 - `repository`: how to wrap `lorm.Repository[T]` and add custom query methods
 - `transaction`: how to use `Engine.TX` and ensure every statement uses the transactional context
 - `custom_model`: how to write explicit joins and map results into a projection model
-- `custom_conversion`: how to store a custom field type using `Conversion` (`ToDB` / `FromDB`)
+- `custom_conversion`: how to store a custom field type using `driver.Valuer` and `sql.Scanner`
 - `json_field`: how to store and update JSON fields with regular Go structs and slices
 - `pagination`: how to use `Page(ctx, page, size)` and work with total counts
 - `optimistic_lock`: how `version` fields participate in safe concurrent updates

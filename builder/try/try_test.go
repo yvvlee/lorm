@@ -119,6 +119,11 @@ func TestGtGteLtLte(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "age <= ?", sql)
 	assert.Equal(t, []any{5}, args)
+
+	assert.Nil(t, Gt("age", (*int)(nil)))
+	assert.Nil(t, Gte("age", (*int)(nil)))
+	assert.Nil(t, Lt("age", (*int)(nil)))
+	assert.Nil(t, Lte("age", (*int)(nil)))
 }
 
 func TestLikes(t *testing.T) {
@@ -156,6 +161,8 @@ func TestNotIn(t *testing.T) {
 }
 
 func TestTimeRangeBranches(t *testing.T) {
+	assert.Equal(t, "", timeToString(nil))
+
 	// start nil, end set
 	end := time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC)
 	c := TimeRange("created_at", nil, &end)
@@ -171,4 +178,7 @@ func TestTimeRangeBranches(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at >= ?", sql)
 	assert.Equal(t, []any{"2023-01-01 00:00:00"}, args)
+
+	var zero time.Time
+	assert.Nil(t, TimeRange("created_at", &zero, &zero))
 }

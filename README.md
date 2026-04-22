@@ -289,17 +289,22 @@ Unlike `UnimplementedTable`, `UnimplementedModel` does not generate a
 
 ## Custom Field Conversion
 
-For fields that should not be stored as plain values or JSON, implement
-`lorm.Conversion` on the field type itself.
+For fields that should not be stored as plain values or JSON, implement the
+standard database interfaces on the field type itself:
+
+- `driver.Valuer` for writes
+- `sql.Scanner` for reads
 
 ```go
+import "database/sql/driver"
+
 type CSVInts []int
 
-func (c CSVInts) ToDB() ([]byte, error) {
+func (c CSVInts) Value() (driver.Value, error) {
 	return []byte("1,2,3"), nil
 }
 
-func (c *CSVInts) FromDB(data []byte) error {
+func (c *CSVInts) Scan(src any) error {
 	// decode "1,2,3" back into the slice
 	return nil
 }
@@ -312,10 +317,8 @@ type Report struct {
 }
 ```
 
-LORM will call:
-
-- `ToDB()` before writing query arguments to the database
-- `FromDB()` when scanning the field back from query results
+LORM passes query arguments through `driver.Valuer`, and `database/sql` uses
+`sql.Scanner` when scanning result columns back into the field.
 
 See [example/custom_conversion/main.go](example/custom_conversion/main.go) for a
 runnable example.

@@ -89,6 +89,8 @@ func ScanModel[T Model](row *sql.Rows, m T) error {
 }
 
 // ScanCol scans the first column of the first row into t.
+// t must be a pointer (e.g. *int, *string) so the scanned value
+// can be written back to the caller.
 func ScanCol[T any](row *sql.Rows, t T) error {
 	columns, err := row.Columns()
 	if err != nil {

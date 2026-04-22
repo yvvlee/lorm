@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -16,9 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// csvInts implements driver.Valuer and sql.Scanner to demonstrate
+// custom type conversion without lorm-specific interfaces.
 type csvInts []int
 
-func (c csvInts) ToDB() ([]byte, error) {
+func (c csvInts) Value() (driver.Value, error) {
 	if len(c) == 0 {
 		return []byte{}, nil
 	}
@@ -29,9 +31,21 @@ func (c csvInts) ToDB() ([]byte, error) {
 	return []byte(strings.Join(parts, ",")), nil
 }
 
-func (c *csvInts) FromDB(data []byte) error {
+func (c *csvInts) Scan(src any) error {
 	if c == nil {
-		return errors.New("csvInts destination is nil")
+		return fmt.Errorf("csvInts destination is nil")
+	}
+	var data []byte
+	switch v := src.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	case nil:
+		*c = nil
+		return nil
+	default:
+		return fmt.Errorf("cannot scan %T into csvInts", src)
 	}
 	if len(data) == 0 {
 		*c = nil

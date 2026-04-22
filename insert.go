@@ -46,7 +46,7 @@ func (s *InsertStmt[T]) AddModels(models ...T) *InsertStmt[T] {
 func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 	s.ignore = true
 	switch s.engine.DriverName() {
-	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach":
+	case "postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
 		s.builder.Suffix("ON CONFLICT DO NOTHING")
 	case "sqlite", "sqlite3":
 		s.builder.StatementKeyword("INSERT OR IGNORE")

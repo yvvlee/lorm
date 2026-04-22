@@ -166,7 +166,7 @@ func TestStmtMethodsEscapeIdentifiersWithoutRepositoryHelp(t *testing.T) {
 	assert.Equal(t, "UPDATE `order` SET `group` = ? WHERE `id` = ?", sqlStr)
 	assert.Equal(t, []any{"g2", 1}, args)
 
-	sqlStr, args, err = DeleteModel[*reservedWordModel](engine).
+	sqlStr, args, err = Delete[*reservedWordModel](engine).
 		Where(builder.Eq{"group": "g3"}).
 		builder.ToSql()
 	require.NoError(t, err)

@@ -1,6 +1,7 @@
 package lorm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,7 @@ func TestPlaceholderBranches(t *testing.T) {
 	assert.Equal(t, builder.Dollar, Placeholder("postgresql"))
 	assert.Equal(t, builder.Dollar, Placeholder("pgx"))
 	assert.Equal(t, builder.Dollar, Placeholder("pq"))
-	assert.Equal(t, builder.Dollar, Placeholder("ql"))
+	assert.Equal(t, builder.Question, Placeholder("ql"))
 	assert.Equal(t, builder.Question, Placeholder("mysql"))
 	assert.Equal(t, builder.Question, Placeholder("unknown"))
 }
@@ -64,17 +65,17 @@ func TestSupportsLastInsertIDBranches(t *testing.T) {
 
 func TestConnectErrorBranches(t *testing.T) {
 	// Unregistered driver should return error immediately
-	_, err := connect("__invalid_driver__", "dsn")
+	_, err := connect(context.Background(), "__invalid_driver__", "dsn")
 	assert.Error(t, err)
 
 	// Alias without a matching registered driver should fail immediately.
-	_, err = connect("postgres", "postgres://wrong:wrong@127.0.0.1:1/db")
+	_, err = connect(context.Background(), "postgres", "postgres://wrong:wrong@127.0.0.1:1/db")
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, `unknown driver "postgres"`)
 
 	// Registered driver with bad DSN: use pgx.
 	// driver imported in lorm_test.go
-	_, err = connect("pgx", "postgres://wrong:wrong@127.0.0.1:1/db")
+	_, err = connect(context.Background(), "pgx", "postgres://wrong:wrong@127.0.0.1:1/db")
 	assert.Error(t, err)
 }
 

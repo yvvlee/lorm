@@ -12,6 +12,8 @@ import (
 )
 
 // Engine wraps a sql.DB and the driver-specific behavior lorm needs.
+// An Engine should be created once per database and used as a global singleton.
+// Do not copy an Engine value; transaction isolation relies on pointer identity.
 type Engine struct {
 	config *Config
 	db     *sql.DB
@@ -27,8 +29,16 @@ type dialectConfig struct {
 }
 
 // NewEngine opens a database connection and applies the provided options.
+// It uses a background context for the initial connectivity check; use
+// NewEngineContext to supply a context with timeout or cancellation.
 func NewEngine(driverName, dsn string, option ...Option) (*Engine, error) {
-	db, err := connect(driverName, dsn)
+	return NewEngineContext(context.Background(), driverName, dsn, option...)
+}
+
+// NewEngineContext is like NewEngine but accepts a context for the initial
+// connectivity check so callers can enforce a timeout.
+func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Option) (*Engine, error) {
+	db, err := connect(ctx, driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -137,38 +147,41 @@ func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Co
 	if _, ok := ctx.Value(e).(*session); ok {
 		return fn(ctx)
 	}
-	s, err := e.beginTxSession(ctx, opts)
+	tx, err := e.db.BeginTx(ctx, opts)
 	if err != nil {
 		e.logger.ErrorContext(ctx, "BEGIN TRANSACTION failed", "err", err)
 		return err
 	}
 	sessionID := uuid.NewString()
 	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID)
+
+	s := &session{engine: e, tx: tx}
 	defer func() {
-		if err := s.close(); err != nil {
-			e.logger.ErrorContext(ctx, "lorm close transaction session error", "sessionID", sessionID, "err", err)
+		if p := recover(); p != nil {
+			rbErr := tx.Rollback()
+			e.logger.ErrorContext(ctx, "ROLLBACK (panic)", "sessionID", sessionID, "panic", p, "rbErr", rbErr)
+			panic(p)
 		}
 	}()
+
 	innerCtx := context.WithValue(ctx, e, s)
 	innerCtx = context.WithValue(innerCtx, sessionIDKey{}, sessionID)
 	if err = fn(innerCtx); err != nil {
-		e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID, "err", err)
+		rbErr := tx.Rollback()
+		if rbErr != nil {
+			e.logger.ErrorContext(ctx, "ROLLBACK failed", "sessionID", sessionID, "err", err, "rbErr", rbErr)
+		} else {
+			e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID, "err", err)
+		}
 		return err
 	}
-	err = s.commit()
-	e.logger.InfoContext(ctx, "COMMIT", "sessionID", sessionID, "err", err)
-	return err
-}
-
-func (e *Engine) beginTxSession(ctx context.Context, opts *sql.TxOptions) (*session, error) {
-	tx, err := e.db.BeginTx(ctx, opts)
+	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		e.logger.ErrorContext(ctx, "COMMIT failed", "sessionID", sessionID, "err", err)
+	} else {
+		e.logger.InfoContext(ctx, "COMMIT", "sessionID", sessionID)
 	}
-	return &session{
-		engine: e,
-		tx:     tx,
-	}, nil
+	return err
 }
 
 // Exec executes a statement against the current session or transaction.
@@ -229,13 +242,12 @@ func (e *Engine) sqlLogFields(ctx context.Context, query string, args []any, err
 }
 
 // connect to a database and verify with a ping.
-func connect(driverName, dataSourceName string) (*sql.DB, error) {
+func connect(ctx context.Context, driverName, dataSourceName string) (*sql.DB, error) {
 	db, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
 		return nil, err
 	}
-	err = db.Ping()
-	if err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -266,7 +278,7 @@ func defaultDialectConfig(driverName string) dialectConfig {
 	case //SQLite
 		"sqlite", "sqlite3", "ql":
 		return dialectConfig{
-			placeholderFormat:    builder.Dollar,
+			placeholderFormat:    builder.Question,
 			escaper:              names.NewQuoter('"', '"'),
 			supportsReturning:    false,
 			supportsLastInsertID: true,

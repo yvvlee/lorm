@@ -543,7 +543,7 @@ func benchmarkDeleteByIDLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := lorm.DeleteModel[*LormUser](engine).ID(ids[i]).Exec(benchmarkCtx); err != nil {
+		if _, err := lorm.Delete[*LormUser](engine).ID(ids[i]).Exec(benchmarkCtx); err != nil {
 			b.Fatalf("lorm delete: %v", err)
 		}
 	}
@@ -957,7 +957,7 @@ func benchmarkBatchDeleteLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		if _, err := lorm.DeleteModel[*LormUser](engine).
+		if _, err := lorm.Delete[*LormUser](engine).
 			Where(builder.In("email", batchEmails)).
 			Exec(benchmarkCtx); err != nil {
 			b.Fatalf("lorm batch delete: %v", err)

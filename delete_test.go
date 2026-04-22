@@ -11,22 +11,16 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
-func TestDeleteExecError_NoFrom(t *testing.T) {
-	e := initEngine(t)
-	_, err := Delete(e).Where("id = ?", 1).Exec(context.TODO())
-	assert.Error(t, err)
-}
-
 func TestDeleteExecErrorWithInvalidPrefix(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
-	_, err := Delete(e).From("test").Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
+	_, err := Delete[*Test](e).Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }
 
 func TestDeleteWrappers(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_ = Delete(e).
+	_ = Delete[*Test](e).
 		From("test").
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).
@@ -38,21 +32,7 @@ func TestDeleteWrappers(t *testing.T) {
 		SuffixExpr(builder.Expr("/*sufx*/"))
 }
 
-func TestDeleteModelWrappers(t *testing.T) {
-	e := &Engine{config: &Config{}}
-	_ = DeleteModel[*Test](e).
-		Prefix("/*pre*/").
-		PrefixExpr(builder.Expr("/*prex*/")).
-		Where("id = ?", 1).
-		ID(1).
-		OrderBy("id DESC").
-		Limit(10).
-		Offset(0).
-		Suffix("/*suf*/").
-		SuffixExpr(builder.Expr("/*sufx*/"))
-}
-
-func TestDeleteModelByID(t *testing.T) {
+func TestDeleteByID(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
@@ -74,7 +54,7 @@ func TestDeleteModelByID(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, target)
 
-	rowsAffected, err := DeleteModel[*Test](e).ID(target.ID).Exec(ctx)
+	rowsAffected, err := Delete[*Test](e).ID(target.ID).Exec(ctx)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 1, rowsAffected)
 

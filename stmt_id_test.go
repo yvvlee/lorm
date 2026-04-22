@@ -87,12 +87,12 @@ func TestUpdateIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	assert.ErrorContains(t, err, "single-column primary keys")
 }
 
-func TestDeleteModelIDRequiresSingleColumnPrimaryKey(t *testing.T) {
+func TestDeleteIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
 
-	_, err := DeleteModel[*testNoPrimaryKeyModel](e).ID(1).Exec(context.TODO())
+	_, err := Delete[*testNoPrimaryKeyModel](e).ID(1).Exec(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	_, err = DeleteModel[*testCompositePrimaryKeyModel](e).ID(1).Exec(context.TODO())
+	_, err = Delete[*testCompositePrimaryKeyModel](e).ID(1).Exec(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 type CSVInts []int
 
-func (c CSVInts) ToDB() ([]byte, error) {
+func (c CSVInts) Value() (driver.Value, error) {
 	if len(c) == 0 {
 		return []byte{}, nil
 	}
@@ -22,9 +23,21 @@ func (c CSVInts) ToDB() ([]byte, error) {
 	return []byte(strings.Join(parts, ",")), nil
 }
 
-func (c *CSVInts) FromDB(data []byte) error {
+func (c *CSVInts) Scan(src any) error {
 	if c == nil {
 		return fmt.Errorf("CSVInts destination is nil")
+	}
+	var data []byte
+	switch v := src.(type) {
+	case nil:
+		*c = nil
+		return nil
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan %T into CSVInts", src)
 	}
 	if len(data) == 0 {
 		*c = nil

@@ -103,6 +103,9 @@ func (s *JSONFieldWrapper) Value() (driver.Value, error) {
 	if s.v == nil {
 		return nil, nil
 	}
+	if v, ok := s.v.(driver.Valuer); ok {
+		return v.Value()
+	}
 	return json.Marshal(s.v)
 }
 

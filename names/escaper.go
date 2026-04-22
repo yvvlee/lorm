@@ -18,6 +18,7 @@ func NewQuoter(prefix byte, suffix byte) *Quoter {
 }
 
 // Escape quotes each dot-separated identifier part independently.
+// Calling Escape on an already-escaped identifier is safe (idempotent).
 func (q Quoter) Escape(fieldOrTable string) string {
 	if fieldOrTable == "" {
 		return ""
@@ -27,8 +28,10 @@ func (q Quoter) Escape(fieldOrTable string) string {
 	}
 	// Quote each segment separately so schema-qualified names stay addressable.
 	items := lo.Map(strings.Split(fieldOrTable, "."), func(s string, _ int) string {
-		s = strings.TrimPrefix(s, string(q.prefix))
-		s = strings.TrimSuffix(s, string(q.suffix))
+		// Already escaped — return as-is to ensure idempotence.
+		if len(s) >= 2 && s[0] == q.prefix && s[len(s)-1] == q.suffix {
+			return s
+		}
 		if q.suffix != 0 {
 			escapedSuffix := string([]byte{q.suffix, q.suffix})
 			s = strings.ReplaceAll(s, string(q.suffix), escapedSuffix)

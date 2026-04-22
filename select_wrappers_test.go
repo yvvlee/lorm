@@ -48,6 +48,7 @@ func TestQueryColStmtWrappers(t *testing.T) {
 		Distinct().
 		Options("opt").
 		Select("id").
+		AddColumn("COUNT(1) AS total").
 		RemoveColumns().
 		Column("id").
 		From("test").

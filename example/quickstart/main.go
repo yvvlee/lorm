@@ -63,7 +63,7 @@ func main() {
 		fmt.Printf("- id=%d name=%s email=%s\n", item.ID, item.Name, item.Email)
 	}
 
-	if _, err := lorm.DeleteModel[*User](engine).ID(bob.ID).Exec(ctx); err != nil {
+	if _, err := lorm.Delete[*User](engine).ID(bob.ID).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 

@@ -12,6 +12,7 @@ import (
 func TestUpdateWrappers(t *testing.T) {
 	e := &Engine{config: &Config{}}
 	_ = Update[*Test](e).
+		Table("test_archive").
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).
 		Set("str", "x").

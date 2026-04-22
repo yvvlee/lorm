@@ -30,7 +30,8 @@ func (p part) ToSql() (sql string, args []any, err error) {
 }
 
 func appendToSql(parts []Sqlizer, w io.Writer, sep string, args []any) ([]any, error) {
-	for i, p := range parts {
+	written := 0
+	for _, p := range parts {
 		partSql, partArgs, err := p.ToSql()
 		if err != nil {
 			return nil, err
@@ -38,7 +39,7 @@ func appendToSql(parts []Sqlizer, w io.Writer, sep string, args []any) ([]any, e
 			continue
 		}
 
-		if i > 0 {
+		if written > 0 {
 			_, err := io.WriteString(w, sep)
 			if err != nil {
 				return nil, err
@@ -50,6 +51,7 @@ func appendToSql(parts []Sqlizer, w io.Writer, sep string, args []any) ([]any, e
 			return nil, err
 		}
 		args = append(args, partArgs...)
+		written++
 	}
 	return args, nil
 }
