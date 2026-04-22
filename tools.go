@@ -58,59 +58,66 @@ func fillCurrentTime(value any, now time.Time) {
 	// Populate managed time fields without overwriting explicit values.
 	switch v := value.(type) {
 	case *time.Time:
-		if v.IsZero() {
-			*v = now
-		}
+		fillZeroValue(v, now)
+	case **time.Time:
+		fillZeroPointerValue(v, now)
 	case *int64:
-		if *v == 0 {
-			*v = now.Unix()
-		}
+		fillZeroValue(v, now.Unix())
+	case **int64:
+		fillZeroPointerValue(v, now.Unix())
 	case *uint64:
-		if *v == 0 {
-			*v = uint64(now.Unix())
-		}
+		fillZeroValue(v, uint64(now.Unix()))
+	case **uint64:
+		fillZeroPointerValue(v, uint64(now.Unix()))
 	case *int32:
-		if *v == 0 {
-			*v = int32(now.Unix())
-		}
+		fillZeroValue(v, int32(now.Unix()))
+	case **int32:
+		fillZeroPointerValue(v, int32(now.Unix()))
 	case *uint32:
-		if *v == 0 {
-			*v = uint32(now.Unix())
-		}
+		fillZeroValue(v, uint32(now.Unix()))
+	case **uint32:
+		fillZeroPointerValue(v, uint32(now.Unix()))
 	case *int:
-		if *v == 0 {
-			*v = int(now.Unix())
-		}
+		fillZeroValue(v, int(now.Unix()))
+	case **int:
+		fillZeroPointerValue(v, int(now.Unix()))
 	case *string:
-		if *v == "" {
-			*v = now.Format(time.DateTime)
-		}
+		fillZeroValue(v, now.Format(time.DateTime))
+	case **string:
+		fillZeroPointerValue(v, now.Format(time.DateTime))
 	}
 }
 
 func newUpdatedFieldValue(value any, now time.Time) (updatedValue any, syncValue func(), ok bool) {
 	switch v := value.(type) {
 	case *time.Time:
-		updated := now
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, now)
+	case **time.Time:
+		return newUpdatedPointerValue(v, now)
 	case *int64:
-		updated := now.Unix()
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, now.Unix())
+	case **int64:
+		return newUpdatedPointerValue(v, now.Unix())
 	case *uint64:
-		updated := uint64(now.Unix())
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, uint64(now.Unix()))
+	case **uint64:
+		return newUpdatedPointerValue(v, uint64(now.Unix()))
 	case *int32:
-		updated := int32(now.Unix())
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, int32(now.Unix()))
+	case **int32:
+		return newUpdatedPointerValue(v, int32(now.Unix()))
 	case *uint32:
-		updated := uint32(now.Unix())
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, uint32(now.Unix()))
+	case **uint32:
+		return newUpdatedPointerValue(v, uint32(now.Unix()))
 	case *int:
-		updated := int(now.Unix())
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, int(now.Unix()))
+	case **int:
+		return newUpdatedPointerValue(v, int(now.Unix()))
 	case *string:
-		updated := now.Format(time.DateTime)
-		return &updated, func() { *v = updated }, true
+		return newUpdatedValue(v, now.Format(time.DateTime))
+	case **string:
+		return newUpdatedPointerValue(v, now.Format(time.DateTime))
 	default:
 		return nil, nil, false
 	}
@@ -119,24 +126,90 @@ func newUpdatedFieldValue(value any, now time.Time) (updatedValue any, syncValue
 func incrementVersionValue(value any) {
 	switch v := value.(type) {
 	case *uint64:
-		*v++
+		incrementValue(v)
+	case **uint64:
+		incrementPointerValue(v)
 	case *int64:
-		*v++
+		incrementValue(v)
+	case **int64:
+		incrementPointerValue(v)
 	case *uint32:
-		*v++
+		incrementValue(v)
+	case **uint32:
+		incrementPointerValue(v)
 	case *int32:
-		*v++
+		incrementValue(v)
+	case **int32:
+		incrementPointerValue(v)
 	case *uint16:
-		*v++
+		incrementValue(v)
+	case **uint16:
+		incrementPointerValue(v)
 	case *int16:
-		*v++
+		incrementValue(v)
+	case **int16:
+		incrementPointerValue(v)
 	case *uint8:
-		*v++
+		incrementValue(v)
+	case **uint8:
+		incrementPointerValue(v)
 	case *int8:
-		*v++
+		incrementValue(v)
+	case **int8:
+		incrementPointerValue(v)
 	case *uint:
-		*v++
+		incrementValue(v)
+	case **uint:
+		incrementPointerValue(v)
 	case *int:
-		*v++
+		incrementValue(v)
+	case **int:
+		incrementPointerValue(v)
 	}
+}
+
+type versionNumber interface {
+	~uint64 | ~int64 | ~uint32 | ~int32 | ~uint16 | ~int16 | ~uint8 | ~int8 | ~uint | ~int
+}
+
+func fillZeroValue[T comparable](value *T, current T) {
+	var zero T
+	if *value == zero {
+		*value = current
+	}
+}
+
+func fillZeroPointerValue[T comparable](value **T, current T) {
+	if *value == nil {
+		currentValue := current
+		*value = &currentValue
+		return
+	}
+	fillZeroValue(*value, current)
+}
+
+func newUpdatedValue[T any](value *T, updated T) (updatedValue any, syncValue func(), ok bool) {
+	return &updated, func() { *value = updated }, true
+}
+
+func newUpdatedPointerValue[T any](value **T, updated T) (updatedValue any, syncValue func(), ok bool) {
+	return &updated, func() {
+		if *value == nil {
+			*value = new(T)
+		}
+		**value = updated
+	}, true
+}
+
+func incrementValue[T versionNumber](value *T) {
+	(*value)++
+}
+
+func incrementPointerValue[T versionNumber](value **T) {
+	if *value == nil {
+		current := T(1)
+		*value = &current
+		return
+	}
+	(**value)++
 }

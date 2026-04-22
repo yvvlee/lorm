@@ -46,6 +46,72 @@ func TestFillCurrentTimeAllBranches(t *testing.T) {
 	}
 }
 
+func TestFillCurrentTimeDoublePointerBranches(t *testing.T) {
+	now := time.Unix(1000, 0)
+
+	t.Run("TimePointer", func(t *testing.T) {
+		var v *time.Time
+		fillCurrentTime(&v, now)
+		assert.NotNil(t, v)
+		assert.Equal(t, now, *v)
+	})
+
+	t.Run("Int64Pointer", func(t *testing.T) {
+		var v *int64
+		fillCurrentTime(&v, now)
+		assert.NotNil(t, v)
+		assert.Equal(t, now.Unix(), *v)
+	})
+
+	t.Run("StringPointer", func(t *testing.T) {
+		var v *string
+		fillCurrentTime(&v, now)
+		assert.NotNil(t, v)
+		assert.Equal(t, now.Format(time.DateTime), *v)
+	})
+}
+
+func TestNewUpdatedFieldValueDoublePointerBranches(t *testing.T) {
+	now := time.Unix(1000, 0)
+
+	t.Run("TimePointer", func(t *testing.T) {
+		var v *time.Time
+		updatedValue, syncValue, ok := newUpdatedFieldValue(&v, now)
+		assert.True(t, ok)
+		assert.Equal(t, &now, updatedValue)
+		syncValue()
+		assert.NotNil(t, v)
+		assert.Equal(t, now, *v)
+	})
+
+	t.Run("StringPointer", func(t *testing.T) {
+		var v *string
+		updatedValue, syncValue, ok := newUpdatedFieldValue(&v, now)
+		assert.True(t, ok)
+		expected := now.Format(time.DateTime)
+		assert.Equal(t, &expected, updatedValue)
+		syncValue()
+		assert.NotNil(t, v)
+		assert.Equal(t, expected, *v)
+	})
+}
+
+func TestIncrementVersionValueDoublePointerBranches(t *testing.T) {
+	t.Run("AllocatesNilPointer", func(t *testing.T) {
+		var v *int64
+		incrementVersionValue(&v)
+		assert.NotNil(t, v)
+		assert.EqualValues(t, 1, *v)
+	})
+
+	t.Run("IncrementsExistingPointer", func(t *testing.T) {
+		current := uint32(4)
+		v := &current
+		incrementVersionValue(&v)
+		assert.EqualValues(t, 5, *v)
+	})
+}
+
 type _pkInt64 struct {
 	UnimplementedTable
 	ID int64

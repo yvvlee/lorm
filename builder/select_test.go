@@ -166,6 +166,21 @@ func TestCountBuilder(t *testing.T) {
 	})
 }
 
+func TestCountBuilderClearDoesNotMutateSourceBuilder(t *testing.T) {
+	b := Select("id", "name").
+		From("users").
+		Where("age > ?", 18).
+		OrderBy("id DESC")
+
+	countBuilder := b.ToCountBuilder()
+	countBuilder.Clear()
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT id, name FROM users WHERE age > ? ORDER BY id DESC", sql)
+	assert.Equal(t, []any{18}, args)
+}
+
 func TestSelectBuilderFromSelect(t *testing.T) {
 	subQ := Select("c").From("d").Where(Eq{"i": 0})
 	b := Select("a", "b").FromSelect(subQ, "subq")

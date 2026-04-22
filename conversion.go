@@ -38,10 +38,3 @@ func normalizeDBArg(arg any) any {
 	}
 	return nil
 }
-
-func wrapScanTarget(target any) any {
-	if target == nil {
-		return target
-	}
-	return target
-}

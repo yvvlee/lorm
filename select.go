@@ -10,8 +10,7 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
-// Query builds a SELECT statement that scans rows into models of T.
-func Query[T Model](engine *Engine) *QueryModelStmt[T] {
+func newQueryModelBuilder[T Model](engine *Engine) *builder.SelectBuilder {
 	var t T
 	fields := t.LormModelDescriptor().AllFields()
 	if escaper := engine.Escaper(); escaper != nil {
@@ -24,9 +23,14 @@ func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	if table, ok := any(t).(Table); ok {
 		selectBuilder.From(engine.Escaper().Escape(table.TableName()))
 	}
+	return selectBuilder
+}
+
+// Query builds a SELECT statement that scans rows into models of T.
+func Query[T Model](engine *Engine) *QueryModelStmt[T] {
 	return &QueryModelStmt[T]{
 		engine:  engine,
-		builder: selectBuilder,
+		builder: newQueryModelBuilder[T](engine),
 	}
 }
 
@@ -37,9 +41,15 @@ type QueryModelStmt[T Model] struct {
 	err     error
 }
 
+func (s *QueryModelStmt[T]) reset() {
+	s.builder = newQueryModelBuilder[T](s.engine)
+	s.err = nil
+}
+
 // Get returns the first matching model or the zero value when no row matches.
 func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 	var t T
+	defer s.reset()
 	if s.err != nil {
 		return t, s.err
 	}
@@ -64,10 +74,11 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 
 // Exist reports whether the query returns at least one row.
 func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
+	defer s.reset()
 	if s.err != nil {
 		return false, s.err
 	}
-	query, args, err := s.builder.ToSql()
+	query, args, err := s.builder.Limit(1).ToSql()
 	if err != nil {
 		return false, err
 	}
@@ -76,6 +87,7 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 
 // Find returns all matching models.
 func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
+	defer s.reset()
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -100,6 +112,7 @@ func (s *QueryModelStmt[T]) Find(ctx context.Context) ([]T, error) {
 
 // Page returns the requested page of results together with the total row count.
 func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint64, error) {
+	defer s.reset()
 	if s.err != nil {
 		return nil, 0, s.err
 	}
@@ -349,9 +362,14 @@ type QueryColStmt[T any] struct {
 	builder *builder.SelectBuilder
 }
 
+func (s *QueryColStmt[T]) reset() {
+	s.builder = new(builder.SelectBuilder)
+}
+
 // Get returns the first column value and whether a row was found.
 func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	var t T
+	defer s.reset()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return t, false, err
@@ -372,6 +390,7 @@ func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 
 // Find returns all values from the first selected column.
 func (s *QueryColStmt[T]) Find(ctx context.Context) ([]T, error) {
+	defer s.reset()
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err

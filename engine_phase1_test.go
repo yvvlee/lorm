@@ -120,7 +120,7 @@ func TestRepositoryMethodsEscapeIdentifiers(t *testing.T) {
 	assert.False(t, exists)
 	call = recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ?", call.query)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ? LIMIT 1", call.query)
 	assert.Equal(t, []any{"updated"}, call.args)
 }
 

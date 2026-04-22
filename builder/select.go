@@ -7,6 +7,14 @@ import (
 	"strings"
 )
 
+func cloneSqlizers(items []Sqlizer) []Sqlizer {
+	return append([]Sqlizer(nil), items...)
+}
+
+func cloneStrings(items []string) []string {
+	return append([]string(nil), items...)
+}
+
 // SelectBuilder builds SELECT statements clause by clause.
 type SelectBuilder struct {
 	prefixes     []Sqlizer
@@ -125,16 +133,24 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 
 // ToCountBuilder rewrites the query into a COUNT query while preserving filters and joins.
 func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
-	if len(b.groupBys) == 0 {
+	hasDistinct := false
+	for _, opt := range b.options {
+		if strings.ToUpper(opt) == "DISTINCT" {
+			hasDistinct = true
+			break
+		}
+	}
+
+	if len(b.groupBys) == 0 && !hasDistinct {
 		// A simple SELECT can count rows directly against the same FROM/WHERE clauses.
 		builder := &SelectBuilder{
-			prefixes:   b.prefixes,
-			options:    b.options,
+			prefixes:   cloneSqlizers(b.prefixes),
+			options:    cloneStrings(b.options),
 			columns:    nil,
 			from:       b.from,
-			joins:      b.joins,
-			whereParts: b.whereParts,
-			suffixes:   b.suffixes,
+			joins:      cloneSqlizers(b.joins),
+			whereParts: cloneSqlizers(b.whereParts),
+			suffixes:   cloneSqlizers(b.suffixes),
 		}
 		return builder.Select("COUNT(1)")
 	}
@@ -144,28 +160,28 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 		!strings.Contains(b.groupBys[0], ",") {
 		// A single grouping key without HAVING can be reduced to COUNT(DISTINCT key).
 		builder := &SelectBuilder{
-			prefixes:   b.prefixes,
-			options:    b.options,
+			prefixes:   cloneSqlizers(b.prefixes),
+			options:    cloneStrings(b.options),
 			columns:    nil,
 			from:       b.from,
-			joins:      b.joins,
-			whereParts: b.whereParts,
-			suffixes:   b.suffixes,
+			joins:      cloneSqlizers(b.joins),
+			whereParts: cloneSqlizers(b.whereParts),
+			suffixes:   cloneSqlizers(b.suffixes),
 		}
 		return builder.Select(fmt.Sprintf("COUNT(DISTINCT %s)", b.groupBys[0]))
 	}
 
 	// Complex GROUP BY or HAVING queries must be counted from a subquery to preserve semantics.
 	subBuilder := &SelectBuilder{
-		prefixes:    b.prefixes,
-		options:     b.options,
-		columns:     b.columns,
+		prefixes:    cloneSqlizers(b.prefixes),
+		options:     cloneStrings(b.options),
+		columns:     cloneSqlizers(b.columns),
 		from:        b.from,
-		joins:       b.joins,
-		whereParts:  b.whereParts,
-		groupBys:    b.groupBys,
-		havingParts: b.havingParts,
-		suffixes:    b.suffixes,
+		joins:       cloneSqlizers(b.joins),
+		whereParts:  cloneSqlizers(b.whereParts),
+		groupBys:    cloneStrings(b.groupBys),
+		havingParts: cloneSqlizers(b.havingParts),
+		suffixes:    cloneSqlizers(b.suffixes),
 	}
 
 	return new(SelectBuilder).

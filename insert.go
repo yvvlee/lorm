@@ -10,13 +10,16 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+func newInsertBuilder[T Table](engine *Engine) *builder.InsertBuilder {
+	var t T
+	return builder.Insert(engine.Escaper().Escape(t.TableName()))
+}
+
 // Insert builds an INSERT statement for table T.
 func Insert[T Table](engine *Engine) *InsertStmt[T] {
-	var t T
-	b := builder.Insert(engine.Escaper().Escape(t.TableName()))
 	return &InsertStmt[T]{
 		engine:  engine,
-		builder: b,
+		builder: newInsertBuilder[T](engine),
 		models:  make([]T, 0),
 	}
 }
@@ -28,6 +31,13 @@ type InsertStmt[T Table] struct {
 	models  []T
 	err     error
 	ignore  bool
+}
+
+func (s *InsertStmt[T]) reset() {
+	s.builder = newInsertBuilder[T](s.engine)
+	s.models = s.models[:0]
+	s.err = nil
+	s.ignore = false
 }
 
 // AddModel appends a model to the insert batch.
@@ -62,6 +72,7 @@ func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 // one-to-one mapping between inserted rows and generated values. Batch inserts on
 // LastInsertId-only dialects intentionally do not infer or synthesize per-row IDs.
 func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
+	defer s.reset()
 	if s.err != nil {
 		return 0, s.err
 	}
@@ -97,6 +108,9 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 
 	if len(s.models) == 1 && s.engine.SupportsLastInsertId() {
 		return rowsAffected, fillModelID(table, result)
+	} else if len(s.models) > 1 && !useReturning {
+		// Log that bulk insert ID backfill is skipped for drivers without RETURNING support (e.g. MySQL)
+		s.engine.logger.DebugContext(ctx, "lorm: bulk insert ID backfill is skipped because the database driver does not support RETURNING")
 	}
 	return rowsAffected, nil
 }

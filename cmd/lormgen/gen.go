@@ -65,7 +65,7 @@ func (g *Generator) Generate(files []string) error {
 	}
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
-			fileInfo := g.extractFile(file)
+			fileInfo := g.extractFile(pkg, file)
 			if fileInfo == nil {
 				continue
 			}
@@ -129,7 +129,7 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 }
 
 // extractFile turns one parsed Go file into a descriptor when it imports lorm.
-func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
+func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.FileDescriptor {
 	lormImportSpec, ok := lo.Find(file.Imports, func(item *ast.ImportSpec) bool {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
 	})
@@ -213,18 +213,28 @@ func (g *Generator) extractFile(file *ast.File) *lorm.FileDescriptor {
 						if len(field.Names) == 0 {
 							// Flatten named embedded structs so generated field accessors can treat them like direct members.
 							embedFieldPrefix, _ := parseTag(field, g.tagKey)
+							var structType *ast.StructType
 							if ident, ok := field.Type.(*ast.Ident); ok {
-								if ts, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
-									if st, ok := ts.Type.(*ast.StructType); ok {
-										for _, embedField := range st.Fields.List {
-											fieldList := g.parseField(embedField)
-											if len(fieldList) > 0 {
-												for _, f := range fieldList {
-													f.FullName = ident.Name + "." + f.Name
-													f.DBField = embedFieldPrefix + f.DBField
-												}
-												structInfo.Fields = append(structInfo.Fields, fieldList...)
+								if ident.Obj != nil {
+									if ts, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
+										structType, _ = ts.Type.(*ast.StructType)
+									}
+								} else if pkg != nil && pkg.TypesInfo != nil {
+									if obj := pkg.TypesInfo.Uses[ident]; obj != nil {
+										if ts := findTypeSpecByPos(pkg, obj.Pos()); ts != nil {
+											structType, _ = ts.Type.(*ast.StructType)
+										}
+									}
+								}
+								if structType != nil {
+									for _, embedField := range structType.Fields.List {
+										fieldList := g.parseField(embedField)
+										if len(fieldList) > 0 {
+											for _, f := range fieldList {
+												f.FullName = ident.Name + "." + f.Name
+												f.DBField = embedFieldPrefix + f.DBField
 											}
+											structInfo.Fields = append(structInfo.Fields, fieldList...)
 										}
 									}
 								}
@@ -312,6 +322,25 @@ func exprToString(expr ast.Expr) string {
 	default:
 		return ""
 	}
+}
+
+func findTypeSpecByPos(pkg *packages.Package, pos token.Pos) *ast.TypeSpec {
+	for _, f := range pkg.Syntax {
+		if f.Pos() <= pos && pos <= f.End() {
+			for _, decl := range f.Decls {
+				if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
+					for _, spec := range genDecl.Specs {
+						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+							if typeSpec.Name.Pos() == pos {
+								return typeSpec
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // generateCode renders the template and applies gofmt before the file hits disk.

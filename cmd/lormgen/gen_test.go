@@ -2,11 +2,15 @@ package main
 
 import (
 	"embed"
+	"go/ast"
 	"os"
+	"path/filepath"
 	"testing"
 
 	json "github.com/bytedance/sonic"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/packages"
 
 	"github.com/yvvlee/lorm/names"
 )
@@ -30,7 +34,8 @@ func Test_Generate(t *testing.T) {
 	pkg := pkgs[0]
 	assert.Len(t, pkg.Syntax, 2)
 
-	fileInfo := generator.extractFile(pkg.Syntax[0])
+	userFile := findSyntaxFile(t, generator, pkg, "user.go")
+	fileInfo := generator.extractFile(pkg, userFile)
 	fileInfoJson, err := json.MarshalString(fileInfo)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
@@ -46,7 +51,8 @@ func Test_Generate(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, string(exceptContent), string(content))
 
-	fileInfo = generator.extractFile(pkg.Syntax[1])
+	userAddressFile := findSyntaxFile(t, generator, pkg, "user_address.go")
+	fileInfo = generator.extractFile(pkg, userAddressFile)
 	fileInfoJson, err = json.MarshalString(fileInfo)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
@@ -61,4 +67,50 @@ func Test_Generate(t *testing.T) {
 	exceptContent, err = testdata.ReadFile("testdata/user_address_lorm_gen.go")
 	assert.Nil(t, err)
 	assert.Equal(t, string(exceptContent), string(content))
+}
+
+func Test_Generate_FlattensEmbeddedStructsAcrossFiles(t *testing.T) {
+	generator := NewGenerator(
+		new(names.SnakeMapper),
+		new(names.SnakeMapper),
+		"lorm",
+		"_test_gen",
+	)
+	pkgs, err := generator.load([]string{
+		"testdata/audit_base.go",
+		"testdata/audit_user.go",
+	})
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	file := findSyntaxFile(t, generator, pkgs[0], "audit_user.go")
+	fileInfo := generator.extractFile(pkgs[0], file)
+	require.NotNil(t, fileInfo)
+	require.Len(t, fileInfo.Structs, 1)
+
+	fields := fileInfo.Structs[0].Fields
+	require.Len(t, fields, 3)
+	assert.Equal(t, "ID", fields[0].Name)
+	assert.Equal(t, "CreatedAt", fields[1].Name)
+	assert.Equal(t, "AuditFields.CreatedAt", fields[1].FullName)
+	assert.Equal(t, "created_at", fields[1].DBField)
+	assert.Equal(t, "UpdatedAt", fields[2].Name)
+	assert.Equal(t, "AuditFields.UpdatedAt", fields[2].FullName)
+	assert.Equal(t, "updated_at", fields[2].DBField)
+}
+
+func findSyntaxFile(t *testing.T, generator *Generator, pkg *packages.Package, name string) *ast.File {
+	t.Helper()
+
+	for _, file := range pkg.Syntax {
+		tokenFile := generator.fileSet.File(file.Pos())
+		if tokenFile == nil {
+			continue
+		}
+		if filepath.Base(tokenFile.Name()) == name {
+			return file
+		}
+	}
+	t.Fatalf("syntax file %q not found", name)
+	return nil
 }

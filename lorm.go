@@ -56,6 +56,9 @@ func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Opt
 	for _, o := range option {
 		o(config)
 	}
+	if config.logger == nil {
+		config.logger = noopLogger{}
+	}
 	engine := &Engine{
 		config: config,
 		db:     db,

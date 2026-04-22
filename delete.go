@@ -7,12 +7,16 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+func newDeleteBuilder[T Table](engine *Engine) *builder.DeleteBuilder {
+	var t T
+	return builder.Delete(engine.Escaper().Escape(t.TableName()))
+}
+
 // Delete builds a DELETE statement for table T.
 func Delete[T Table](engine *Engine) *DeleteStmt[T] {
-	var t T
 	return &DeleteStmt[T]{
 		engine:  engine,
-		builder: builder.Delete(engine.Escaper().Escape(t.TableName())),
+		builder: newDeleteBuilder[T](engine),
 	}
 }
 
@@ -23,8 +27,14 @@ type DeleteStmt[T Table] struct {
 	err     error
 }
 
+func (s *DeleteStmt[T]) reset() {
+	s.builder = newDeleteBuilder[T](s.engine)
+	s.err = nil
+}
+
 // Exec executes the built DELETE statement.
 func (s *DeleteStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
+	defer s.reset()
 	if s.err != nil {
 		return 0, s.err
 	}

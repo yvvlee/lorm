@@ -8,13 +8,16 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+func newUpdateBuilder[T Table](engine *Engine) *builder.UpdateBuilder {
+	var t T
+	return builder.Update(engine.Escaper().Escape(t.TableName()))
+}
+
 // Update builds an UPDATE statement for table T.
 func Update[T Table](engine *Engine) *UpdateStmt[T] {
-	var t T
-	b := builder.Update(engine.Escaper().Escape(t.TableName()))
 	return &UpdateStmt[T]{
 		engine:  engine,
-		builder: b,
+		builder: newUpdateBuilder[T](engine),
 	}
 }
 
@@ -26,8 +29,15 @@ type UpdateStmt[T Table] struct {
 	err     error
 }
 
+func (s *UpdateStmt[T]) reset() {
+	s.builder = newUpdateBuilder[T](s.engine)
+	s.after = s.after[:0]
+	s.err = nil
+}
+
 // Exec executes the built UPDATE statement.
 func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
+	defer s.reset()
 	if s.err != nil {
 		return 0, s.err
 	}

@@ -16,19 +16,15 @@ type Repository[T Table] struct {
 
 // NewRepository creates a Repository backed by engine.
 func NewRepository[T Table](engine *Engine) *Repository[T] {
-	return &Repository[T]{Engine: engine}
-}
-
-func (r *Repository[T]) modelDescriptor() *ModelDescriptor {
-	if r.descriptor == nil {
-		var t T
-		r.descriptor = t.New().LormModelDescriptor()
+	var t T
+	return &Repository[T]{
+		Engine:     engine,
+		descriptor: t.New().LormModelDescriptor(),
 	}
-	return r.descriptor
 }
 
 func (r *Repository[T]) primaryKeys() []string {
-	return r.modelDescriptor().FlagFields(FlagPrimaryKey)
+	return r.descriptor.FlagFields(FlagPrimaryKey)
 }
 
 // Get loads a row by its single-column primary key.
