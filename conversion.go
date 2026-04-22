@@ -48,6 +48,7 @@ func adaptDBArgs(args []any) []any {
 	}
 	adapted := make([]any, len(args))
 	for i, arg := range args {
+		arg = normalizeDBArg(arg)
 		if value, ok := asConversionTo(arg); ok {
 			adapted[i] = conversionValuer{value: value}
 			continue
@@ -55,6 +56,30 @@ func adaptDBArgs(args []any) []any {
 		adapted[i] = arg
 	}
 	return adapted
+}
+
+func normalizeDBArg(arg any) any {
+	if arg == nil {
+		return nil
+	}
+	value := reflect.ValueOf(arg)
+	for value.IsValid() {
+		if value.Kind() != reflect.Pointer {
+			return value.Interface()
+		}
+		if value.IsNil() {
+			return nil
+		}
+		current := value.Interface()
+		if _, ok := current.(ConversionTo); ok {
+			return current
+		}
+		if _, ok := current.(driver.Valuer); ok {
+			return current
+		}
+		value = value.Elem()
+	}
+	return nil
 }
 
 func wrapScanTarget(target any) any {

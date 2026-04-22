@@ -3,6 +3,7 @@ package lorm
 import (
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -118,4 +119,19 @@ func TestJSONFieldWrapperValue(t *testing.T) {
 	v, err = w.Value()
 	assert.NoError(t, err)
 	assert.NotNil(t, v)
+}
+
+func TestAdaptDBArgsNilNestedDriverValuerPointer(t *testing.T) {
+	var decimalValue *decimal.Decimal
+	adapted := adaptDBArgs([]any{&decimalValue})
+	assert.Len(t, adapted, 1)
+	assert.Nil(t, adapted[0])
+}
+
+func TestAdaptDBArgsKeepsNonNilDriverValuerPointer(t *testing.T) {
+	decimalValue := decimal.NewFromFloat(4.20)
+	decimalPtr := &decimalValue
+	adapted := adaptDBArgs([]any{&decimalPtr})
+	assert.Len(t, adapted, 1)
+	assert.Same(t, decimalPtr, adapted[0])
 }

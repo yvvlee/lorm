@@ -164,27 +164,14 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 	for _, key := range keys {
 		var e Sqlizer
 		val := eq[key]
-
-		switch v := val.(type) {
-		case driver.Valuer:
-			if val, err = v.Value(); err != nil {
-				return
-			}
-		}
-
-		r := reflect.ValueOf(val)
-		if r.Kind() == reflect.Ptr {
-			if r.IsNil() {
-				val = nil
-			} else {
-				val = r.Elem().Interface()
-				r = reflect.ValueOf(val)
-			}
+		if val, err = normalizePredicateValue(val); err != nil {
+			return
 		}
 
 		if val == nil {
 			e = Expr(fmt.Sprintf("%s %s NULL", key, nullOpr))
 		} else {
+			r := reflect.ValueOf(val)
 			if r.Kind() == reflect.Slice || r.Kind() == reflect.Array {
 				if _, ok := val.([]byte); !ok {
 					err = fmt.Errorf("cannot use array or slice with Eq operators")
@@ -215,6 +202,33 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 
 func (eq Eq) ToSql() (sql string, args []any, err error) {
 	return eq.toSQL(false)
+}
+
+func normalizePredicateValue(value any) (any, error) {
+	for {
+		if value == nil {
+			return nil, nil
+		}
+		refValue := reflect.ValueOf(value)
+		if refValue.Kind() == reflect.Ptr {
+			if refValue.IsNil() {
+				return nil, nil
+			}
+		}
+		if valuer, ok := value.(driver.Valuer); ok {
+			var err error
+			value, err = valuer.Value()
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if refValue.Kind() == reflect.Ptr {
+			value = refValue.Elem().Interface()
+			continue
+		}
+		return value, nil
+	}
 }
 
 // NotEq is syntactic sugar for use with Where/Having/Set methods.

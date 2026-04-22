@@ -2,10 +2,17 @@ package builder
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+type stringValuer string
+
+func (v stringValuer) Value() (driver.Value, error) {
+	return string(v), nil
+}
 
 func TestConcatExpr(t *testing.T) {
 	b := ConcatExpr("COALESCE(name,", Expr("CONCAT(?,' ',?)", "f", "l"), ")")
@@ -337,6 +344,41 @@ func TestNotNilPointer(t *testing.T) {
 	_, _, err = neq.ToSql()
 	assert.Error(t, err)
 	assert.Equal(t, "cannot use array or slice with Eq operators", err.Error())
+}
+
+func TestNilNestedDriverValuerPointer(t *testing.T) {
+	var inner *stringValuer
+	eq := Eq{"name": &inner}
+	sql, args, err := eq.ToSql()
+
+	assert.NoError(t, err)
+	assert.Empty(t, args)
+	assert.Equal(t, "name IS NULL", sql)
+
+	neq := NotEq{"name": &inner}
+	sql, args, err = neq.ToSql()
+
+	assert.NoError(t, err)
+	assert.Empty(t, args)
+	assert.Equal(t, "name IS NOT NULL", sql)
+}
+
+func TestNotNilNestedDriverValuerPointer(t *testing.T) {
+	value := stringValuer("Name")
+	inner := &value
+	eq := Eq{"name": &inner}
+	sql, args, err := eq.ToSql()
+
+	assert.NoError(t, err)
+	assert.Equal(t, []any{"Name"}, args)
+	assert.Equal(t, "name = ?", sql)
+
+	neq := NotEq{"name": &inner}
+	sql, args, err = neq.ToSql()
+
+	assert.NoError(t, err)
+	assert.Equal(t, []any{"Name"}, args)
+	assert.Equal(t, "name <> ?", sql)
 }
 
 func TestEmptyAndToSql(t *testing.T) {
