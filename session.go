@@ -36,17 +36,14 @@ func (s *session) Query(ctx context.Context, query string, args ...any) (rows *s
 
 func (s *session) Exist(ctx context.Context, query string, args ...any) (exist bool, err error) {
 	proxy := s.proxy()
-	var rows *sql.Rows
-	if len(args) == 0 {
-		rows, err = proxy.QueryContext(ctx, query)
-	} else {
+	if len(args) > 0 {
 		query, err = s.engine.Placeholder().ReplacePlaceholders(query)
 		if err != nil {
 			return
 		}
 		args = adaptDBArgs(args)
-		rows, err = proxy.QueryContext(ctx, query, args...)
 	}
+	rows, err := proxy.QueryContext(ctx, query, args...)
 	if err != nil {
 		return
 	}

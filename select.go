@@ -88,7 +88,7 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 	if s.err != nil {
 		return false, s.err
 	}
-	query, args, err := s.builder.Select("1").Limit(1).ToSql()
+	query, args, err := s.builder.Clone().Select("1").Limit(1).ToSql()
 	if err != nil {
 		return false, err
 	}
@@ -147,8 +147,20 @@ func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, u
 		return nil, count, nil
 	}
 	s.builder.Limit(size).Offset(offset)
-	list, err := s.Find(ctx)
+	query, args, err := s.builder.ToSql()
 	if err != nil {
+		return nil, count, err
+	}
+	rows, err := s.engine.Query(ctx, query, args...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, count, nil
+		}
+		return nil, count, err
+	}
+	defer rows.Close()
+	var list []T
+	if err = ScanModels(rows, &list); err != nil {
 		return nil, count, err
 	}
 	return list, count, nil

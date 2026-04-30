@@ -165,15 +165,17 @@ Terminal methods still reset only the statement they are called on.
 
 See [example/README.md](example/README.md) for runnable, self-contained examples.
 
-- `go run ./example/quickstart`
-- `go run ./example/repository`
-- `go run ./example/transaction`
-- `go run ./example/custom_model`
-- `go run ./example/custom_conversion`
-- `go run ./example/json_field`
-- `go run ./example/pagination`
-- `go run ./example/optimistic_lock`
-- `go run ./example/query_builder`
+The examples live in their own module:
+
+- `cd example && go run ./quickstart`
+- `cd example && go run ./repository`
+- `cd example && go run ./transaction`
+- `cd example && go run ./custom_model`
+- `cd example && go run ./custom_conversion`
+- `cd example && go run ./json_field`
+- `cd example && go run ./pagination`
+- `cd example && go run ./optimistic_lock`
+- `cd example && go run ./query_builder`
 
 ## Transactions
 

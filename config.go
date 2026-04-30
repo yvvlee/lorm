@@ -7,6 +7,18 @@ import (
 	"github.com/yvvlee/lorm/names"
 )
 
+// ignoreStrategy defines how INSERT IGNORE is expressed in different SQL dialects.
+type ignoreStrategy uint8
+
+const (
+	// IgnoreKeyword uses "INSERT IGNORE INTO ..." (MySQL/MariaDB default).
+	IgnoreKeyword ignoreStrategy = iota
+	// IgnoreOrKeyword uses "INSERT OR IGNORE INTO ..." (SQLite).
+	IgnoreOrKeyword
+	// IgnoreConflictSuffix appends "ON CONFLICT DO NOTHING" (PostgreSQL).
+	IgnoreConflictSuffix
+)
+
 // Config holds engine settings assembled from Option values.
 type Config struct {
 	// driverName is the name of the database driver (e.g. "mysql", "postgres", etc.)
@@ -23,6 +35,8 @@ type Config struct {
 	supportsLastInsertID bool
 	// supportsForUpdate indicates whether the dialect supports FOR UPDATE
 	supportsForUpdate bool
+	// ignoreStrategy defines the dialect-specific INSERT IGNORE syntax
+	ignoreStrategy ignoreStrategy
 	// logger is the logger instance used for logging database operations
 	logger Logger
 	// logSQLArgs controls whether SQL argument values are included in engine logs

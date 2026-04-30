@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,15 +38,15 @@ func (*scanCoverageModel) LormModelDescriptor() *ModelDescriptor {
 }
 
 func TestScanColsPreallocatedSlice(t *testing.T) {
-	skipUnlessSQLite3Available(t)
-	db, err := sql.Open("sqlite3", ":memory:")
+	recorder := newScriptedQueryRecorder()
+	db, err := openScriptedQueryDB(t, recorder)
 	require.NoError(t, err)
-	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE items (name TEXT NOT NULL)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO items(name) VALUES ('alice'), ('bob')`)
-	require.NoError(t, err)
+	recorder.QueueQueryRows(
+		[]string{"name"},
+		[]driver.Value{"alice"},
+		[]driver.Value{"bob"},
+	)
 
 	rows, err := db.Query(`SELECT name FROM items ORDER BY name ASC`)
 	require.NoError(t, err)
@@ -59,15 +58,15 @@ func TestScanColsPreallocatedSlice(t *testing.T) {
 }
 
 func TestScanColsEmptySlice(t *testing.T) {
-	skipUnlessSQLite3Available(t)
-	db, err := sql.Open("sqlite3", ":memory:")
+	recorder := newScriptedQueryRecorder()
+	db, err := openScriptedQueryDB(t, recorder)
 	require.NoError(t, err)
-	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE items (name TEXT NOT NULL)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO items(name) VALUES ('alice'), ('bob')`)
-	require.NoError(t, err)
+	recorder.QueueQueryRows(
+		[]string{"name"},
+		[]driver.Value{"alice"},
+		[]driver.Value{"bob"},
+	)
 
 	rows, err := db.Query(`SELECT name FROM items ORDER BY name ASC`)
 	require.NoError(t, err)

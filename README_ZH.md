@@ -134,15 +134,17 @@ Statement builder 是轻量级对象。每次数据库操作都应重新创建�
 
 可运行、可直接参考的完整示例见 [example/README.md](example/README.md)。
 
-- `go run ./example/quickstart`
-- `go run ./example/repository`
-- `go run ./example/transaction`
-- `go run ./example/custom_model`
-- `go run ./example/custom_conversion`
-- `go run ./example/json_field`
-- `go run ./example/pagination`
-- `go run ./example/optimistic_lock`
-- `go run ./example/query_builder`
+示例在独立 module 中：
+
+- `cd example && go run ./quickstart`
+- `cd example && go run ./repository`
+- `cd example && go run ./transaction`
+- `cd example && go run ./custom_model`
+- `cd example && go run ./custom_conversion`
+- `cd example && go run ./json_field`
+- `cd example && go run ./pagination`
+- `cd example && go run ./optimistic_lock`
+- `cd example && go run ./query_builder`
 
 ## 事务
 

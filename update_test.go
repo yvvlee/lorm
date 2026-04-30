@@ -26,15 +26,8 @@ func TestUpdateWrappers(t *testing.T) {
 		SuffixExpr(builder.Expr("/*sufx*/"))
 }
 
-func TestUpdateExecErrorWithInvalidPrefix(t *testing.T) {
-	e := initEngine(t)
-	defer e.Close()
-	_, err := Update[*Test](e).Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
-	assert.Error(t, err)
-}
-
 func TestUpdateExecError_NoSet(t *testing.T) {
-	e := initEngine(t)
+	e := &Engine{config: &Config{}}
 	_, err := Update[*Test](e).Exec(context.TODO())
 	assert.Error(t, err)
 }

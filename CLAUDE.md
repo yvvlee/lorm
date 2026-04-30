@@ -5,18 +5,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Run all tests (requires a running database)
+# Run core tests
 go test -v ./...
 
-# Run tests against specific databases
+# Run integration tests
+cd integration
+CGO_ENABLED=1 go test -v ./...
+
+# Run integration tests against specific databases
 DB_DRIVER=mysql DB_DSN="root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4" go test -v ./...
 DB_DRIVER=pgx DB_DSN="host=127.0.0.1 user=postgres password=123456 dbname=test port=5432 sslmode=disable" go test -v ./...
 DB_DRIVER=sqlite3 DB_DSN="file:test.db?cache=shared&mode=memory" CGO_ENABLED=1 go test -v ./...
 
-# Run a single test
-DB_DRIVER=sqlite3 DB_DSN="file:test.db?cache=shared&mode=memory" CGO_ENABLED=1 go test -v -run TestName ./...
+# Run examples
+cd ../example
+CGO_ENABLED=1 go test -v ./...
 
 # Build
+cd ..
 go build ./...
 
 # Install the code generator

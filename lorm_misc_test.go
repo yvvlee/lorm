@@ -2,7 +2,7 @@ package lorm
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -77,16 +77,14 @@ func TestConnectErrorBranches(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, `unknown driver "postgres"`)
 
-	// Registered driver with bad DSN: use pgx.
-	// driver imported in lorm_test.go
-	_, err = connect(context.Background(), "pgx", "postgres://wrong:wrong@127.0.0.1:1/db")
+	driverName := registerPingErrorDriver(errors.New("ping failed"))
+	_, err = connect(context.Background(), driverName, "dsn")
 	assert.Error(t, err)
+	assert.ErrorContains(t, err, "ping failed")
 }
 
 func TestEngineInitAppliesConfigAndFallbacks(t *testing.T) {
-	skipUnlessSQLite3Available(t)
-
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := openScriptedQueryDB(t, newScriptedQueryRecorder())
 	assert.NoError(t, err)
 	if err != nil {
 		return

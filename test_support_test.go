@@ -217,6 +217,31 @@ type txBehaviorTx struct {
 func (tx txBehaviorTx) Commit() error   { return tx.behavior.commitErr }
 func (tx txBehaviorTx) Rollback() error { return tx.behavior.rollbackErr }
 
+var pingErrorDriverSeq atomic.Uint64
+
+func registerPingErrorDriver(err error) string {
+	driverName := "lorm_ping_error_" + strconv.FormatUint(pingErrorDriverSeq.Add(1), 10)
+	sql.Register(driverName, &pingErrorDriver{err: err})
+	return driverName
+}
+
+type pingErrorDriver struct {
+	err error
+}
+
+func (d *pingErrorDriver) Open(string) (driver.Conn, error) {
+	return &pingErrorConn{err: d.err}, nil
+}
+
+type pingErrorConn struct {
+	err error
+}
+
+func (c *pingErrorConn) Prepare(string) (driver.Stmt, error) { return nil, driver.ErrSkip }
+func (c *pingErrorConn) Close() error                        { return nil }
+func (c *pingErrorConn) Begin() (driver.Tx, error)           { return scriptedQueryTx{}, nil }
+func (c *pingErrorConn) Ping(context.Context) error          { return c.err }
+
 type errorPlaceholder struct{}
 
 func (errorPlaceholder) ReplacePlaceholders(string) (string, error) {

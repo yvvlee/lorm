@@ -9,21 +9,21 @@ without any external database service.
 ## Run
 
 ```bash
-go run ./example/quickstart
-go run ./example/repository
-go run ./example/transaction
-go run ./example/custom_model
-go run ./example/custom_conversion
-go run ./example/json_field
-go run ./example/pagination
-go run ./example/optimistic_lock
-go run ./example/query_builder
+go run ./quickstart
+go run ./repository
+go run ./transaction
+go run ./custom_model
+go run ./custom_conversion
+go run ./json_field
+go run ./pagination
+go run ./optimistic_lock
+go run ./query_builder
 ```
 
 To regenerate the checked-in `_lorm_gen.go` files for all examples:
 
 ```bash
-go generate ./example/...
+go generate ./...
 ```
 
 ## Included Examples

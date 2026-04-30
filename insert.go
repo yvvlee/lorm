@@ -20,7 +20,6 @@ func Insert[T Table](engine *Engine) *InsertStmt[T] {
 	return &InsertStmt[T]{
 		engine:  engine,
 		builder: newInsertBuilder[T](engine),
-		models:  make([]T, 0),
 	}
 }
 
@@ -67,10 +66,10 @@ func (s *InsertStmt[T]) AddModels(models ...T) *InsertStmt[T] {
 // Ignore enables duplicate-conflict suppression for drivers that support it.
 func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 	s.ignore = true
-	switch s.engine.DriverName() {
-	case "postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
+	switch s.engine.IgnoreStrategy() {
+	case IgnoreConflictSuffix:
 		s.builder.Suffix("ON CONFLICT DO NOTHING")
-	case "sqlite", "sqlite3":
+	case IgnoreOrKeyword:
 		s.builder.StatementKeyword("INSERT OR IGNORE")
 	default:
 		s.builder.StatementKeyword("INSERT IGNORE")

@@ -26,6 +26,7 @@ type dialectConfig struct {
 	supportsReturning    bool
 	supportsLastInsertID bool
 	supportsForUpdate    bool
+	ignoreStrategy       ignoreStrategy
 }
 
 // NewEngine opens a database connection and applies the provided options.
@@ -51,6 +52,7 @@ func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Opt
 		supportsReturning:    dialect.supportsReturning,
 		supportsLastInsertID: dialect.supportsLastInsertID,
 		supportsForUpdate:    dialect.supportsForUpdate,
+		ignoreStrategy:       dialect.ignoreStrategy,
 		logger:               defaultLogger,
 	}
 	for _, o := range option {
@@ -122,6 +124,11 @@ func (e *Engine) SupportsLastInsertId() bool {
 // SupportsForUpdate returns true if the database driver supports FOR UPDATE.
 func (e *Engine) SupportsForUpdate() bool {
 	return e.config.supportsForUpdate
+}
+
+// IgnoreStrategy returns the configured insert-ignore strategy for the dialect.
+func (e *Engine) IgnoreStrategy() ignoreStrategy {
+	return e.config.ignoreStrategy
 }
 
 func (e *Engine) session(ctx context.Context) *session {
@@ -271,12 +278,13 @@ func defaultDialectConfig(driverName string) dialectConfig {
 	switch driverName {
 	case //PostgreSQL
 		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
-		return dialectConfig{
+	return dialectConfig{
 			placeholderFormat:    builder.Dollar,
 			escaper:              names.NewQuoter('"', '"'),
 			supportsReturning:    true,
 			supportsLastInsertID: false,
 			supportsForUpdate:    true,
+			ignoreStrategy:       IgnoreConflictSuffix,
 		}
 	case //SQLite
 		"sqlite", "sqlite3", "ql":
@@ -286,6 +294,7 @@ func defaultDialectConfig(driverName string) dialectConfig {
 			supportsReturning:    false,
 			supportsLastInsertID: true,
 			supportsForUpdate:    false,
+			ignoreStrategy:       IgnoreOrKeyword,
 		}
 	case //MySQL, MariaDB
 		"mysql", "mariadb":
@@ -295,6 +304,7 @@ func defaultDialectConfig(driverName string) dialectConfig {
 			supportsReturning:    false,
 			supportsLastInsertID: true,
 			supportsForUpdate:    true,
+			ignoreStrategy:       IgnoreKeyword,
 		}
 	default:
 		return dialectConfig{
@@ -303,6 +313,7 @@ func defaultDialectConfig(driverName string) dialectConfig {
 			supportsReturning:    false,
 			supportsLastInsertID: true,
 			supportsForUpdate:    false,
+			ignoreStrategy:       IgnoreKeyword,
 		}
 	}
 }

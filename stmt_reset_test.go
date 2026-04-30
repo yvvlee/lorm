@@ -127,29 +127,21 @@ func TestUpdateStmtResetsAfterExec(t *testing.T) {
 
 func TestUpdateStmtResetsAfterCallbacks(t *testing.T) {
 	ctx := context.Background()
-	engine := newSQLiteSemanticsEngine(t)
-	defer engine.Close()
-
-	model := &updateSemanticsModel{Name: "draft", Version: 1}
-	_, err := Insert[*updateSemanticsModel](engine).AddModel(model).Exec(ctx)
-	require.NoError(t, err)
-
-	repo := NewRepository[*updateSemanticsModel](engine)
-	loaded, err := repo.Get(ctx, model.ID)
-	require.NoError(t, err)
+	engine := newConversionTestEngine(t, newConversionRecorder())
 
 	stmt := Update[*updateSemanticsModel](engine)
-	loaded.Name = "published"
-	rowsAffected, err := stmt.SetModel(loaded).Exec(ctx)
+	model := &updateSemanticsModel{ID: 1, Name: "draft", Version: 1}
+	model.Name = "published"
+	rowsAffected, err := stmt.SetModel(model).Exec(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rowsAffected)
-	require.EqualValues(t, 2, loaded.Version)
+	require.EqualValues(t, 2, model.Version)
 
-	loaded.Name = "published-again"
-	rowsAffected, err = stmt.SetModel(loaded).Exec(ctx)
+	model.Name = "published-again"
+	rowsAffected, err = stmt.SetModel(model).Exec(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rowsAffected)
-	require.EqualValues(t, 3, loaded.Version)
+	require.EqualValues(t, 3, model.Version)
 }
 
 func TestQueryModelStmtCloneExecDoesNotResetSource(t *testing.T) {

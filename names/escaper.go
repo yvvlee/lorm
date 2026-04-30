@@ -20,25 +20,31 @@ func NewQuoter(prefix byte, suffix byte) *Quoter {
 // Escape quotes each dot-separated identifier part independently.
 // Calling Escape on an already-escaped identifier is safe (idempotent).
 func (q Quoter) Escape(fieldOrTable string) string {
-	if fieldOrTable == "" {
-		return ""
-	}
-	if q.prefix == 0 && q.suffix == 0 {
+	if fieldOrTable == "" || (q.prefix == 0 && q.suffix == 0) {
 		return fieldOrTable
+	}
+	// Fast path: no dot means no split/join needed (covers the vast majority of calls).
+	if !strings.Contains(fieldOrTable, ".") {
+		return q.escapeSegment(fieldOrTable)
 	}
 	// Quote each segment separately so schema-qualified names stay addressable.
 	items := lo.Map(strings.Split(fieldOrTable, "."), func(s string, _ int) string {
-		// Already escaped — return as-is to ensure idempotence.
-		if len(s) >= 2 && s[0] == q.prefix && s[len(s)-1] == q.suffix {
-			return s
-		}
-		if q.suffix != 0 {
-			escapedSuffix := string([]byte{q.suffix, q.suffix})
-			s = strings.ReplaceAll(s, string(q.suffix), escapedSuffix)
-		}
-		return string(q.prefix) + s + string(q.suffix)
+		return q.escapeSegment(s)
 	})
 	return strings.Join(items, ".")
+}
+
+// escapeSegment quotes a single identifier segment.
+func (q Quoter) escapeSegment(s string) string {
+	// Already escaped — return as-is to ensure idempotence.
+	if len(s) >= 2 && s[0] == q.prefix && s[len(s)-1] == q.suffix {
+		return s
+	}
+	if q.suffix != 0 {
+		escapedSuffix := string([]byte{q.suffix, q.suffix})
+		s = strings.ReplaceAll(s, string(q.suffix), escapedSuffix)
+	}
+	return string(q.prefix) + s + string(q.suffix)
 }
 
 // Escaper quotes database identifiers such as columns or tables.
