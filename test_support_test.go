@@ -91,13 +91,15 @@ func newScriptedEngine(t *testing.T, recorder *scriptedQueryRecorder) *Engine {
 	require.NoError(t, err)
 	return &Engine{
 		config: &Config{
-			driverName:           "mysql",
-			placeholderFormat:    builder.Question,
-			escaper:              names.NoEscaper,
-			supportsReturning:    false,
-			supportsLastInsertID: true,
-			supportsForUpdate:    true,
-			logger:               testLogger{},
+			driverName: "mysql",
+			Dialect: DialectConfig{
+				PlaceholderFormat:    builder.Question,
+				Escaper:              names.NoEscaper,
+				SupportsReturning:    false,
+				SupportsLastInsertID: true,
+				SupportsForUpdate:    true,
+			},
+			logger: testLogger{},
 		},
 		db:     db,
 		logger: testLogger{},
@@ -175,10 +177,12 @@ func newTxBehaviorEngine(t *testing.T, behavior txBehavior) *Engine {
 
 	return &Engine{
 		config: &Config{
-			driverName:        driverName,
-			placeholderFormat: builder.Question,
-			escaper:           names.NoEscaper,
-			logger:            testLogger{},
+			driverName: driverName,
+			Dialect: DialectConfig{
+				PlaceholderFormat: builder.Question,
+				Escaper:           names.NoEscaper,
+			},
+			logger: testLogger{},
 		},
 		db:     db,
 		logger: testLogger{},

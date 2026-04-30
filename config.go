@@ -7,17 +7,33 @@ import (
 	"github.com/yvvlee/lorm/names"
 )
 
-// ignoreStrategy defines how INSERT IGNORE is expressed in different SQL dialects.
-type ignoreStrategy uint8
+// IgnoreStrategy defines how INSERT IGNORE is expressed in different SQL dialects.
+type IgnoreStrategy uint8
 
 const (
 	// IgnoreKeyword uses "INSERT IGNORE INTO ..." (MySQL/MariaDB default).
-	IgnoreKeyword ignoreStrategy = iota
+	IgnoreKeyword IgnoreStrategy = iota
 	// IgnoreOrKeyword uses "INSERT OR IGNORE INTO ..." (SQLite).
 	IgnoreOrKeyword
 	// IgnoreConflictSuffix appends "ON CONFLICT DO NOTHING" (PostgreSQL).
 	IgnoreConflictSuffix
 )
+
+// DialectConfig holds SQL dialect behavior used by an Engine.
+type DialectConfig struct {
+	// PlaceholderFormat specifies the format of placeholders used in SQL queries (e.g. ?, $1, :1).
+	PlaceholderFormat builder.PlaceholderFormat
+	// Escaper escapes table names and column names.
+	Escaper names.Escaper
+	// SupportsReturning indicates whether the dialect supports RETURNING clauses.
+	SupportsReturning bool
+	// SupportsLastInsertID indicates whether the dialect supports LastInsertId.
+	SupportsLastInsertID bool
+	// SupportsForUpdate indicates whether the dialect supports FOR UPDATE.
+	SupportsForUpdate bool
+	// IgnoreStrategy defines the dialect-specific INSERT IGNORE syntax.
+	IgnoreStrategy IgnoreStrategy
+}
 
 // Config holds engine settings assembled from Option values.
 type Config struct {
@@ -25,18 +41,8 @@ type Config struct {
 	driverName string
 	// dsn is the data source name or connection string used to connect to the database
 	dsn string
-	// placeholderFormat specifies the format of placeholders used in SQL queries (e.g. ?, $1, :1)
-	placeholderFormat builder.PlaceholderFormat
-	// escaper is used to escape special characters in table names and column names
-	escaper names.Escaper
-	// supportsReturning indicates whether the dialect supports RETURNING clauses
-	supportsReturning bool
-	// supportsLastInsertID indicates whether the dialect supports LastInsertId
-	supportsLastInsertID bool
-	// supportsForUpdate indicates whether the dialect supports FOR UPDATE
-	supportsForUpdate bool
-	// ignoreStrategy defines the dialect-specific INSERT IGNORE syntax
-	ignoreStrategy ignoreStrategy
+	// Dialect holds SQL dialect behavior for generated statements.
+	Dialect DialectConfig
 	// logger is the logger instance used for logging database operations
 	logger Logger
 	// logSQLArgs controls whether SQL argument values are included in engine logs
@@ -54,38 +60,45 @@ type Config struct {
 // Option mutates Config during engine construction.
 type Option func(*Config)
 
+// WithDialectConfig sets the dialect behavior as a single config value.
+func WithDialectConfig(dialect DialectConfig) Option {
+	return func(c *Config) {
+		c.Dialect = dialect
+	}
+}
+
 // WithPlaceholderFormat sets the placeholder format
 func WithPlaceholderFormat(format builder.PlaceholderFormat) Option {
 	return func(c *Config) {
-		c.placeholderFormat = format
+		c.Dialect.PlaceholderFormat = format
 	}
 }
 
 // WithEscaper sets the escaper
 func WithEscaper(escaper names.Escaper) Option {
 	return func(c *Config) {
-		c.escaper = escaper
+		c.Dialect.Escaper = escaper
 	}
 }
 
 // WithSupportsReturning overrides RETURNING support detection.
 func WithSupportsReturning(enabled bool) Option {
 	return func(c *Config) {
-		c.supportsReturning = enabled
+		c.Dialect.SupportsReturning = enabled
 	}
 }
 
 // WithSupportsLastInsertID overrides LastInsertId support detection.
 func WithSupportsLastInsertID(enabled bool) Option {
 	return func(c *Config) {
-		c.supportsLastInsertID = enabled
+		c.Dialect.SupportsLastInsertID = enabled
 	}
 }
 
 // WithSupportsForUpdate overrides FOR UPDATE support detection.
 func WithSupportsForUpdate(enabled bool) Option {
 	return func(c *Config) {
-		c.supportsForUpdate = enabled
+		c.Dialect.SupportsForUpdate = enabled
 	}
 }
 

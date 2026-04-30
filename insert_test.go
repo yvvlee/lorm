@@ -22,8 +22,10 @@ func TestInsertAllEmpty(t *testing.T) {
 func TestInsertStmtBuilderWrappers(t *testing.T) {
 	stmt := Insert[*Test](&Engine{
 		config: &Config{
-			placeholderFormat: builder.Question,
-			escaper:           names.NoEscaper,
+			Dialect: DialectConfig{
+				PlaceholderFormat: builder.Question,
+				Escaper:           names.NoEscaper,
+			},
 		},
 	}).
 		Prefix("WITH audit AS ?", 0).
@@ -48,8 +50,8 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 		recorder.SetQueryRows([]string{"id"}, []driver.Value{int64(41)})
 		engine := newConversionTestEngine(t, recorder)
 		engine.config.driverName = "postgres"
-		engine.config.supportsReturning = true
-		engine.config.supportsLastInsertID = false
+		engine.config.Dialect.SupportsReturning = true
+		engine.config.Dialect.SupportsLastInsertID = false
 
 		model := &conversionModel{Name: "alpha", Codes: csvInts{1, 2}}
 		rowsAffected, err := Insert[*conversionModel](engine).AddModel(model).Exec(context.Background())
@@ -67,8 +69,8 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 		recorder.SetQueryRows([]string{"id"}, []driver.Value{int64(1)})
 		engine := newConversionTestEngine(t, recorder)
 		engine.config.driverName = "postgres"
-		engine.config.supportsReturning = true
-		engine.config.supportsLastInsertID = false
+		engine.config.Dialect.SupportsReturning = true
+		engine.config.Dialect.SupportsLastInsertID = false
 
 		models := []*conversionModel{
 			{Name: "a", Codes: csvInts{1}},
@@ -84,8 +86,8 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 		recorder.SetQueryRows([]string{"id"}, []driver.Value{int64(1)})
 		engine := newConversionTestEngine(t, recorder)
 		engine.config.driverName = "postgres"
-		engine.config.supportsReturning = true
-		engine.config.supportsLastInsertID = false
+		engine.config.Dialect.SupportsReturning = true
+		engine.config.Dialect.SupportsLastInsertID = false
 
 		models := []*conversionModel{
 			{Name: "a", Codes: csvInts{1}},

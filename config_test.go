@@ -32,16 +32,32 @@ func TestConfigOptions(t *testing.T) {
 	WithSupportsLastInsertID(false)(c)
 	WithSupportsForUpdate(true)(c)
 
-	assert.Equal(t, builder.Dollar, c.placeholderFormat)
-	assert.NotNil(t, c.escaper)
+	assert.Equal(t, builder.Dollar, c.Dialect.PlaceholderFormat)
+	assert.NotNil(t, c.Dialect.Escaper)
 	assert.Equal(t, 3, c.maxIdleConns)
 	assert.Equal(t, 9, c.maxOpenConns)
 	assert.Equal(t, 30*time.Second, c.connMaxLifetime)
 	assert.Equal(t, 10*time.Second, c.connMaxIdleTime)
 	assert.True(t, c.logSQLArgs)
-	assert.True(t, c.supportsReturning)
-	assert.False(t, c.supportsLastInsertID)
-	assert.True(t, c.supportsForUpdate)
+	assert.True(t, c.Dialect.SupportsReturning)
+	assert.False(t, c.Dialect.SupportsLastInsertID)
+	assert.True(t, c.Dialect.SupportsForUpdate)
 	_, ok := c.logger.(testLogger)
 	assert.True(t, ok)
+}
+
+func TestWithDialectConfig(t *testing.T) {
+	dialect := DialectConfig{
+		PlaceholderFormat:    builder.Dollar,
+		Escaper:              names.NewQuoter('"', '"'),
+		SupportsReturning:    true,
+		SupportsLastInsertID: false,
+		SupportsForUpdate:    true,
+		IgnoreStrategy:       IgnoreConflictSuffix,
+	}
+	c := &Config{}
+
+	WithDialectConfig(dialect)(c)
+
+	assert.Equal(t, dialect, c.Dialect)
 }

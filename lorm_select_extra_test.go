@@ -20,7 +20,6 @@ func TestQueryColGetSuccessCoverage(t *testing.T) {
 		Select("id").
 		From("conversion_models").
 		Where("name = ?", "alpha").
-		Limit(1).
 		Get(context.Background())
 	require.NoError(t, err)
 	assert.True(t, ok)

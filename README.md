@@ -335,11 +335,13 @@ runnable example.
 ## Configuration
 
 ```go
+dialect := lorm.DefaultDialectConfig("pgx")
+dialect.SupportsForUpdate = true
+
 engine, err := lorm.NewEngine(
 	"pgx",
 	"postgres://user:password@localhost:5432/dbname?sslmode=disable",
-	lorm.WithPlaceholderFormat(builder.Dollar),
-	lorm.WithEscaper(names.NewQuoter('"', '"')),
+	lorm.WithDialectConfig(dialect),
 	lorm.WithMaxIdleConns(10),
 	lorm.WithMaxOpenConns(100),
 	lorm.WithConnMaxLifetime(time.Hour),
@@ -348,62 +350,77 @@ engine, err := lorm.NewEngine(
 )
 ```
 
+`DialectConfig` stores driver-specific SQL behavior in one place:
+placeholder style, identifier quoting, `RETURNING`, `LastInsertId`,
+`FOR UPDATE`, and `INSERT IGNORE` syntax. Built-in defaults are selected from
+the driver name. Use `WithDialectConfig` to replace the whole dialect config,
+or `WithPlaceholderFormat`, `WithEscaper`, and `WithSupports...` helpers to
+override one field.
+
 ## Benchmarks
 
 The benchmark suite lives in [benchmarks/orm-crud](benchmarks/orm-crud).
 
-Results below were captured on April 20, 2026 with:
+Results below were captured on April 30, 2026 with:
 
 ```bash
 cd benchmarks/orm-crud
-go test -bench . -benchmem
+ORMCRUD_DB=mysql go test -run '^$' -bench . -benchmem -count=1
+ORMCRUD_DB=postgres go test -run '^$' -bench . -benchmem -count=1
 ```
 
 Environment:
 
-- Backend: SQLite (default, `ORMCRUD_DB=sqlite`)
-- OS/arch: `linux/amd64`
-- CPU: `Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz`
+- OS/arch: `darwin/arm64`
+- CPU: `Apple M1 Pro`
+- MySQL: `8.4.6`
+- PostgreSQL: `18.1`
 
-Single-row CRUD, `ns/op` (lower is better):
-
-| Benchmark | lorm | gorm | xorm | ent |
-| --- | ---: | ---: | ---: | ---: |
-| Create | **97,471** | 127,067 | 99,391 | 107,457 |
-| ReadByID | **31,231** | 36,679 | 45,174 | 35,275 |
-| UpdateByID | **85,727** | 104,658 | 93,461 | 123,181 |
-| DeleteByID | 79,837 | 96,848 | 84,681 | **78,846** |
-
-Batch CRUD with 100 rows, `ns/op` (lower is better):
+MySQL, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| BatchCreate100 | 1,139,752 | **724,101** | 4,025,133 | 853,383 |
-| BatchRead100 | **346,392** | 427,952 | 725,096 | 411,414 |
-| BatchUpdate100 | 211,472 | 211,800 | **185,189** | 186,621 |
-| BatchDelete100 | 332,062 | 326,834 | 313,968 | **313,609** |
+| Create | 1,913,144 | 2,613,786 | **1,788,054** | 1,817,208 |
+| ReadByID | 1,262,759 | 1,258,343 | 1,321,836 | **1,199,787** |
+| ReadByIDComplex | **1,132,911** | 1,386,360 | 1,353,234 | 1,167,020 |
+| UpdateByID | 1,690,392 | 2,496,637 | **1,486,555** | 4,337,282 |
+| DeleteByID | 1,791,673 | 2,577,342 | **1,078,675** | 1,469,701 |
+| BatchCreate100 | **9,816,171** | 10,372,265 | 14,042,917 | 11,062,927 |
+| BatchRead100 | **3,668,220** | 4,154,132 | 4,040,834 | 3,969,475 |
+| BatchRead100Complex | 4,653,190 | 4,950,072 | 4,541,484 | **4,436,015** |
+| BatchUpdate100 | 8,032,387 | 8,486,618 | **6,988,625** | 8,843,135 |
+| BatchDelete100 | 5,277,316 | 6,698,076 | **2,085,592** | 5,679,043 |
+
+PostgreSQL, `ns/op` (lower is better):
+
+| Benchmark | lorm | gorm | xorm | ent |
+| --- | ---: | ---: | ---: | ---: |
+| Create | **518,071** | 947,152 | 555,380 | 591,445 |
+| ReadByID | **298,036** | 431,630 | 309,724 | 373,995 |
+| ReadByIDComplex | 344,650 | 474,724 | **317,436** | 399,537 |
+| UpdateByID | 713,365 | 989,863 | **679,395** | 1,097,098 |
+| DeleteByID | 463,347 | 863,456 | **276,317** | 462,638 |
+| BatchCreate100 | 4,676,179 | 5,024,113 | 5,872,695 | **4,653,561** |
+| BatchRead100 | 1,471,637 | 1,770,276 | 1,787,619 | **1,459,470** |
+| BatchRead100Complex | **1,876,657** | 2,126,904 | 2,403,127 | 1,882,766 |
+| BatchUpdate100 | **902,407** | 1,370,367 | 1,499,549 | 1,753,552 |
+| BatchDelete100 | 809,539 | 1,429,966 | **531,330** | 950,048 |
 
 Notes from this run:
 
-- `lorm` leads single-row create, read, and update, and is effectively tied
-  with `ent` on single-row delete.
-- `lorm` is fastest for batch reads and dramatically faster than `xorm` on
-  batch create.
-- `gorm` is fastest in batch create on this machine.
-- `lorm` has the lowest `B/op` in 7 of the 8 benchmark cases in this run.
+- On MySQL, `lorm` is fastest in 3 of the 10 `ns/op` cases. `xorm` is fastest
+  in single-row create/update/delete and batch update/delete in this run.
+- On PostgreSQL, `lorm` is fastest in 4 of the 10 `ns/op` cases, including
+  create, read by ID, complex batch read, and batch update.
+- `lorm` has the lowest `B/op` in 5 of the 10 MySQL cases and 7 of the 10
+  PostgreSQL cases in this run.
 
 Treat these numbers as directional rather than universal. Re-run the suite on
 your target database, schema, driver, and hardware before making a decision.
 
-The suite can also run against MySQL or PostgreSQL:
-
-```bash
-ORMCRUD_DB=mysql go test -bench . -benchmem
-ORMCRUD_DB=postgres go test -bench . -benchmem
-```
-
 See [benchmarks/orm-crud/README.md](benchmarks/orm-crud/README.md)
-for the benchmark scope, setup, and full result tables.
+for the benchmark scope, setup, and full `ns/op`, `B/op`, and `allocs/op`
+tables.
 
 ## lormgen
 

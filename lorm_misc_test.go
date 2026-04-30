@@ -144,15 +144,10 @@ func TestNoopLoggerMethods(t *testing.T) {
 }
 
 func newDialectTestEngine(driverName string) *Engine {
-	dialect := defaultDialectConfig(driverName)
 	return &Engine{
 		config: &Config{
-			driverName:           driverName,
-			placeholderFormat:    dialect.placeholderFormat,
-			escaper:              dialect.escaper,
-			supportsReturning:    dialect.supportsReturning,
-			supportsLastInsertID: dialect.supportsLastInsertID,
-			supportsForUpdate:    dialect.supportsForUpdate,
+			driverName: driverName,
+			Dialect:    DefaultDialectConfig(driverName),
 		},
 	}
 }

@@ -153,11 +153,6 @@ func TestCustomConversionIsUsedForQueryArgsAndScan(t *testing.T) {
 	assert.Equal(t, []byte("1,2,3"), call.args[0])
 }
 
-func TestConversionHelpersExtraBranches(t *testing.T) {
-	assert.Empty(t, adaptDBArgs(nil))
-	assert.Nil(t, normalizeDBArg(nil))
-}
-
 type conversionRecorder struct {
 	mu          sync.Mutex
 	execCalls   []conversionCall
@@ -250,13 +245,15 @@ func newConversionTestEngine(t *testing.T, recorder *conversionRecorder) *Engine
 
 	return &Engine{
 		config: &Config{
-			driverName:           "mysql",
-			placeholderFormat:    Placeholder("mysql"),
-			escaper:              Escaper("unknown"),
-			supportsReturning:    false,
-			supportsLastInsertID: true,
-			supportsForUpdate:    true,
-			logger:               testLogger{},
+			driverName: "mysql",
+			Dialect: DialectConfig{
+				PlaceholderFormat:    Placeholder("mysql"),
+				Escaper:              Escaper("unknown"),
+				SupportsReturning:    false,
+				SupportsLastInsertID: true,
+				SupportsForUpdate:    true,
+			},
+			logger: testLogger{},
 		},
 		db:     db,
 		logger: testLogger{},

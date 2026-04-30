@@ -92,11 +92,16 @@ declarations such as `A, B int`.
 
 ### Multi-database dialect handling
 
-Database-specific behavior is configured on the `Engine` via options:
-- `WithPlaceholderFormat` — driver-dependent placeholder format. Current defaults are:
-  - MySQL/MariaDB: `builder.Question`
-  - PostgreSQL and SQLite: `builder.Dollar`
-- `WithEscaper` — controls identifier quoting (backtick or double-quote)
+Database-specific behavior is stored in `DialectConfig` and attached to
+`Config.Dialect`. `DefaultDialectConfig(driverName)` selects built-in defaults,
+and `WithDialectConfig` replaces the whole dialect config. The narrower options
+such as `WithPlaceholderFormat`, `WithEscaper`, and `WithSupports...` still
+override individual `DialectConfig` fields.
+
+Current defaults:
+- MySQL/MariaDB: `builder.Question`, backtick quoting, `LastInsertId`, `FOR UPDATE`, `INSERT IGNORE`
+- PostgreSQL: `builder.Dollar`, double-quote quoting, `RETURNING`, `FOR UPDATE`, `ON CONFLICT DO NOTHING`
+- SQLite: `builder.Question`, double-quote quoting, `LastInsertId`, no `FOR UPDATE`, `INSERT OR IGNORE`
 
 The `INSERT IGNORE` syntax and `RETURNING` clause are handled per-driver in `insert.go`. Repository locking uses `FOR UPDATE` only on explicitly supported drivers and returns an error otherwise. `Lock` and `LockByField` only have practical row-locking effect inside `Engine.TX(...)` / `Engine.TXWithOptions(...)`; outside a transaction the database will not keep the lock beyond the statement itself.
 

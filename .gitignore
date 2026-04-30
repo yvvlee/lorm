@@ -3,9 +3,10 @@
 
 # ide
 .idea
-.fleet
 .vscode
 .windsurf
 .cursor
+.CLAUDE.md
+.AGENTS.md
 
 bin/*

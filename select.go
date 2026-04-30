@@ -63,7 +63,7 @@ func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 	if s.err != nil {
 		return t, s.err
 	}
-	query, args, err := s.builder.ToSql()
+	query, args, err := s.builder.Clone().Limit(1).ToSql()
 	if err != nil {
 		return t, err
 	}
@@ -401,7 +401,7 @@ func (s *QueryColStmt[T]) Clone() *QueryColStmt[T] {
 func (s *QueryColStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	var t T
 	defer s.reset()
-	query, args, err := s.builder.ToSql()
+	query, args, err := s.builder.Clone().Limit(1).ToSql()
 	if err != nil {
 		return t, false, err
 	}

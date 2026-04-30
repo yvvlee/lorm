@@ -20,15 +20,6 @@ type Engine struct {
 	logger Logger
 }
 
-type dialectConfig struct {
-	placeholderFormat    builder.PlaceholderFormat
-	escaper              names.Escaper
-	supportsReturning    bool
-	supportsLastInsertID bool
-	supportsForUpdate    bool
-	ignoreStrategy       ignoreStrategy
-}
-
 // NewEngine opens a database connection and applies the provided options.
 // It uses a background context for the initial connectivity check; use
 // NewEngineContext to supply a context with timeout or cancellation.
@@ -43,17 +34,11 @@ func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Opt
 	if err != nil {
 		return nil, err
 	}
-	dialect := defaultDialectConfig(driverName)
 	config := &Config{
-		driverName:           driverName,
-		dsn:                  dsn,
-		placeholderFormat:    dialect.placeholderFormat,
-		escaper:              dialect.escaper,
-		supportsReturning:    dialect.supportsReturning,
-		supportsLastInsertID: dialect.supportsLastInsertID,
-		supportsForUpdate:    dialect.supportsForUpdate,
-		ignoreStrategy:       dialect.ignoreStrategy,
-		logger:               defaultLogger,
+		driverName: driverName,
+		dsn:        dsn,
+		Dialect:    DefaultDialectConfig(driverName),
+		logger:     defaultLogger,
 	}
 	for _, o := range option {
 		o(config)
@@ -92,18 +77,18 @@ func (e *Engine) init() {
 
 // Placeholder returns the placeholder format configured for the engine.
 func (e *Engine) Placeholder() builder.PlaceholderFormat {
-	if e.config.placeholderFormat == nil {
+	if e.config.Dialect.PlaceholderFormat == nil {
 		return builder.Question
 	}
-	return e.config.placeholderFormat
+	return e.config.Dialect.PlaceholderFormat
 }
 
 // Escaper returns the identifier escaper configured for the engine.
 func (e *Engine) Escaper() names.Escaper {
-	if e.config.escaper == nil {
+	if e.config.Dialect.Escaper == nil {
 		return names.NoEscaper
 	}
-	return e.config.escaper
+	return e.config.Dialect.Escaper
 }
 
 // DriverName returns the configured database driver name.
@@ -113,22 +98,22 @@ func (e *Engine) DriverName() string {
 
 // SupportsReturning returns true if the database driver supports RETURNING clause
 func (e *Engine) SupportsReturning() bool {
-	return e.config.supportsReturning
+	return e.config.Dialect.SupportsReturning
 }
 
 // SupportsLastInsertId returns true if the database driver supports LastInsertId
 func (e *Engine) SupportsLastInsertId() bool {
-	return e.config.supportsLastInsertID
+	return e.config.Dialect.SupportsLastInsertID
 }
 
 // SupportsForUpdate returns true if the database driver supports FOR UPDATE.
 func (e *Engine) SupportsForUpdate() bool {
-	return e.config.supportsForUpdate
+	return e.config.Dialect.SupportsForUpdate
 }
 
 // IgnoreStrategy returns the configured insert-ignore strategy for the dialect.
-func (e *Engine) IgnoreStrategy() ignoreStrategy {
-	return e.config.ignoreStrategy
+func (e *Engine) IgnoreStrategy() IgnoreStrategy {
+	return e.config.Dialect.IgnoreStrategy
 }
 
 func (e *Engine) session(ctx context.Context) *session {
@@ -247,7 +232,7 @@ func (e *Engine) sqlLogFields(ctx context.Context, query string, args []any, err
 	if e.config != nil && e.config.logSQLArgs {
 		fields = append(fields, "args", args)
 	}
-	fields = append(fields, "executeTime", elapsed.Seconds())
+	fields = append(fields, "latency", elapsed.Seconds())
 	return fields
 }
 
@@ -266,54 +251,55 @@ func connect(ctx context.Context, driverName, dataSourceName string) (*sql.DB, e
 
 // Placeholder returns the default placeholder format for a driver name.
 func Placeholder(driverName string) builder.PlaceholderFormat {
-	return defaultDialectConfig(driverName).placeholderFormat
+	return DefaultDialectConfig(driverName).PlaceholderFormat
 }
 
 // Escaper returns the default identifier escaper for a driver name.
 func Escaper(driverName string) names.Escaper {
-	return defaultDialectConfig(driverName).escaper
+	return DefaultDialectConfig(driverName).Escaper
 }
 
-func defaultDialectConfig(driverName string) dialectConfig {
+// DefaultDialectConfig returns the built-in dialect behavior for a driver name.
+func DefaultDialectConfig(driverName string) DialectConfig {
 	switch driverName {
 	case //PostgreSQL
 		"postgres", "postgresql", "pgx", "pq", "pq-timeouts", "cloudsqlpostgres", "nrpostgres", "cockroach", "crdb-postgres":
-	return dialectConfig{
-			placeholderFormat:    builder.Dollar,
-			escaper:              names.NewQuoter('"', '"'),
-			supportsReturning:    true,
-			supportsLastInsertID: false,
-			supportsForUpdate:    true,
-			ignoreStrategy:       IgnoreConflictSuffix,
+		return DialectConfig{
+			PlaceholderFormat:    builder.Dollar,
+			Escaper:              names.NewQuoter('"', '"'),
+			SupportsReturning:    true,
+			SupportsLastInsertID: false,
+			SupportsForUpdate:    true,
+			IgnoreStrategy:       IgnoreConflictSuffix,
 		}
 	case //SQLite
 		"sqlite", "sqlite3", "ql":
-		return dialectConfig{
-			placeholderFormat:    builder.Question,
-			escaper:              names.NewQuoter('"', '"'),
-			supportsReturning:    false,
-			supportsLastInsertID: true,
-			supportsForUpdate:    false,
-			ignoreStrategy:       IgnoreOrKeyword,
+		return DialectConfig{
+			PlaceholderFormat:    builder.Question,
+			Escaper:              names.NewQuoter('"', '"'),
+			SupportsReturning:    false,
+			SupportsLastInsertID: true,
+			SupportsForUpdate:    false,
+			IgnoreStrategy:       IgnoreOrKeyword,
 		}
 	case //MySQL, MariaDB
 		"mysql", "mariadb":
-		return dialectConfig{
-			placeholderFormat:    builder.Question,
-			escaper:              names.NewQuoter('`', '`'),
-			supportsReturning:    false,
-			supportsLastInsertID: true,
-			supportsForUpdate:    true,
-			ignoreStrategy:       IgnoreKeyword,
+		return DialectConfig{
+			PlaceholderFormat:    builder.Question,
+			Escaper:              names.NewQuoter('`', '`'),
+			SupportsReturning:    false,
+			SupportsLastInsertID: true,
+			SupportsForUpdate:    true,
+			IgnoreStrategy:       IgnoreKeyword,
 		}
 	default:
-		return dialectConfig{
-			placeholderFormat:    builder.Question,
-			escaper:              names.NoEscaper,
-			supportsReturning:    false,
-			supportsLastInsertID: true,
-			supportsForUpdate:    false,
-			ignoreStrategy:       IgnoreKeyword,
+		return DialectConfig{
+			PlaceholderFormat:    builder.Question,
+			Escaper:              names.NoEscaper,
+			SupportsReturning:    false,
+			SupportsLastInsertID: true,
+			SupportsForUpdate:    false,
+			IgnoreStrategy:       IgnoreKeyword,
 		}
 	}
 }

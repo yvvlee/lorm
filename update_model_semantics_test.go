@@ -54,7 +54,7 @@ func (m *updateSemanticsModel) LormModelDescriptor() *ModelDescriptor {
 }
 
 func TestUpdateSetModelCoverage(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NoEscaper}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
 	model := &updateSemanticsModel{
 		ID:        7,
 		Name:      "published",

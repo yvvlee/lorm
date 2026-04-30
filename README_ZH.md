@@ -300,11 +300,13 @@ LORM 写参数时会走 `driver.Valuer`。
 ## 配置
 
 ```go
+dialect := lorm.DefaultDialectConfig("pgx")
+dialect.SupportsForUpdate = true
+
 engine, err := lorm.NewEngine(
 	"pgx",
 	"postgres://user:password@localhost:5432/dbname?sslmode=disable",
-	lorm.WithPlaceholderFormat(builder.Dollar),
-	lorm.WithEscaper(names.NewQuoter('"', '"')),
+	lorm.WithDialectConfig(dialect),
 	lorm.WithMaxIdleConns(10),
 	lorm.WithMaxOpenConns(100),
 	lorm.WithConnMaxLifetime(time.Hour),
@@ -313,58 +315,72 @@ engine, err := lorm.NewEngine(
 )
 ```
 
+`DialectConfig` 集中保存数据库方言行为：占位符格式、表名和字段名转义、
+`RETURNING`、`LastInsertId`、`FOR UPDATE`、`INSERT IGNORE` 语法。
+默认值会按 driver name 自动选择。
+需要整体替换时用 `WithDialectConfig`。
+只改一项时仍然可以用 `WithPlaceholderFormat`、`WithEscaper` 和 `WithSupports...`。
+
 ## Benchmark
 
 benchmark 套件位于 [benchmarks/orm-crud](benchmarks/orm-crud)。
 
-下面这组结果采集于 2026 年 4 月 20 日，执行命令为：
+下面这组结果采集于 2026 年 4 月 30 日，执行命令为：
 
 ```bash
 cd benchmarks/orm-crud
-go test -bench . -benchmem
+ORMCRUD_DB=mysql go test -run '^$' -bench . -benchmem -count=1
+ORMCRUD_DB=postgres go test -run '^$' -bench . -benchmem -count=1
 ```
 
 测试环境：
 
-- 后端：SQLite（默认值，即 `ORMCRUD_DB=sqlite`）
-- OS/架构：`linux/amd64`
-- CPU：`Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz`
+- OS/架构：`darwin/arm64`
+- CPU：`Apple M1 Pro`
+- MySQL：`8.4.6`
+- PostgreSQL：`18.1`
 
-单行 CRUD，`ns/op`，数值越小越好：
-
-| Benchmark | lorm | gorm | xorm | ent |
-| --- | ---: | ---: | ---: | ---: |
-| Create | **97,471** | 127,067 | 99,391 | 107,457 |
-| ReadByID | **31,231** | 36,679 | 45,174 | 35,275 |
-| UpdateByID | **85,727** | 104,658 | 93,461 | 123,181 |
-| DeleteByID | 79,837 | 96,848 | 84,681 | **78,846** |
-
-100 行批量 CRUD，`ns/op`，数值越小越好：
+MySQL，`ns/op`，数值越小越好：
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| BatchCreate100 | 1,139,752 | **724,101** | 4,025,133 | 853,383 |
-| BatchRead100 | **346,392** | 427,952 | 725,096 | 411,414 |
-| BatchUpdate100 | 211,472 | 211,800 | **185,189** | 186,621 |
-| BatchDelete100 | 332,062 | 326,834 | 313,968 | **313,609** |
+| Create | 1,913,144 | 2,613,786 | **1,788,054** | 1,817,208 |
+| ReadByID | 1,262,759 | 1,258,343 | 1,321,836 | **1,199,787** |
+| ReadByIDComplex | **1,132,911** | 1,386,360 | 1,353,234 | 1,167,020 |
+| UpdateByID | 1,690,392 | 2,496,637 | **1,486,555** | 4,337,282 |
+| DeleteByID | 1,791,673 | 2,577,342 | **1,078,675** | 1,469,701 |
+| BatchCreate100 | **9,816,171** | 10,372,265 | 14,042,917 | 11,062,927 |
+| BatchRead100 | **3,668,220** | 4,154,132 | 4,040,834 | 3,969,475 |
+| BatchRead100Complex | 4,653,190 | 4,950,072 | 4,541,484 | **4,436,015** |
+| BatchUpdate100 | 8,032,387 | 8,486,618 | **6,988,625** | 8,843,135 |
+| BatchDelete100 | 5,277,316 | 6,698,076 | **2,085,592** | 5,679,043 |
+
+PostgreSQL，`ns/op`，数值越小越好：
+
+| Benchmark | lorm | gorm | xorm | ent |
+| --- | ---: | ---: | ---: | ---: |
+| Create | **518,071** | 947,152 | 555,380 | 591,445 |
+| ReadByID | **298,036** | 431,630 | 309,724 | 373,995 |
+| ReadByIDComplex | 344,650 | 474,724 | **317,436** | 399,537 |
+| UpdateByID | 713,365 | 989,863 | **679,395** | 1,097,098 |
+| DeleteByID | 463,347 | 863,456 | **276,317** | 462,638 |
+| BatchCreate100 | 4,676,179 | 5,024,113 | 5,872,695 | **4,653,561** |
+| BatchRead100 | 1,471,637 | 1,770,276 | 1,787,619 | **1,459,470** |
+| BatchRead100Complex | **1,876,657** | 2,126,904 | 2,403,127 | 1,882,766 |
+| BatchUpdate100 | **902,407** | 1,370,367 | 1,499,549 | 1,753,552 |
+| BatchDelete100 | 809,539 | 1,429,966 | **531,330** | 950,048 |
 
 这次结果可以概括为：
 
-- `lorm` 在单行 create、read、update 上最快，单行 delete 与 `ent`
-  基本处于同一量级。
-- `lorm` 在批量 read 上最快，且批量 create 明显快于 `xorm`。
-- 这台机器上的批量 create 最快的是 `gorm`。
-- 这次测试里，`lorm` 在 8 个 benchmark 里的 7 个场景都拿到了最低的 `B/op`。
+- 在 MySQL 上，`lorm` 在 10 个 `ns/op` 场景里有 3 个最快。
+  `xorm` 在本次单行 create、update、delete 和批量 update、delete 上最快。
+- 在 PostgreSQL 上，`lorm` 在 10 个 `ns/op` 场景里有 4 个最快，
+  包括 create、按 ID 读取、复杂批量读取和批量更新。
+- 这次测试里，`lorm` 在 MySQL 的 10 个场景里有 5 个拿到最低 `B/op`，
+  在 PostgreSQL 的 10 个场景里有 7 个拿到最低 `B/op`。
 
 这些数字更适合作为趋势参考，而不是所有场景下的绝对结论。做技术选型前，
 建议在你的目标数据库、schema、驱动和硬件环境上重新跑一遍。
-
-也可以切换到 MySQL 或 PostgreSQL 运行同一套 benchmark：
-
-```bash
-ORMCRUD_DB=mysql go test -bench . -benchmem
-ORMCRUD_DB=postgres go test -bench . -benchmem
-```
 
 更完整的 benchmark 范围、环境和结果表格见
 [benchmarks/orm-crud/README.md](benchmarks/orm-crud/README.md)。

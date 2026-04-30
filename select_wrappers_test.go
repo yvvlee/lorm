@@ -10,7 +10,7 @@ import (
 )
 
 func TestQueryModelStmtWrappers(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NoEscaper}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
 	_ = Query[*Test](engine).
 		Prefix("/*p*/").
 		PrefixExpr(builder.Expr("/*px*/")).
@@ -42,7 +42,7 @@ func TestQueryModelStmtWrappers(t *testing.T) {
 }
 
 func TestQueryColStmtWrappers(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NoEscaper}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
 	_ = QueryCol[uint64](engine).
 		Prefix("/*p*/").
 		PrefixExpr(builder.Expr("/*px*/")).
@@ -74,7 +74,7 @@ func TestQueryColStmtWrappers(t *testing.T) {
 }
 
 func TestQueryStatementsUseIndependentBuilders(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NoEscaper}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
 
 	q1 := Query[*Test](engine).Where("id = ?", 1)
 	q2 := Query[*Test](engine).Where("id = ?", 2)

@@ -17,7 +17,6 @@ func (s *session) Exec(ctx context.Context, query string, args ...any) (result s
 		if err != nil {
 			return
 		}
-		args = adaptDBArgs(args)
 	}
 	return proxy.ExecContext(ctx, query, args...)
 }
@@ -29,7 +28,6 @@ func (s *session) Query(ctx context.Context, query string, args ...any) (rows *s
 		if err != nil {
 			return
 		}
-		args = adaptDBArgs(args)
 	}
 	return proxy.QueryContext(ctx, query, args...)
 }
@@ -41,7 +39,6 @@ func (s *session) Exist(ctx context.Context, query string, args ...any) (exist b
 		if err != nil {
 			return
 		}
-		args = adaptDBArgs(args)
 	}
 	rows, err := proxy.QueryContext(ctx, query, args...)
 	if err != nil {

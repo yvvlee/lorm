@@ -39,7 +39,7 @@ func TestSessionExecQueryExistBranches(t *testing.T) {
 
 func TestSessionPlaceholderErrors(t *testing.T) {
 	engine := newScriptedEngine(t, newScriptedQueryRecorder())
-	engine.config.placeholderFormat = errorPlaceholder{}
+	engine.config.Dialect.PlaceholderFormat = errorPlaceholder{}
 	sess := &session{engine: engine}
 
 	_, err := sess.Exec(context.Background(), "SELECT ?", 1)

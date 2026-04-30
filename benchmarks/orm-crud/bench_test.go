@@ -311,7 +311,7 @@ func benchmarkReadByIDXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var out XormUser
-		has, err := engine.ID(user.ID).Get(&out)
+		has, err := engine.NoAutoCondition().ID(user.ID).Get(&out)
 		if err != nil {
 			b.Fatalf("xorm read: %v", err)
 		}
@@ -391,7 +391,7 @@ func benchmarkReadByIDComplexXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var out XormUser
-		has, err := engine.ID(user.ID).Get(&out)
+		has, err := engine.NoAutoCondition().ID(user.ID).Get(&out)
 		if err != nil {
 			b.Fatalf("xorm complex read: %v", err)
 		}
@@ -1412,7 +1412,7 @@ func newXormUser(input benchInput) *XormUser {
 
 func fetchXormUserByEmail(engine *xorm.Engine, email string) (*XormUser, error) {
 	var out XormUser
-	has, err := engine.Where("email = ?", email).Get(&out)
+	has, err := engine.NoAutoCondition().Where("email = ?", email).Get(&out)
 	if err != nil {
 		return nil, err
 	}

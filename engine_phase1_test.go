@@ -84,7 +84,7 @@ func TestFlagFieldsKeepsNonAutoPrimaryKeysOutOfGeneratedKeyPath(t *testing.T) {
 }
 
 func TestQueryEscapesModelTableAndPrimaryKeyPredicate(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NewQuoter('`', '`')}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
 
 	sqlStr, args, err := Query[*reservedWordModel](engine).ID(7).builder.ToSql()
 	require.NoError(t, err)
@@ -181,14 +181,14 @@ func TestRepositoryWrapperMethodsWithCaptureEngine(t *testing.T) {
 	assert.Nil(t, model)
 	call = recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ? FOR UPDATE", call.query)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ? LIMIT 1 FOR UPDATE", call.query)
 	assert.Equal(t, []any{int64(9)}, call.args)
 }
 
 func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
-	engine.config.escaper = names.NoEscaper
+	engine.config.Dialect.Escaper = names.NoEscaper
 	repo := NewRepository[*manualPrimaryKeyModel](engine)
 	ctx := context.Background()
 
@@ -196,7 +196,7 @@ func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 	require.NoError(t, err)
 	call := recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT id, name FROM manual_keys WHERE id = ?", call.query)
+	assert.Equal(t, "SELECT id, name FROM manual_keys WHERE id = ? LIMIT 1", call.query)
 	assert.Equal(t, []any{"manual-1"}, call.args)
 
 	recorder.Reset()
@@ -210,7 +210,7 @@ func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 }
 
 func TestStmtMethodsEscapeIdentifiersWithoutRepositoryHelp(t *testing.T) {
-	engine := &Engine{config: &Config{escaper: names.NewQuoter('`', '`')}}
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
 
 	sqlStr, args, err := Query[*reservedWordModel](engine).
 		Where(builder.Eq{"group": "g1"}).
@@ -330,14 +330,16 @@ func newCaptureSQLEngine(t *testing.T, recorder *captureSQLRecorder, logArgs boo
 	})
 
 	config := &Config{
-		driverName:           "mysql",
-		placeholderFormat:    builder.Question,
-		escaper:              names.NewQuoter('`', '`'),
-		supportsReturning:    false,
-		supportsLastInsertID: true,
-		supportsForUpdate:    true,
-		logger:               logger,
-		logSQLArgs:           logArgs,
+		driverName: "mysql",
+		Dialect: DialectConfig{
+			PlaceholderFormat:    builder.Question,
+			Escaper:              names.NewQuoter('`', '`'),
+			SupportsReturning:    false,
+			SupportsLastInsertID: true,
+			SupportsForUpdate:    true,
+		},
+		logger:     logger,
+		logSQLArgs: logArgs,
 	}
 	return &Engine{
 		config: config,
