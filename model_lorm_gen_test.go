@@ -74,8 +74,9 @@ type Test_Fields struct {
 }
 
 func (f *Test_Fields) WithAlias(alias string) *Test_Fields {
-	f.alias = alias
-	return f
+	o := new(Test_Fields)
+	o.alias = alias
+	return o
 }
 func (f *Test_Fields) ID() string {
 	if f.alias == "" {

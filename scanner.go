@@ -48,14 +48,7 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 		return fmt.Errorf("expected exactly one column, got %d", len(columns))
 	}
 	if len(*v) > 0 {
-		i := 0
-		for rows.Next() && i < len(*v) {
-			if err = rows.Scan(&(*v)[i]); err != nil {
-				return err
-			}
-			i++
-		}
-		return rows.Err()
+		return fmt.Errorf("ScanCols requires an empty destination slice, got len=%d", len(*v))
 	}
 	var res []T
 	for rows.Next() {

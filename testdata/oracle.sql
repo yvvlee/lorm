@@ -1,0 +1,31 @@
+BEGIN
+   EXECUTE IMMEDIATE 'DROP TABLE test';
+EXCEPTION
+   WHEN OTHERS THEN
+      IF SQLCODE != -942 THEN
+         RAISE;
+      END IF;
+END;
+/
+
+CREATE TABLE test (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  "index" NUMBER(10) DEFAULT 0 NOT NULL,
+  int_p NUMBER(10),
+  bool NUMBER(1) DEFAULT 0 NOT NULL,
+  bool_p NUMBER(1),
+  str VARCHAR2(255) DEFAULT '' NOT NULL,
+  str_p VARCHAR2(255),
+  timestamp TIMESTAMP NOT NULL,
+  timestamp_p TIMESTAMP,
+  datetime TIMESTAMP NOT NULL,
+  datetime_p TIMESTAMP,
+  decimal NUMBER(10,2) NOT NULL,
+  decimal_p NUMBER(10,2),
+  int_slice VARCHAR2(255) NOT NULL,
+  int_slice_p VARCHAR2(255),
+  struct VARCHAR2(255) NOT NULL,
+  struct_p VARCHAR2(255),
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);

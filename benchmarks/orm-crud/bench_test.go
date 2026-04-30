@@ -7,17 +7,18 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/yvvlee/lorm"
-	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
-	entbench "github.com/yvvlee/lorm/benchmarks/orm-crud/ent"
-	entuser "github.com/yvvlee/lorm/benchmarks/orm-crud/ent/user"
-	"github.com/yvvlee/lorm/builder"
 	gmysql "gorm.io/driver/mysql"
 	gpostgres "gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
 	"xorm.io/xorm"
+
+	"github.com/yvvlee/lorm"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
+	entbench "github.com/yvvlee/lorm/benchmarks/orm-crud/ent"
+	entuser "github.com/yvvlee/lorm/benchmarks/orm-crud/ent/user"
+	"github.com/yvvlee/lorm/builder"
 )
 
 const batchSize = 100

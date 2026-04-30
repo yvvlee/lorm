@@ -32,6 +32,16 @@ func (s *DeleteStmt[T]) reset() {
 	s.err = nil
 }
 
+// Clone returns a copy of the statement state. Terminal methods still reset
+// only the statement they are called on.
+func (s *DeleteStmt[T]) Clone() *DeleteStmt[T] {
+	return &DeleteStmt[T]{
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+		err:     s.err,
+	}
+}
+
 // Exec executes the built DELETE statement.
 func (s *DeleteStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	defer s.reset()

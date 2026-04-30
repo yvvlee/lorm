@@ -35,7 +35,8 @@ func Test_Generate(t *testing.T) {
 	assert.Len(t, pkg.Syntax, 2)
 
 	userFile := findSyntaxFile(t, generator, pkg, "user.go")
-	fileInfo := generator.extractFile(pkg, userFile)
+	fileInfo, err := generator.extractFile(pkg, userFile)
+	require.NoError(t, err)
 	fileInfoJson, err := json.MarshalString(fileInfo)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
@@ -52,7 +53,8 @@ func Test_Generate(t *testing.T) {
 	assert.Equal(t, string(exceptContent), string(content))
 
 	userAddressFile := findSyntaxFile(t, generator, pkg, "user_address.go")
-	fileInfo = generator.extractFile(pkg, userAddressFile)
+	fileInfo, err = generator.extractFile(pkg, userAddressFile)
+	require.NoError(t, err)
 	fileInfoJson, err = json.MarshalString(fileInfo)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
@@ -84,7 +86,8 @@ func Test_Generate_FlattensEmbeddedStructsAcrossFiles(t *testing.T) {
 	require.Len(t, pkgs, 1)
 
 	file := findSyntaxFile(t, generator, pkgs[0], "audit_user.go")
-	fileInfo := generator.extractFile(pkgs[0], file)
+	fileInfo, err := generator.extractFile(pkgs[0], file)
+	require.NoError(t, err)
 	require.NotNil(t, fileInfo)
 	require.Len(t, fileInfo.Structs, 1)
 
@@ -97,6 +100,27 @@ func Test_Generate_FlattensEmbeddedStructsAcrossFiles(t *testing.T) {
 	assert.Equal(t, "UpdatedAt", fields[2].Name)
 	assert.Equal(t, "AuditFields.UpdatedAt", fields[2].FullName)
 	assert.Equal(t, "updated_at", fields[2].DBField)
+}
+
+func Test_Generate_FailsFastForUnsupportedFieldType(t *testing.T) {
+	generator := NewGenerator(
+		new(names.SnakeMapper),
+		new(names.SnakeMapper),
+		"lorm",
+		"_test_gen",
+	)
+	pkgs, err := generator.load([]string{
+		"testdata/unsupported_type.go",
+	})
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	file := findSyntaxFile(t, generator, pkgs[0], "unsupported_type.go")
+	fileInfo, err := generator.extractFile(pkgs[0], file)
+	require.Error(t, err)
+	assert.Nil(t, fileInfo)
+	assert.ErrorContains(t, err, `unsupported field type "func()"`)
+	assert.ErrorContains(t, err, "UnsupportedType.Callback")
 }
 
 func findSyntaxFile(t *testing.T, generator *Generator, pkg *packages.Package, name string) *ast.File {

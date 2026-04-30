@@ -306,4 +306,69 @@ func testEngine(t *testing.T, engine *Engine) {
 		assert.Nil(t, err)
 		assert.Equal(t, int64(1), rows)
 	})
+
+	t.Run("Repository InsertIgnore wrappers", func(t *testing.T) {
+		repo := NewRepository[*Test](engine)
+		original := &Test{
+			Int:       701,
+			Str:       "repo_insert_ignore_original",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(7.01),
+			IntSlice:  []int{7, 0, 1},
+			Struct:    Sub{ID: 701, Name: "original"},
+		}
+
+		rows, err := repo.Insert(ctx, original)
+		assert.NoError(t, err)
+		assert.EqualValues(t, 1, rows)
+
+		ignored := &Test{
+			ID:        original.ID,
+			Int:       702,
+			Str:       "repo_insert_ignore_single",
+			Timestamp: testTime,
+			Datetime:  testTime,
+			Decimal:   decimal.NewFromFloat(7.02),
+			IntSlice:  []int{7, 0, 2},
+			Struct:    Sub{ID: 702, Name: "ignored"},
+		}
+
+		_, err = repo.InsertIgnore(ctx, ignored)
+		assert.NoError(t, err)
+
+		current, err := repo.Get(ctx, original.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, "repo_insert_ignore_original", current.Str)
+
+		batch := []*Test{
+			{
+				ID:        original.ID,
+				Int:       703,
+				Str:       "repo_insert_ignore_all_duplicate",
+				Timestamp: testTime,
+				Datetime:  testTime,
+				Decimal:   decimal.NewFromFloat(7.03),
+				IntSlice:  []int{7, 0, 3},
+				Struct:    Sub{ID: 703, Name: "duplicate"},
+			},
+			{
+				Int:       704,
+				Str:       "repo_insert_ignore_all_inserted",
+				Timestamp: testTime,
+				Datetime:  testTime,
+				Decimal:   decimal.NewFromFloat(7.04),
+				IntSlice:  []int{7, 0, 4},
+				Struct:    Sub{ID: 704, Name: "inserted"},
+			},
+		}
+
+		_, err = repo.InsertIgnoreAll(ctx, batch)
+		assert.NoError(t, err)
+
+		inserted, err := repo.GetByField(ctx, "str", "repo_insert_ignore_all_inserted")
+		assert.NoError(t, err)
+		assert.NotNil(t, inserted)
+		assert.NotZero(t, inserted.ID)
+	})
 }

@@ -81,6 +81,9 @@ The `lorm` tag supports two syntaxes:
 
 Built-in flag values: `primary_key`, `auto_increment`, `json`, `created`, `updated`, `version`.
 
+If a field needs a `lorm` tag, declare it on its own line instead of grouped
+declarations such as `A, B int`.
+
 ### Multi-database dialect handling
 
 Database-specific behavior is configured on the `Engine` via options:
@@ -89,7 +92,7 @@ Database-specific behavior is configured on the `Engine` via options:
   - PostgreSQL and SQLite: `builder.Dollar`
 - `WithEscaper` — controls identifier quoting (backtick or double-quote)
 
-The `INSERT IGNORE` syntax and `RETURNING` clause are handled per-driver in `insert.go`. Repository locking uses `FOR UPDATE` only on explicitly supported drivers and returns an error otherwise.
+The `INSERT IGNORE` syntax and `RETURNING` clause are handled per-driver in `insert.go`. Repository locking uses `FOR UPDATE` only on explicitly supported drivers and returns an error otherwise. `Lock` and `LockByField` only have practical row-locking effect inside `Engine.TX(...)` / `Engine.TXWithOptions(...)`; outside a transaction the database will not keep the lock beyond the statement itself.
 
 ### Statement lifecycle
 

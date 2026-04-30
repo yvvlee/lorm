@@ -21,6 +21,32 @@ type InsertBuilder struct {
 	returning        []string
 }
 
+// Clone returns a shallow copy of the builder and its clause slices.
+func (b *InsertBuilder) Clone() *InsertBuilder {
+	if b == nil {
+		return nil
+	}
+	values := make([][]any, len(b.values))
+	for i, row := range b.values {
+		values[i] = append([]any(nil), row...)
+	}
+	var selectBuilder *SelectBuilder
+	if b.selectBuilder != nil {
+		selectBuilder = b.selectBuilder.Clone()
+	}
+	return &InsertBuilder{
+		prefixes:         cloneSqlizers(b.prefixes),
+		statementKeyword: b.statementKeyword,
+		options:          cloneStrings(b.options),
+		into:             b.into,
+		columns:          cloneStrings(b.columns),
+		values:           values,
+		suffixes:         cloneSqlizers(b.suffixes),
+		selectBuilder:    selectBuilder,
+		returning:        cloneStrings(b.returning),
+	}
+}
+
 // ToSql renders the INSERT statement and its bound arguments.
 func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.into) == 0 {

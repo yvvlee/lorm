@@ -93,7 +93,7 @@ func (f *Report_Fields) All() []string {
 	}
 }
 
-const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"fmt\"","Alias":""},{"Path":"\"strconv\"","Alias":""},{"Path":"\"strings\"","Alias":""},{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Report","TableName":"reports","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Title","FullName":"Title","DBField":"title","Type":"string","Flag":0},{"Name":"Scores","FullName":"Scores","DBField":"scores","Type":"CSVInts","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}]}]}`
+const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"database/sql/driver\"","Alias":""},{"Path":"\"fmt\"","Alias":""},{"Path":"\"strconv\"","Alias":""},{"Path":"\"strings\"","Alias":""},{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Report","TableName":"reports","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Title","FullName":"Title","DBField":"title","Type":"string","Flag":0},{"Name":"Scores","FullName":"Scores","DBField":"scores","Type":"CSVInts","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}]}]}`
 
 var _lorm_file_model_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor

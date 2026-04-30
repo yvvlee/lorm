@@ -19,6 +19,23 @@ type DeleteBuilder struct {
 	returning  []string
 }
 
+// Clone returns a shallow copy of the builder and its clause slices.
+func (b *DeleteBuilder) Clone() *DeleteBuilder {
+	if b == nil {
+		return nil
+	}
+	return &DeleteBuilder{
+		prefixes:   cloneSqlizers(b.prefixes),
+		from:       b.from,
+		whereParts: cloneSqlizers(b.whereParts),
+		orderBys:   cloneStrings(b.orderBys),
+		limit:      b.limit,
+		offset:     b.offset,
+		suffixes:   cloneSqlizers(b.suffixes),
+		returning:  cloneStrings(b.returning),
+	}
+}
+
 // ToSql renders the DELETE statement and its bound arguments.
 func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.from) == 0 {

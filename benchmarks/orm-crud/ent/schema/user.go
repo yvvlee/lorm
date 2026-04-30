@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
 	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 )
 

@@ -2,9 +2,13 @@ package lorm
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
@@ -77,6 +81,68 @@ func TestConnectErrorBranches(t *testing.T) {
 	// driver imported in lorm_test.go
 	_, err = connect(context.Background(), "pgx", "postgres://wrong:wrong@127.0.0.1:1/db")
 	assert.Error(t, err)
+}
+
+func TestEngineInitAppliesConfigAndFallbacks(t *testing.T) {
+	skipUnlessSQLite3Available(t)
+
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	engine := &Engine{
+		config: &Config{
+			maxIdleConns:    2,
+			maxOpenConns:    3,
+			connMaxLifetime: time.Second,
+			connMaxIdleTime: time.Second,
+		},
+		db: db,
+	}
+	engine.init()
+
+	assert.Equal(t, 3, db.Stats().MaxOpenConnections)
+	assert.Equal(t, builder.Question, (&Engine{config: &Config{}}).Placeholder())
+	assert.Equal(t, "field", (&Engine{config: &Config{}}).Escaper().Escape("field"))
+}
+
+func TestNewEngineAndContextCoverage(t *testing.T) {
+	recorder := newScriptedQueryRecorder()
+	driverName := registerScriptedQueryDriver(recorder)
+
+	engine, err := NewEngine(
+		driverName,
+		"",
+		WithMaxIdleConns(2),
+		WithMaxOpenConns(3),
+		WithConnMaxLifetime(time.Second),
+		WithConnMaxIdleTime(time.Second),
+		WithLogger(nil),
+	)
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+	assert.IsType(t, noopLogger{}, engine.logger)
+	assert.Equal(t, 3, engine.db.Stats().MaxOpenConnections)
+	assert.NoError(t, engine.Close())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	engine, err = NewEngineContext(ctx, driverName, filepath.Join(t.TempDir(), "cancelled.db"))
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, engine)
+}
+
+func TestNoopLoggerMethods(t *testing.T) {
+	logger := noopLogger{}
+	logger.DebugContext(context.Background(), "debug")
+	logger.InfoContext(context.Background(), "info")
+	logger.WarnContext(context.Background(), "warn")
+	logger.ErrorContext(context.Background(), "error")
 }
 
 func newDialectTestEngine(driverName string) *Engine {

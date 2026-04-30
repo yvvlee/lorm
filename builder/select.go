@@ -15,8 +15,18 @@ func cloneStrings(items []string) []string {
 	return append([]string(nil), items...)
 }
 
+func hasOption(options []string, target string) bool {
+	for _, opt := range options {
+		if strings.EqualFold(opt, target) {
+			return true
+		}
+	}
+	return false
+}
+
 // SelectBuilder builds SELECT statements clause by clause.
 type SelectBuilder struct {
+	withParts    []Sqlizer
 	prefixes     []Sqlizer
 	options      []string
 	columns      []Sqlizer
@@ -29,6 +39,30 @@ type SelectBuilder struct {
 	limit        string
 	offset       string
 	suffixes     []Sqlizer
+	lockParts    []Sqlizer
+}
+
+// Clone returns a shallow copy of the builder and its clause slices.
+func (b *SelectBuilder) Clone() *SelectBuilder {
+	if b == nil {
+		return nil
+	}
+	return &SelectBuilder{
+		withParts:    cloneSqlizers(b.withParts),
+		prefixes:     cloneSqlizers(b.prefixes),
+		options:      cloneStrings(b.options),
+		columns:      cloneSqlizers(b.columns),
+		from:         b.from,
+		joins:        cloneSqlizers(b.joins),
+		whereParts:   cloneSqlizers(b.whereParts),
+		groupBys:     cloneStrings(b.groupBys),
+		havingParts:  cloneSqlizers(b.havingParts),
+		orderByParts: cloneSqlizers(b.orderByParts),
+		limit:        b.limit,
+		offset:       b.offset,
+		suffixes:     cloneSqlizers(b.suffixes),
+		lockParts:    cloneSqlizers(b.lockParts),
+	}
 }
 
 // ToSql renders the SELECT statement and its bound arguments.
@@ -39,6 +73,14 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	}
 
 	sql := &bytes.Buffer{}
+
+	if len(b.withParts) > 0 {
+		args, err = appendToSql(b.withParts, sql, " ", args)
+		if err != nil {
+			return
+		}
+		sql.WriteString(" ")
+	}
 
 	if len(b.prefixes) > 0 {
 		args, err = appendToSql(b.prefixes, sql, " ", args)
@@ -127,25 +169,27 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 		}
 	}
 
+	if len(b.lockParts) > 0 {
+		sql.WriteString(" ")
+		args, err = appendToSql(b.lockParts, sql, " ", args)
+		if err != nil {
+			return
+		}
+	}
+
 	sqlStr = sql.String()
 	return
 }
 
 // ToCountBuilder rewrites the query into a COUNT query while preserving filters and joins.
 func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
-	hasDistinct := false
-	for _, opt := range b.options {
-		if strings.ToUpper(opt) == "DISTINCT" {
-			hasDistinct = true
-			break
-		}
-	}
+	hasDistinct := hasOption(b.options, "DISTINCT")
 
 	if len(b.groupBys) == 0 && !hasDistinct {
 		// A simple SELECT can count rows directly against the same FROM/WHERE clauses.
 		builder := &SelectBuilder{
+			withParts:  cloneSqlizers(b.withParts),
 			prefixes:   cloneSqlizers(b.prefixes),
-			options:    cloneStrings(b.options),
 			columns:    nil,
 			from:       b.from,
 			joins:      cloneSqlizers(b.joins),
@@ -160,8 +204,8 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 		!strings.Contains(b.groupBys[0], ",") {
 		// A single grouping key without HAVING can be reduced to COUNT(DISTINCT key).
 		builder := &SelectBuilder{
+			withParts:  cloneSqlizers(b.withParts),
 			prefixes:   cloneSqlizers(b.prefixes),
-			options:    cloneStrings(b.options),
 			columns:    nil,
 			from:       b.from,
 			joins:      cloneSqlizers(b.joins),
@@ -173,7 +217,6 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 
 	// Complex GROUP BY or HAVING queries must be counted from a subquery to preserve semantics.
 	subBuilder := &SelectBuilder{
-		prefixes:    cloneSqlizers(b.prefixes),
 		options:     cloneStrings(b.options),
 		columns:     cloneSqlizers(b.columns),
 		from:        b.from,
@@ -181,22 +224,39 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 		whereParts:  cloneSqlizers(b.whereParts),
 		groupBys:    cloneStrings(b.groupBys),
 		havingParts: cloneSqlizers(b.havingParts),
-		suffixes:    cloneSqlizers(b.suffixes),
 	}
 
-	return new(SelectBuilder).
+	builder := new(SelectBuilder).
 		Select("COUNT(1)").
 		FromSelect(subBuilder, "sub")
+	builder.withParts = cloneSqlizers(b.withParts)
+	builder.prefixes = cloneSqlizers(b.prefixes)
+	builder.suffixes = cloneSqlizers(b.suffixes)
+	return builder
 }
 
 // Prefix adds an expression to the beginning of the query
 func (b *SelectBuilder) Prefix(sql string, args ...any) *SelectBuilder {
+	if isWithClause(sql) {
+		return b.With(sql, args...)
+	}
 	return b.PrefixExpr(Expr(sql, args...))
 }
 
 // PrefixExpr adds an expression to the very beginning of the query
 func (b *SelectBuilder) PrefixExpr(expr Sqlizer) *SelectBuilder {
 	b.prefixes = append(b.prefixes, expr)
+	return b
+}
+
+// With adds a WITH clause to the beginning of the query.
+func (b *SelectBuilder) With(sql string, args ...any) *SelectBuilder {
+	return b.WithExpr(Expr(sql, args...))
+}
+
+// WithExpr adds a WITH clause to the beginning of the query.
+func (b *SelectBuilder) WithExpr(expr Sqlizer) *SelectBuilder {
+	b.withParts = append(b.withParts, expr)
 	return b
 }
 
@@ -364,6 +424,9 @@ func (b *SelectBuilder) RemoveOffset() *SelectBuilder {
 
 // Suffix adds an expression to the end of the query
 func (b *SelectBuilder) Suffix(sql string, args ...any) *SelectBuilder {
+	if isLockClause(sql) {
+		return b.Lock(sql, args...)
+	}
 	return b.SuffixExpr(Expr(sql, args...))
 }
 
@@ -373,8 +436,37 @@ func (b *SelectBuilder) SuffixExpr(expr Sqlizer) *SelectBuilder {
 	return b
 }
 
+// Lock adds a row-locking clause such as FOR UPDATE to the end of the query.
+func (b *SelectBuilder) Lock(sql string, args ...any) *SelectBuilder {
+	return b.LockExpr(Expr(sql, args...))
+}
+
+// LockExpr adds a row-locking clause to the end of the query.
+func (b *SelectBuilder) LockExpr(expr Sqlizer) *SelectBuilder {
+	b.lockParts = append(b.lockParts, expr)
+	return b
+}
+
+func isWithClause(sql string) bool {
+	s := strings.TrimSpace(strings.ToUpper(sql))
+	return s == "WITH" || strings.HasPrefix(s, "WITH ")
+}
+
+func isLockClause(sql string) bool {
+	s := strings.TrimSpace(strings.ToUpper(sql))
+	return s == "FOR UPDATE" ||
+		strings.HasPrefix(s, "FOR UPDATE ") ||
+		s == "FOR SHARE" ||
+		strings.HasPrefix(s, "FOR SHARE ") ||
+		s == "FOR KEY SHARE" ||
+		strings.HasPrefix(s, "FOR KEY SHARE ") ||
+		s == "FOR NO KEY UPDATE" ||
+		strings.HasPrefix(s, "FOR NO KEY UPDATE ")
+}
+
 // Clear resets all fields while preserving slice capacity for reuse.
 func (b *SelectBuilder) Clear() *SelectBuilder {
+	b.withParts = resetSlice(b.withParts)
 	b.prefixes = resetSlice(b.prefixes)
 	b.options = resetSlice(b.options)
 	b.columns = resetSlice(b.columns)
@@ -387,5 +479,6 @@ func (b *SelectBuilder) Clear() *SelectBuilder {
 	b.limit = ""
 	b.offset = ""
 	b.suffixes = resetSlice(b.suffixes)
+	b.lockParts = resetSlice(b.lockParts)
 	return b
 }

@@ -128,3 +128,23 @@ func TestInsertBuilderReturningWithMultipleSuffixes(t *testing.T) {
 	expectedArgs := []any{"John", "john@example.com"}
 	assert.Equal(t, expectedArgs, args)
 }
+
+func TestInsertBuilderCloneDoesNotMutateSourceBuilder(t *testing.T) {
+	b := Insert("users").
+		Columns("name").
+		Values("Alice")
+
+	clone := b.Clone().
+		Values("Bob").
+		Returning("id")
+
+	cloneSQL, cloneArgs, err := clone.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "INSERT INTO users (name) VALUES (?),(?) RETURNING id", cloneSQL)
+	assert.Equal(t, []any{"Alice", "Bob"}, cloneArgs)
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "INSERT INTO users (name) VALUES (?)", sql)
+	assert.Equal(t, []any{"Alice"}, args)
+}

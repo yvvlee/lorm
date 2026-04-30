@@ -8,6 +8,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
+
+	"github.com/yvvlee/lorm/names"
 )
 
 type updateSemanticsModel struct {
@@ -56,6 +58,7 @@ func (m *updateSemanticsModel) LormModelDescriptor() *ModelDescriptor {
 
 func newSQLiteSemanticsEngine(t *testing.T) *Engine {
 	t.Helper()
+	skipUnlessSQLite3Available(t)
 
 	engine, err := NewEngine(
 		"sqlite3",
@@ -131,4 +134,26 @@ func TestUpdateSetModelSyncsVersionBackToModel(t *testing.T) {
 	reloaded, err := repo.Get(ctx, model.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), reloaded.Version)
+}
+
+func TestUpdateSetModelCoverage(t *testing.T) {
+	engine := &Engine{config: &Config{escaper: names.NoEscaper}}
+	model := &updateSemanticsModel{
+		ID:        7,
+		Name:      "published",
+		Version:   3,
+		UpdatedAt: time.Unix(100, 0),
+	}
+
+	stmt := Update[*updateSemanticsModel](engine).SetModel(model)
+	require.NoError(t, stmt.err)
+
+	sql, args, err := stmt.builder.ToSql()
+	require.NoError(t, err)
+	require.Len(t, args, 4)
+	require.Equal(t, "UPDATE update_semantics_models SET name = ?, updated_at = ?, version = version+1 WHERE id = ? AND version = ?", sql)
+	require.IsType(t, (*string)(nil), args[0])
+	require.Equal(t, "published", *args[0].(*string))
+	require.Equal(t, int64(7), args[2])
+	require.Equal(t, int64(3), args[3])
 }

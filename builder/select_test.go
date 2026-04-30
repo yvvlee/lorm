@@ -71,6 +71,20 @@ func TestCountBuilder(t *testing.T) {
 		assert.Equal(t, []any{18}, args)
 	})
 
+	t.Run("CopiesNonLockSuffix", func(t *testing.T) {
+		b := Select("id").
+			From("users").
+			Where("age > ?", 21).
+			Suffix("FETCH FIRST ? ROWS ONLY", 10)
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM users WHERE age > ? FETCH FIRST ? ROWS ONLY", sql)
+		assert.Equal(t, []any{21, 10}, args)
+	})
+
 	// Test single GROUP BY field without HAVING clause
 	t.Run("SingleGroupByWithoutHaving", func(t *testing.T) {
 		b := Select("department", "COUNT(*) as cnt").
@@ -144,8 +158,25 @@ func TestCountBuilder(t *testing.T) {
 
 		sql, args, err := countBuilder.ToSql()
 		assert.NoError(t, err)
-		assert.Equal(t, "WITH temp AS (SELECT * FROM departments) SELECT COUNT(1) FROM users u JOIN temp t ON u.dept_id = t.id WHERE u.age > ? FOR UPDATE", sql)
+		assert.Equal(t, "WITH temp AS (SELECT * FROM departments) SELECT COUNT(1) FROM users u JOIN temp t ON u.dept_id = t.id WHERE u.age > ?", sql)
 		assert.Equal(t, []any{21}, args)
+	})
+
+	t.Run("ComplexWithPrefixAndSuffix", func(t *testing.T) {
+		b := Select("u.id", "COUNT(*) AS total").
+			Prefix("WITH temp AS (SELECT * FROM users)").
+			From("temp u").
+			Where("u.age > ?", 21).
+			GroupBy("u.id").
+			Having("COUNT(*) > ?", 1).
+			Suffix("FOR UPDATE")
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "WITH temp AS (SELECT * FROM users) SELECT COUNT(1) FROM (SELECT u.id, COUNT(*) AS total FROM temp u WHERE u.age > ? GROUP BY u.id HAVING COUNT(*) > ?) AS sub", sql)
+		assert.Equal(t, []any{21, 1}, args)
 	})
 
 	// Test complex query with JOINs
@@ -179,6 +210,28 @@ func TestCountBuilderClearDoesNotMutateSourceBuilder(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "SELECT id, name FROM users WHERE age > ? ORDER BY id DESC", sql)
 	assert.Equal(t, []any{18}, args)
+}
+
+func TestSelectBuilderCloneDoesNotMutateSourceBuilder(t *testing.T) {
+	b := Select("id", "name").
+		Prefix("WITH active AS (SELECT * FROM users)").
+		From("users").
+		Where("age > ?", 18).
+		Limit(10).
+		Suffix("FETCH FIRST ? ROWS ONLY", 10).
+		Suffix("FOR UPDATE")
+
+	clone := b.Clone().Select("1").Limit(1)
+
+	cloneSQL, cloneArgs, err := clone.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "WITH active AS (SELECT * FROM users) SELECT 1 FROM users WHERE age > ? LIMIT 1 FETCH FIRST ? ROWS ONLY FOR UPDATE", cloneSQL)
+	assert.Equal(t, []any{18, 10}, cloneArgs)
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "WITH active AS (SELECT * FROM users) SELECT id, name FROM users WHERE age > ? LIMIT 10 FETCH FIRST ? ROWS ONLY FOR UPDATE", sql)
+	assert.Equal(t, []any{18, 10}, args)
 }
 
 func TestSelectBuilderFromSelect(t *testing.T) {

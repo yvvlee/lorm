@@ -1,8 +1,10 @@
 package ormcrud
 
-import "time"
+import (
+	"time"
 
-import benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
+	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
+)
 
 type GormUser struct {
 	ID        int64                  `gorm:"column:id;primaryKey;autoIncrement"`

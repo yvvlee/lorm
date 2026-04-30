@@ -25,6 +25,11 @@ import (
         switch name {
             {{- range $struct.Fields}}
             case "{{.DBField}}":
+                {{- if .EnsureFullName }}
+                if m.{{.EnsureFullName}} == nil {
+                    m.{{.EnsureFullName}} = new({{.EnsureType}})
+                }
+                {{- end }}
                 {{- if .Flag.HasFlag 4 }}
                 return {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})
                 {{- else }}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/yvvlee/lorm/builder"
 )
 
@@ -149,4 +150,91 @@ func TestUpdateStmtResetsAfterCallbacks(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rowsAffected)
 	require.EqualValues(t, 3, loaded.Version)
+}
+
+func TestQueryModelStmtCloneExecDoesNotResetSource(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	ctx := context.Background()
+
+	stmt := Query[*reservedWordModel](engine).Where(builder.Eq{"group": "staff"})
+	clone := stmt.Clone().Where(builder.Eq{"id": int64(7)})
+	_, err := clone.Find(ctx)
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = stmt.Find(ctx)
+	require.NoError(t, err)
+
+	call := recorder.Last()
+	assert.Equal(t, "query", call.kind)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ?", call.query)
+	assert.Equal(t, []any{"staff"}, call.args)
+}
+
+func TestQueryColStmtCloneExecDoesNotResetSource(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	ctx := context.Background()
+
+	stmt := QueryCol[int64](engine).
+		Select("id").
+		From("manual_keys").
+		Where("name = ?", "alice")
+	clone := stmt.Clone().Where("id = ?", "manual-1")
+	_, err := clone.Find(ctx)
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = stmt.Find(ctx)
+	require.NoError(t, err)
+
+	call := recorder.Last()
+	assert.Equal(t, "query", call.kind)
+	assert.Equal(t, "SELECT id FROM manual_keys WHERE name = ?", call.query)
+	assert.Equal(t, []any{"alice"}, call.args)
+}
+
+func TestWriteStmtCloneExecDoesNotResetSource(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	ctx := context.Background()
+
+	updateStmt := Update[*reservedWordModel](engine).
+		SetMap(map[string]any{"group": "base"}).
+		Where(builder.Eq{"id": int64(1)})
+	updateClone := updateStmt.Clone().Where(builder.Eq{"group": "clone"})
+	_, err := updateClone.Exec(ctx)
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = updateStmt.Exec(ctx)
+	require.NoError(t, err)
+	call := recorder.Last()
+	assert.Equal(t, "UPDATE `order` SET `group` = ? WHERE `id` = ?", call.query)
+	assert.Equal(t, []any{"base", int64(1)}, call.args)
+
+	deleteStmt := Delete[*reservedWordModel](engine).Where(builder.Eq{"id": int64(1)})
+	deleteClone := deleteStmt.Clone().Where(builder.Eq{"group": "clone"})
+	_, err = deleteClone.Exec(ctx)
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = deleteStmt.Exec(ctx)
+	require.NoError(t, err)
+	call = recorder.Last()
+	assert.Equal(t, "DELETE FROM `order` WHERE `id` = ?", call.query)
+	assert.Equal(t, []any{int64(1)}, call.args)
+
+	insertStmt := Insert[*reservedWordModel](engine).AddModel(&reservedWordModel{Group: "base"})
+	insertClone := insertStmt.Clone().AddModel(&reservedWordModel{Group: "clone"})
+	_, err = insertClone.Exec(ctx)
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = insertStmt.Exec(ctx)
+	require.NoError(t, err)
+	call = recorder.Last()
+	assert.Equal(t, "INSERT INTO `order` (`group`) VALUES (?)", call.query)
+	assert.Equal(t, []any{"base"}, call.args)
 }

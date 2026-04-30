@@ -8,17 +8,19 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"text/template"
 
 	"github.com/samber/lo"
-	"github.com/yvvlee/lorm"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 
+	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/names"
 )
 
@@ -59,13 +61,45 @@ func NewGenerator(
 
 // Generate emits one generated file for each source file that declares Lorm models.
 func (g *Generator) Generate(files []string) error {
-	pkgs, err := g.load(files)
-	if err != nil {
-		return err
+	for _, group := range groupFilesByDir(files) {
+		pkgs, err := g.load(group)
+		if err != nil {
+			return err
+		}
+		if err := g.generatePackages(pkgs); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func groupFilesByDir(files []string) [][]string {
+	if len(files) == 0 {
+		return nil
+	}
+	byDir := make(map[string][]string)
+	for _, file := range files {
+		dir := filepath.Dir(file)
+		byDir[dir] = append(byDir[dir], file)
+	}
+	dirs := lo.Keys(byDir)
+	sort.Strings(dirs)
+	groups := make([][]string, 0, len(dirs))
+	for _, dir := range dirs {
+		group := byDir[dir]
+		sort.Strings(group)
+		groups = append(groups, group)
+	}
+	return groups
+}
+
+func (g *Generator) generatePackages(pkgs []*packages.Package) error {
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
-			fileInfo := g.extractFile(pkg, file)
+			fileInfo, err := g.extractFile(pkg, file)
+			if err != nil {
+				return err
+			}
 			if fileInfo == nil {
 				continue
 			}
@@ -129,18 +163,18 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 }
 
 // extractFile turns one parsed Go file into a descriptor when it imports lorm.
-func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.FileDescriptor {
+func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.FileDescriptor, error) {
 	lormImportSpec, ok := lo.Find(file.Imports, func(item *ast.ImportSpec) bool {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
 	})
 	if !ok {
 		// If lorm package is not imported, skip processing
-		return nil
+		return nil, nil
 	}
 	tokenFile := g.fileSet.File(file.Pos())
 	filePath := tokenFile.Name()
 	// packages.Load records absolute paths; keep descriptors stable relative to where the CLI was invoked.
-	fileRefPath, _ := filepath.Rel(wd, filePath)
+	fileRefPath := relativeToWorkingDir(filePath)
 
 	// Respect import aliases both when detecting embedded markers and when generating method bodies.
 	lormName := "lorm"
@@ -167,7 +201,11 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.Fil
 		Structs: nil,
 	}
 
+	var extractErr error
 	ast.Inspect(file, func(n ast.Node) bool {
+		if extractErr != nil {
+			return false
+		}
 		switch x := n.(type) {
 		case *ast.GenDecl:
 			if x.Tok == token.TYPE {
@@ -184,26 +222,28 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.Fil
 						Name: typeSpec.Name.Name,
 					}
 					var hasModel bool
-					fields := lo.Filter(structType.Fields.List, func(field *ast.Field, _ int) bool {
+					var fields []*ast.Field
+					for _, field := range structType.Fields.List {
 						// Embedded marker fields opt the struct into generation and may carry table metadata.
 						if len(field.Names) > 0 {
-							return true
+							fields = append(fields, field)
+							continue
 						}
-						fieldType := exprToString(field.Type)
-						if fieldType == unimplementedTable {
+						fieldType, err := exprToString(field.Type)
+						if err == nil && fieldType == unimplementedTable {
 							hasModel = true
 							structInfo.TableName, _ = parseTag(field, g.tagKey)
 							if structInfo.TableName == "" {
 								structInfo.TableName = g.tableMapper.ConvertName(structInfo.Name)
 							}
-							return false
+							continue
 						}
-						if fieldType == unimplementedModel {
+						if err == nil && fieldType == unimplementedModel {
 							hasModel = true
-							return false
+							continue
 						}
-						return true
-					})
+						fields = append(fields, field)
+					}
 					if !hasModel {
 						continue
 					}
@@ -213,35 +253,36 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.Fil
 						if len(field.Names) == 0 {
 							// Flatten named embedded structs so generated field accessors can treat them like direct members.
 							embedFieldPrefix, _ := parseTag(field, g.tagKey)
-							var structType *ast.StructType
-							if ident, ok := field.Type.(*ast.Ident); ok {
-								if ident.Obj != nil {
-									if ts, ok := ident.Obj.Decl.(*ast.TypeSpec); ok {
-										structType, _ = ts.Type.(*ast.StructType)
-									}
-								} else if pkg != nil && pkg.TypesInfo != nil {
-									if obj := pkg.TypesInfo.Uses[ident]; obj != nil {
-										if ts := findTypeSpecByPos(pkg, obj.Pos()); ts != nil {
-											structType, _ = ts.Type.(*ast.StructType)
-										}
-									}
+							embedName, ensureType, embeddedPointer, structType := resolveEmbeddedStruct(pkg, field.Type)
+							if structType == nil {
+								extractErr = fmt.Errorf("unsupported embedded field %q in %s", exprSource(field.Type), structInfo.Name)
+								return false
+							}
+							for _, embedField := range structType.Fields.List {
+								fieldList, err := g.parseField(structInfo.Name+"."+embedName, embedField)
+								if err != nil {
+									extractErr = err
+									return false
 								}
-								if structType != nil {
-									for _, embedField := range structType.Fields.List {
-										fieldList := g.parseField(embedField)
-										if len(fieldList) > 0 {
-											for _, f := range fieldList {
-												f.FullName = ident.Name + "." + f.Name
-												f.DBField = embedFieldPrefix + f.DBField
-											}
-											structInfo.Fields = append(structInfo.Fields, fieldList...)
+								if len(fieldList) > 0 {
+									for _, f := range fieldList {
+										f.FullName = embedName + "." + f.Name
+										f.DBField = embedFieldPrefix + f.DBField
+										if embeddedPointer {
+											f.EnsureFullName = embedName
+											f.EnsureType = ensureType
 										}
 									}
+									structInfo.Fields = append(structInfo.Fields, fieldList...)
 								}
 							}
 						} else {
 							// Regular field
-							fieldList := g.parseField(field)
+							fieldList, err := g.parseField(structInfo.Name, field)
+							if err != nil {
+								extractErr = err
+								return false
+							}
 							if len(fieldList) > 0 {
 								structInfo.Fields = append(structInfo.Fields, fieldList...)
 							}
@@ -254,11 +295,34 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) *lorm.Fil
 		}
 		return true
 	})
-	return &fileInfo
+	if extractErr != nil {
+		return nil, extractErr
+	}
+	return &fileInfo, nil
+}
+
+func relativeToWorkingDir(filePath string) string {
+	fileRefPath, err := filepath.Rel(wd, filePath)
+	if err == nil && !strings.HasPrefix(fileRefPath, ".."+string(filepath.Separator)) && fileRefPath != ".." {
+		return fileRefPath
+	}
+	realWd, wdErr := filepath.EvalSymlinks(wd)
+	realFilePath, fileErr := filepath.EvalSymlinks(filePath)
+	if wdErr == nil && fileErr == nil {
+		if rel, relErr := filepath.Rel(realWd, realFilePath); relErr == nil {
+			return rel
+		}
+	}
+	return fileRefPath
 }
 
 // parseField expands grouped declarations like "A, B string" into one descriptor per field name.
-func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
+func (g *Generator) parseField(structName string, field *ast.Field) ([]*lorm.FieldDescriptor, error) {
+	fieldType, err := exprToString(field.Type)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported field type %q for %s.%s", exprSource(field.Type), structName, fieldNames(field))
+	}
+
 	dbField, flag := parseTag(field, g.tagKey)
 	var fields []*lorm.FieldDescriptor
 	for i, name := range field.Names {
@@ -275,10 +339,10 @@ func (g *Generator) parseField(field *ast.Field) []*lorm.FieldDescriptor {
 			}
 		}
 
-		fieldInfo.Type = exprToString(field.Type)
+		fieldInfo.Type = fieldType
 		fields = append(fields, fieldInfo)
 	}
-	return fields
+	return fields, nil
 }
 
 // parseTag splits the lorm tag into an optional database field name and any flag tokens.
@@ -307,21 +371,147 @@ func parseFlag(flags *[]string, key string) bool {
 }
 
 // exprToString normalizes the subset of Go field types that descriptors need to serialize.
-func exprToString(expr ast.Expr) string {
+func exprToString(expr ast.Expr) (string, error) {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name, nil
+	case *ast.SelectorExpr:
+		selector, err := exprToString(x.X)
+		if err != nil {
+			return "", err
+		}
+		return selector + "." + x.Sel.Name, nil
+	case *ast.StarExpr:
+		elem, err := exprToString(x.X)
+		if err != nil {
+			return "", err
+		}
+		return "*" + elem, nil
+	case *ast.ArrayType:
+		elem, err := exprToString(x.Elt)
+		if err != nil {
+			return "", err
+		}
+		if x.Len == nil {
+			return "[]" + elem, nil
+		}
+		return "[" + exprSource(x.Len) + "]" + elem, nil
+	case *ast.MapType:
+		key, err := exprToString(x.Key)
+		if err != nil {
+			return "", err
+		}
+		value, err := exprToString(x.Value)
+		if err != nil {
+			return "", err
+		}
+		return "map[" + key + "]" + value, nil
+	default:
+		return "", fmt.Errorf("unsupported field type %q", exprSource(expr))
+	}
+}
+
+func fieldNames(field *ast.Field) string {
+	names := lo.Map(field.Names, func(name *ast.Ident, _ int) string {
+		return name.Name
+	})
+	return strings.Join(names, ", ")
+}
+
+func exprSource(expr ast.Expr) string {
+	var buf bytes.Buffer
+	if err := format.Node(&buf, token.NewFileSet(), expr); err != nil {
+		return fmt.Sprintf("%T", expr)
+	}
+	return buf.String()
+}
+
+func resolveEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (string, string, bool, *ast.StructType) {
+	expr, pointer := unwrapPointerExpr(expr)
+	embedName := embeddedFieldName(expr)
+	if embedName == "" {
+		return "", "", false, nil
+	}
+	ensureType, err := exprToString(expr)
+	if err != nil {
+		return "", "", false, nil
+	}
+
+	var obj types.Object
+	switch x := expr.(type) {
+	case *ast.Ident:
+		if pkg != nil && pkg.TypesInfo != nil {
+			obj = pkg.TypesInfo.Uses[x]
+			if obj == nil {
+				obj = pkg.TypesInfo.Defs[x]
+			}
+		}
+		if obj == nil && x.Obj != nil {
+			if ts, ok := x.Obj.Decl.(*ast.TypeSpec); ok {
+				if structType, ok := ts.Type.(*ast.StructType); ok {
+					return embedName, ensureType, pointer, structType
+				}
+			}
+		}
+	case *ast.SelectorExpr:
+		if pkg != nil && pkg.TypesInfo != nil {
+			obj = pkg.TypesInfo.Uses[x.Sel]
+		}
+	}
+	if obj == nil {
+		return "", "", false, nil
+	}
+	ts := findTypeSpecByObject(pkg, obj)
+	if ts == nil {
+		return "", "", false, nil
+	}
+	structType, _ := ts.Type.(*ast.StructType)
+	return embedName, ensureType, pointer, structType
+}
+
+func unwrapPointerExpr(expr ast.Expr) (ast.Expr, bool) {
+	pointer := false
+	for {
+		star, ok := expr.(*ast.StarExpr)
+		if !ok {
+			return expr, pointer
+		}
+		pointer = true
+		expr = star.X
+	}
+}
+
+func embeddedFieldName(expr ast.Expr) string {
 	switch x := expr.(type) {
 	case *ast.Ident:
 		return x.Name
 	case *ast.SelectorExpr:
-		return exprToString(x.X) + "." + x.Sel.Name
-	case *ast.StarExpr:
-		return "*" + exprToString(x.X)
-	case *ast.ArrayType:
-		return "[]" + exprToString(x.Elt)
-	case *ast.MapType:
-		return "map[" + exprToString(x.Key) + "]" + exprToString(x.Value)
+		return x.Sel.Name
 	default:
 		return ""
 	}
+}
+
+func findTypeSpecByObject(pkg *packages.Package, obj types.Object) *ast.TypeSpec {
+	return findTypeSpecByObjectSeen(pkg, obj, make(map[*packages.Package]bool))
+}
+
+func findTypeSpecByObjectSeen(pkg *packages.Package, obj types.Object, seen map[*packages.Package]bool) *ast.TypeSpec {
+	if pkg == nil || obj == nil || seen[pkg] {
+		return nil
+	}
+	seen[pkg] = true
+	if ts := findTypeSpecByPos(pkg, obj.Pos()); ts != nil {
+		return ts
+	}
+	importPaths := lo.Keys(pkg.Imports)
+	sort.Strings(importPaths)
+	for _, importPath := range importPaths {
+		if ts := findTypeSpecByObjectSeen(pkg.Imports[importPath], obj, seen); ts != nil {
+			return ts
+		}
+	}
+	return nil
 }
 
 func findTypeSpecByPos(pkg *packages.Package, pos token.Pos) *ast.TypeSpec {
@@ -350,5 +540,9 @@ func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("template execution failed: %v\n", err)
 	}
-	return format.Source(buf.Bytes())
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to format generated code: %w", err)
+	}
+	return formatted, nil
 }

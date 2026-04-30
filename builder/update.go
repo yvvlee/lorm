@@ -27,6 +27,25 @@ type setClause struct {
 	value  any
 }
 
+// Clone returns a shallow copy of the builder and its clause slices.
+func (b *UpdateBuilder) Clone() *UpdateBuilder {
+	if b == nil {
+		return nil
+	}
+	return &UpdateBuilder{
+		prefixes:   cloneSqlizers(b.prefixes),
+		table:      b.table,
+		setClauses: append([]setClause(nil), b.setClauses...),
+		from:       b.from,
+		whereParts: cloneSqlizers(b.whereParts),
+		orderBys:   cloneStrings(b.orderBys),
+		limit:      b.limit,
+		offset:     b.offset,
+		suffixes:   cloneSqlizers(b.suffixes),
+		returning:  cloneStrings(b.returning),
+	}
+}
+
 // ToSql renders the UPDATE statement and its bound arguments.
 func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 	if len(b.table) == 0 {

@@ -40,6 +40,18 @@ func (s *InsertStmt[T]) reset() {
 	s.ignore = false
 }
 
+// Clone returns a copy of the statement state. Terminal methods still reset
+// only the statement they are called on.
+func (s *InsertStmt[T]) Clone() *InsertStmt[T] {
+	return &InsertStmt[T]{
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+		models:  append([]T(nil), s.models...),
+		err:     s.err,
+		ignore:  s.ignore,
+	}
+}
+
 // AddModel appends a model to the insert batch.
 func (s *InsertStmt[T]) AddModel(model T) *InsertStmt[T] {
 	s.models = append(s.models, model)
@@ -108,10 +120,8 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 
 	if len(s.models) == 1 && s.engine.SupportsLastInsertId() {
 		return rowsAffected, fillModelID(table, result)
-	} else if len(s.models) > 1 && !useReturning {
-		// Log that bulk insert ID backfill is skipped for drivers without RETURNING support (e.g. MySQL)
-		s.engine.logger.DebugContext(ctx, "lorm: bulk insert ID backfill is skipped because the database driver does not support RETURNING")
 	}
+	// bulk insert ID backfill is skipped for drivers without RETURNING support (e.g. MySQL)
 	return rowsAffected, nil
 }
 
@@ -159,9 +169,9 @@ func (s *InsertStmt[T]) execWithReturning(ctx context.Context, pkColumn string) 
 		return 0, err
 	}
 	defer rows.Close()
-	returnedIDs := make([]any, 0, len(s.models))
+	returnedIDs := make([]int64, 0, len(s.models))
 	for rows.Next() {
-		var returnedID any
+		var returnedID int64
 		if err = rows.Scan(&returnedID); err != nil {
 			return 0, err
 		}

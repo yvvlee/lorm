@@ -135,3 +135,23 @@ func TestUpdateBuilderReturningWithMultipleSuffixes(t *testing.T) {
 	expectedArgs := []any{99.99, "electronics"}
 	assert.Equal(t, expectedArgs, args)
 }
+
+func TestUpdateBuilderCloneDoesNotMutateSourceBuilder(t *testing.T) {
+	b := Update("users").
+		Set("name", "Alice").
+		Where("id = ?", 1)
+
+	clone := b.Clone().
+		Set("status", "active").
+		Where("tenant_id = ?", 2)
+
+	cloneSQL, cloneArgs, err := clone.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "UPDATE users SET name = ?, status = ? WHERE id = ? AND tenant_id = ?", cloneSQL)
+	assert.Equal(t, []any{"Alice", "active", 1, 2}, cloneArgs)
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "UPDATE users SET name = ? WHERE id = ?", sql)
+	assert.Equal(t, []any{"Alice", 1}, args)
+}

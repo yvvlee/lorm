@@ -46,6 +46,16 @@ func (s *QueryModelStmt[T]) reset() {
 	s.err = nil
 }
 
+// Clone returns a copy of the statement state. Terminal methods still reset
+// only the statement they are called on.
+func (s *QueryModelStmt[T]) Clone() *QueryModelStmt[T] {
+	return &QueryModelStmt[T]{
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+		err:     s.err,
+	}
+}
+
 // Get returns the first matching model or the zero value when no row matches.
 func (s *QueryModelStmt[T]) Get(ctx context.Context) (T, error) {
 	var t T
@@ -78,7 +88,7 @@ func (s *QueryModelStmt[T]) Exist(ctx context.Context) (bool, error) {
 	if s.err != nil {
 		return false, s.err
 	}
-	query, args, err := s.builder.Limit(1).ToSql()
+	query, args, err := s.builder.Select("1").Limit(1).ToSql()
 	if err != nil {
 		return false, err
 	}
@@ -124,7 +134,7 @@ func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, u
 	}
 	offset := (page - 1) * size
 	countStmt := QueryCol[uint64](s.engine)
-	// Count on a cloned builder so filters stay in sync with the data query.
+	// Count with a derived builder so filters stay in sync with the data query.
 	countStmt.builder = s.builder.ToCountBuilder()
 	count, ok, err := countStmt.Get(ctx)
 	if err != nil {
@@ -364,6 +374,15 @@ type QueryColStmt[T any] struct {
 
 func (s *QueryColStmt[T]) reset() {
 	s.builder = new(builder.SelectBuilder)
+}
+
+// Clone returns a copy of the statement state. Terminal methods still reset
+// only the statement they are called on.
+func (s *QueryColStmt[T]) Clone() *QueryColStmt[T] {
+	return &QueryColStmt[T]{
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+	}
 }
 
 // Get returns the first column value and whether a row was found.

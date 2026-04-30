@@ -84,3 +84,23 @@ func TestDeleteBuilderReturningWithMultipleSuffixes(t *testing.T) {
 	expectedArgs := []any{true}
 	assert.Equal(t, expectedArgs, args)
 }
+
+func TestDeleteBuilderCloneDoesNotMutateSourceBuilder(t *testing.T) {
+	b := Delete("users").
+		Where("status = ?", "inactive").
+		Limit(10)
+
+	clone := b.Clone().
+		Where("tenant_id = ?", 2).
+		Limit(1)
+
+	cloneSQL, cloneArgs, err := clone.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "DELETE FROM users WHERE status = ? AND tenant_id = ? LIMIT 1", cloneSQL)
+	assert.Equal(t, []any{"inactive", 2}, cloneArgs)
+
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "DELETE FROM users WHERE status = ? LIMIT 10", sql)
+	assert.Equal(t, []any{"inactive"}, args)
+}

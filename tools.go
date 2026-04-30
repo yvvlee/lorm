@@ -3,9 +3,8 @@ package lorm
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
-
-	"github.com/spf13/cast"
 )
 
 func fillModelID(table Table, result sql.Result) error {
@@ -14,110 +13,276 @@ func fillModelID(table Table, result sql.Result) error {
 	if len(primaryKeys) != 1 {
 		return nil
 	}
-	primaryPointer := table.LormFieldPtr(primaryKeys[0])
+	ptr := table.LormFieldPtr(primaryKeys[0])
 	// Only backfill auto-generated keys when the model has not already set one.
-	if cast.ToUint64(primaryPointer) == 0 {
-		lastInsertId, err := result.LastInsertId()
+	if primaryKeyIsZero(ptr) {
+		id, err := result.LastInsertId()
 		if err != nil {
 			return err
 		}
-		return fillModelPrimaryKey(primaryPointer, lastInsertId)
+		return fillModelPrimaryKey(ptr, id)
 	}
 	return nil
 }
 
-func fillModelPrimaryKey(primaryPointer any, value any) error {
-	switch id := primaryPointer.(type) {
-	case *uint64:
-		*id = cast.ToUint64(value)
-	case *int64:
-		*id = cast.ToInt64(value)
-	case *uint32:
-		*id = cast.ToUint32(value)
-	case *int32:
-		*id = cast.ToInt32(value)
-	case *uint16:
-		*id = cast.ToUint16(value)
-	case *int16:
-		*id = cast.ToInt16(value)
-	case *uint8:
-		*id = cast.ToUint8(value)
-	case *int8:
-		*id = cast.ToInt8(value)
-	case *uint:
-		*id = cast.ToUint(value)
+func primaryKeyIsZero(ptr any) bool {
+	switch p := ptr.(type) {
 	case *int:
-		*id = cast.ToInt(value)
+		return p == nil || *p == 0
+	case *int8:
+		return p == nil || *p == 0
+	case *int16:
+		return p == nil || *p == 0
+	case *int32:
+		return p == nil || *p == 0
+	case *int64:
+		return p == nil || *p == 0
+	case *uint:
+		return p == nil || *p == 0
+	case *uint8:
+		return p == nil || *p == 0
+	case *uint16:
+		return p == nil || *p == 0
+	case *uint32:
+		return p == nil || *p == 0
+	case *uint64:
+		return p == nil || *p == 0
+	case **int:
+		return p == nil || *p == nil || **p == 0
+	case **int8:
+		return p == nil || *p == nil || **p == 0
+	case **int16:
+		return p == nil || *p == nil || **p == 0
+	case **int32:
+		return p == nil || *p == nil || **p == 0
+	case **int64:
+		return p == nil || *p == nil || **p == 0
+	case **uint:
+		return p == nil || *p == nil || **p == 0
+	case **uint8:
+		return p == nil || *p == nil || **p == 0
+	case **uint16:
+		return p == nil || *p == nil || **p == 0
+	case **uint32:
+		return p == nil || *p == nil || **p == 0
+	case **uint64:
+		return p == nil || *p == nil || **p == 0
 	default:
-		return fmt.Errorf("unsupported primary key type %T", primaryPointer)
+		return true
+	}
+}
+
+func fillModelPrimaryKey(ptr any, value int64) error {
+	switch p := ptr.(type) {
+	case *int:
+		if err := checkSignedPrimaryKey(ptr, value, strconv.IntSize); err != nil {
+			return err
+		}
+		*p = int(value)
+	case *int8:
+		if err := checkSignedPrimaryKey(ptr, value, 8); err != nil {
+			return err
+		}
+		*p = int8(value)
+	case *int16:
+		if err := checkSignedPrimaryKey(ptr, value, 16); err != nil {
+			return err
+		}
+		*p = int16(value)
+	case *int32:
+		if err := checkSignedPrimaryKey(ptr, value, 32); err != nil {
+			return err
+		}
+		*p = int32(value)
+	case *int64:
+		*p = value
+	case *uint:
+		if err := checkUnsignedPrimaryKey(ptr, value, strconv.IntSize); err != nil {
+			return err
+		}
+		*p = uint(value)
+	case *uint8:
+		if err := checkUnsignedPrimaryKey(ptr, value, 8); err != nil {
+			return err
+		}
+		*p = uint8(value)
+	case *uint16:
+		if err := checkUnsignedPrimaryKey(ptr, value, 16); err != nil {
+			return err
+		}
+		*p = uint16(value)
+	case *uint32:
+		if err := checkUnsignedPrimaryKey(ptr, value, 32); err != nil {
+			return err
+		}
+		*p = uint32(value)
+	case *uint64:
+		if err := checkUnsignedPrimaryKey(ptr, value, 64); err != nil {
+			return err
+		}
+		*p = uint64(value)
+	case **int:
+		if err := checkSignedPrimaryKey(ptr, value, strconv.IntSize); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, int(value))
+	case **int8:
+		if err := checkSignedPrimaryKey(ptr, value, 8); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, int8(value))
+	case **int16:
+		if err := checkSignedPrimaryKey(ptr, value, 16); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, int16(value))
+	case **int32:
+		if err := checkSignedPrimaryKey(ptr, value, 32); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, int32(value))
+	case **int64:
+		return setPrimaryKeyPtr(p, value)
+	case **uint:
+		if err := checkUnsignedPrimaryKey(ptr, value, strconv.IntSize); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, uint(value))
+	case **uint8:
+		if err := checkUnsignedPrimaryKey(ptr, value, 8); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, uint8(value))
+	case **uint16:
+		if err := checkUnsignedPrimaryKey(ptr, value, 16); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, uint16(value))
+	case **uint32:
+		if err := checkUnsignedPrimaryKey(ptr, value, 32); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, uint32(value))
+	case **uint64:
+		if err := checkUnsignedPrimaryKey(ptr, value, 64); err != nil {
+			return err
+		}
+		return setPrimaryKeyPtr(p, uint64(value))
+	default:
+		return fmt.Errorf("unsupported primary key type %T", ptr)
 	}
 	return nil
 }
 
+func checkSignedPrimaryKey(ptr any, value int64, bits int) error {
+	if bits >= 64 {
+		return nil
+	}
+	min := -int64(1 << (bits - 1))
+	max := int64(1<<(bits-1)) - 1
+	if value < min || value > max {
+		return fmt.Errorf("primary key value %d overflows %T", value, ptr)
+	}
+	return nil
+}
+
+func checkUnsignedPrimaryKey(ptr any, value int64, bits int) error {
+	if value < 0 {
+		return fmt.Errorf("primary key value %d overflows %T", value, ptr)
+	}
+	if bits < 64 && uint64(value) > (uint64(1)<<bits)-1 {
+		return fmt.Errorf("primary key value %d overflows %T", value, ptr)
+	}
+	return nil
+}
+
+func setPrimaryKeyPtr[T any](p **T, value T) error {
+	if p == nil {
+		return fmt.Errorf("unsupported primary key type %T", p)
+	}
+	if *p == nil {
+		v := value
+		*p = &v
+		return nil
+	}
+	**p = value
+	return nil
+}
+
+// fillCurrentTime populates managed time fields without overwriting explicit values.
 func fillCurrentTime(value any, now time.Time) {
-	// Populate managed time fields without overwriting explicit values.
 	switch v := value.(type) {
 	case *time.Time:
-		fillZeroValue(v, now)
+		fillZero(v, now)
 	case **time.Time:
-		fillZeroPointerValue(v, now)
+		fillZeroPtr(v, now)
+	case *sql.NullTime:
+		if !v.Valid || v.Time.IsZero() {
+			*v = sql.NullTime{Time: now, Valid: true}
+		}
+	case **sql.NullTime:
+		fillZeroPtr(v, sql.NullTime{Time: now, Valid: true})
 	case *int64:
-		fillZeroValue(v, now.Unix())
+		fillZero(v, now.Unix())
 	case **int64:
-		fillZeroPointerValue(v, now.Unix())
+		fillZeroPtr(v, now.Unix())
 	case *uint64:
-		fillZeroValue(v, uint64(now.Unix()))
+		fillZero(v, uint64(now.Unix()))
 	case **uint64:
-		fillZeroPointerValue(v, uint64(now.Unix()))
+		fillZeroPtr(v, uint64(now.Unix()))
 	case *int32:
-		fillZeroValue(v, int32(now.Unix()))
+		fillZero(v, int32(now.Unix()))
 	case **int32:
-		fillZeroPointerValue(v, int32(now.Unix()))
+		fillZeroPtr(v, int32(now.Unix()))
 	case *uint32:
-		fillZeroValue(v, uint32(now.Unix()))
+		fillZero(v, uint32(now.Unix()))
 	case **uint32:
-		fillZeroPointerValue(v, uint32(now.Unix()))
+		fillZeroPtr(v, uint32(now.Unix()))
 	case *int:
-		fillZeroValue(v, int(now.Unix()))
+		fillZero(v, int(now.Unix()))
 	case **int:
-		fillZeroPointerValue(v, int(now.Unix()))
+		fillZeroPtr(v, int(now.Unix()))
 	case *string:
-		fillZeroValue(v, now.Format(time.DateTime))
+		fillZero(v, now.Format(time.DateTime))
 	case **string:
-		fillZeroPointerValue(v, now.Format(time.DateTime))
+		fillZeroPtr(v, now.Format(time.DateTime))
 	}
 }
 
 func newUpdatedFieldValue(value any, now time.Time) (updatedValue any, syncValue func(), ok bool) {
 	switch v := value.(type) {
 	case *time.Time:
-		return newUpdatedValue(v, now)
+		return setUpdated(v, now)
 	case **time.Time:
-		return newUpdatedPointerValue(v, now)
+		return setUpdatedPtr(v, now)
+	case *sql.NullTime:
+		return setUpdated(v, sql.NullTime{Time: now, Valid: true})
+	case **sql.NullTime:
+		return setUpdatedPtr(v, sql.NullTime{Time: now, Valid: true})
 	case *int64:
-		return newUpdatedValue(v, now.Unix())
+		return setUpdated(v, now.Unix())
 	case **int64:
-		return newUpdatedPointerValue(v, now.Unix())
+		return setUpdatedPtr(v, now.Unix())
 	case *uint64:
-		return newUpdatedValue(v, uint64(now.Unix()))
+		return setUpdated(v, uint64(now.Unix()))
 	case **uint64:
-		return newUpdatedPointerValue(v, uint64(now.Unix()))
+		return setUpdatedPtr(v, uint64(now.Unix()))
 	case *int32:
-		return newUpdatedValue(v, int32(now.Unix()))
+		return setUpdated(v, int32(now.Unix()))
 	case **int32:
-		return newUpdatedPointerValue(v, int32(now.Unix()))
+		return setUpdatedPtr(v, int32(now.Unix()))
 	case *uint32:
-		return newUpdatedValue(v, uint32(now.Unix()))
+		return setUpdated(v, uint32(now.Unix()))
 	case **uint32:
-		return newUpdatedPointerValue(v, uint32(now.Unix()))
+		return setUpdatedPtr(v, uint32(now.Unix()))
 	case *int:
-		return newUpdatedValue(v, int(now.Unix()))
+		return setUpdated(v, int(now.Unix()))
 	case **int:
-		return newUpdatedPointerValue(v, int(now.Unix()))
+		return setUpdatedPtr(v, int(now.Unix()))
 	case *string:
-		return newUpdatedValue(v, now.Format(time.DateTime))
+		return setUpdated(v, now.Format(time.DateTime))
 	case **string:
-		return newUpdatedPointerValue(v, now.Format(time.DateTime))
+		return setUpdatedPtr(v, now.Format(time.DateTime))
 	default:
 		return nil, nil, false
 	}
@@ -125,91 +290,89 @@ func newUpdatedFieldValue(value any, now time.Time) (updatedValue any, syncValue
 
 func incrementVersionValue(value any) {
 	switch v := value.(type) {
-	case *uint64:
-		incrementValue(v)
-	case **uint64:
-		incrementPointerValue(v)
-	case *int64:
-		incrementValue(v)
-	case **int64:
-		incrementPointerValue(v)
-	case *uint32:
-		incrementValue(v)
-	case **uint32:
-		incrementPointerValue(v)
-	case *int32:
-		incrementValue(v)
-	case **int32:
-		incrementPointerValue(v)
-	case *uint16:
-		incrementValue(v)
-	case **uint16:
-		incrementPointerValue(v)
-	case *int16:
-		incrementValue(v)
-	case **int16:
-		incrementPointerValue(v)
-	case *uint8:
-		incrementValue(v)
-	case **uint8:
-		incrementPointerValue(v)
-	case *int8:
-		incrementValue(v)
-	case **int8:
-		incrementPointerValue(v)
-	case *uint:
-		incrementValue(v)
-	case **uint:
-		incrementPointerValue(v)
 	case *int:
-		incrementValue(v)
+		*v++
+	case *int8:
+		*v++
+	case *int16:
+		*v++
+	case *int32:
+		*v++
+	case *int64:
+		*v++
+	case *uint:
+		*v++
+	case *uint8:
+		*v++
+	case *uint16:
+		*v++
+	case *uint32:
+		*v++
+	case *uint64:
+		*v++
 	case **int:
-		incrementPointerValue(v)
+		incrPtr(v)
+	case **int8:
+		incrPtr(v)
+	case **int16:
+		incrPtr(v)
+	case **int32:
+		incrPtr(v)
+	case **int64:
+		incrPtr(v)
+	case **uint:
+		incrPtr(v)
+	case **uint8:
+		incrPtr(v)
+	case **uint16:
+		incrPtr(v)
+	case **uint32:
+		incrPtr(v)
+	case **uint64:
+		incrPtr(v)
 	}
 }
 
-type versionNumber interface {
-	~uint64 | ~int64 | ~uint32 | ~int32 | ~uint16 | ~int16 | ~uint8 | ~int8 | ~uint | ~int
+// --- generic helpers ---
+
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
-func fillZeroValue[T comparable](value *T, current T) {
+func fillZero[T comparable](p *T, val T) {
 	var zero T
-	if *value == zero {
-		*value = current
+	if *p == zero {
+		*p = val
 	}
 }
 
-func fillZeroPointerValue[T comparable](value **T, current T) {
-	if *value == nil {
-		currentValue := current
-		*value = &currentValue
-		return
+func fillZeroPtr[T comparable](p **T, val T) {
+	if *p == nil {
+		v := val
+		*p = &v
+	} else {
+		fillZero(*p, val)
 	}
-	fillZeroValue(*value, current)
 }
 
-func newUpdatedValue[T any](value *T, updated T) (updatedValue any, syncValue func(), ok bool) {
-	return &updated, func() { *value = updated }, true
+func setUpdated[T any](p *T, val T) (any, func(), bool) {
+	return &val, func() { *p = val }, true
 }
 
-func newUpdatedPointerValue[T any](value **T, updated T) (updatedValue any, syncValue func(), ok bool) {
-	return &updated, func() {
-		if *value == nil {
-			*value = new(T)
+func setUpdatedPtr[T any](p **T, val T) (any, func(), bool) {
+	return &val, func() {
+		if *p == nil {
+			*p = new(T)
 		}
-		**value = updated
+		**p = val
 	}, true
 }
 
-func incrementValue[T versionNumber](value *T) {
-	(*value)++
-}
-
-func incrementPointerValue[T versionNumber](value **T) {
-	if *value == nil {
-		current := T(1)
-		*value = &current
-		return
+func incrPtr[T integer](p **T) {
+	if *p == nil {
+		v := T(1)
+		*p = &v
+	} else {
+		**p++
 	}
-	(**value)++
 }

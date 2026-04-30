@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/names"
 )

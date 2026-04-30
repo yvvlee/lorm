@@ -84,9 +84,11 @@ func (m *ModelDescriptor) AllFields() []string {
 
 // FieldDescriptor stores field information
 type FieldDescriptor struct {
-	Name     string
-	FullName string
-	DBField  string
-	Type     string
-	Flag     FieldFlag
+	Name           string
+	FullName       string
+	DBField        string
+	Type           string
+	Flag           FieldFlag
+	EnsureFullName string `json:",omitempty"`
+	EnsureType     string `json:",omitempty"`
 }

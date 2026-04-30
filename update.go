@@ -35,6 +35,17 @@ func (s *UpdateStmt[T]) reset() {
 	s.err = nil
 }
 
+// Clone returns a copy of the statement state. Terminal methods still reset
+// only the statement they are called on.
+func (s *UpdateStmt[T]) Clone() *UpdateStmt[T] {
+	return &UpdateStmt[T]{
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+		after:   append([]func(rowsAffected int64){}, s.after...),
+		err:     s.err,
+	}
+}
+
 // Exec executes the built UPDATE statement.
 func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	defer s.reset()

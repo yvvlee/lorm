@@ -158,6 +158,8 @@ _, err = lorm.DeleteModel[*User](engine).
 Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
 `Update` / `Delete` chain for each operation, and do not share the same
 statement across goroutines.
+Use `Clone()` when one operation needs to branch from an existing statement.
+Terminal methods still reset only the statement they are called on.
 
 ## Examples
 
@@ -259,6 +261,11 @@ func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint
 		Page(ctx, page, size)
 }
 ```
+
+> **Note**: `Lock` and `LockByField` append `FOR UPDATE`. They only have
+> practical locking effect inside `Engine.TX(...)` or
+> `Engine.TXWithOptions(...)`. Outside a transaction the database will not keep
+> the row lock beyond the statement itself.
 
 ## Custom Projection Models
 
@@ -441,6 +448,8 @@ Generator behavior worth knowing:
 - Table names default to snake_case and can be overridden with a tag on the
   embedded `lorm.UnimplementedTable`.
 - Field names default to snake_case and can be overridden with field tags.
+- If a field needs a `lorm` tag, declare it on its own line instead of grouped
+  declarations such as `A, B int`.
 - Embedded structs are flattened into the generated field accessors.
 - Tags on embedded structs can prepend a prefix to the flattened field names.
 

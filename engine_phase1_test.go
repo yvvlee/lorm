@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/names"
 )
@@ -120,8 +121,68 @@ func TestRepositoryMethodsEscapeIdentifiers(t *testing.T) {
 	assert.False(t, exists)
 	call = recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ? LIMIT 1", call.query)
+	assert.Equal(t, "SELECT 1 FROM `order` WHERE `group` = ? LIMIT 1", call.query)
 	assert.Equal(t, []any{"updated"}, call.args)
+}
+
+func TestRepositoryWrapperMethodsWithCaptureEngine(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	repo := NewRepository[*reservedWordModel](engine)
+	ctx := context.Background()
+
+	rowsAffected, err := repo.Insert(ctx, &reservedWordModel{Group: "first"})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rowsAffected)
+	call := recorder.Last()
+	assert.Equal(t, "exec", call.kind)
+	assert.Equal(t, "INSERT INTO `order` (`group`) VALUES (?)", call.query)
+	assert.Equal(t, []any{"first"}, call.args)
+
+	recorder.Reset()
+	rowsAffected, err = repo.InsertAll(ctx, []*reservedWordModel{{Group: "a"}, {Group: "b"}})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rowsAffected)
+	call = recorder.Last()
+	assert.Equal(t, "exec", call.kind)
+	assert.Equal(t, "INSERT INTO `order` (`group`) VALUES (?),(?)", call.query)
+	assert.Equal(t, []any{"a", "b"}, call.args)
+
+	recorder.Reset()
+	rowsAffected, err = repo.InsertIgnore(ctx, &reservedWordModel{Group: "ignored"})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rowsAffected)
+	call = recorder.Last()
+	assert.Equal(t, "exec", call.kind)
+	assert.Equal(t, "INSERT IGNORE INTO `order` (`group`) VALUES (?)", call.query)
+	assert.Equal(t, []any{"ignored"}, call.args)
+
+	recorder.Reset()
+	rowsAffected, err = repo.InsertIgnoreAll(ctx, []*reservedWordModel{{Group: "x"}, {Group: "y"}})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rowsAffected)
+	call = recorder.Last()
+	assert.Equal(t, "exec", call.kind)
+	assert.Equal(t, "INSERT IGNORE INTO `order` (`group`) VALUES (?),(?)", call.query)
+	assert.Equal(t, []any{"x", "y"}, call.args)
+
+	recorder.Reset()
+	exists, err := repo.Exist(ctx, int64(7))
+	require.NoError(t, err)
+	assert.False(t, exists)
+	call = recorder.Last()
+	assert.Equal(t, "query", call.kind)
+	assert.Equal(t, "SELECT 1 FROM `order` WHERE `id` = ? LIMIT 1", call.query)
+	assert.Equal(t, []any{int64(7)}, call.args)
+
+	recorder.Reset()
+	model, err := repo.Lock(ctx, int64(9))
+	require.NoError(t, err)
+	assert.Nil(t, model)
+	call = recorder.Last()
+	assert.Equal(t, "query", call.kind)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ? FOR UPDATE", call.query)
+	assert.Equal(t, []any{int64(9)}, call.args)
 }
 
 func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {

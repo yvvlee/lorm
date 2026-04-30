@@ -153,6 +153,11 @@ func TestCustomConversionIsUsedForQueryArgsAndScan(t *testing.T) {
 	assert.Equal(t, []byte("1,2,3"), call.args[0])
 }
 
+func TestConversionHelpersExtraBranches(t *testing.T) {
+	assert.Empty(t, adaptDBArgs(nil))
+	assert.Nil(t, normalizeDBArg(nil))
+}
+
 type conversionRecorder struct {
 	mu          sync.Mutex
 	execCalls   []conversionCall

@@ -127,6 +127,8 @@ _, err = lorm.DeleteModel[*User](engine).
 Statement builder 是轻量级对象。每次数据库操作都应重新创建一条新的
 `Query` / `Insert` / `Update` / `Delete` 调用链，不要在多个 goroutine
 之间共享同一个 statement。
+需要基于已有条件派生查询时，使用 `Clone()`。
+终态方法仍然只会重置被调用的那个 statement。
 
 ## 示例
 
@@ -225,6 +227,10 @@ func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint
 		Page(ctx, page, size)
 }
 ```
+
+> **说明**：`Lock` 和 `LockByField` 会在查询后面追加 `FOR UPDATE`。
+> 它们只有放在 `Engine.TX(...)` 或 `Engine.TXWithOptions(...)` 里才有实际的加锁意义。
+> 不在事务里调用时，数据库不会在语句结束后继续保留这把行锁。
 
 ## 自定义投影模型
 
@@ -405,6 +411,8 @@ lormgen --ignore="*_temp.go" --ignore="*_old.go" ./models
 - 表名默认使用 snake_case，可以通过嵌入的 `lorm.UnimplementedTable`
   tag 覆盖。
 - 字段名默认使用 snake_case，也可以通过字段 tag 覆盖。
+- 如果字段需要 `lorm` tag，请单独写一行，不要和其他字段写成
+  `A, B int` 这种合并声明。
 - 内嵌结构体会被展开到生成的字段访问器中。
 - 给内嵌结构体加 tag 可以为展开后的字段名加前缀。
 

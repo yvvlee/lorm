@@ -2,6 +2,9 @@ package lorm
 
 import (
 	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type TestRepository interface {
@@ -29,4 +32,20 @@ func NewTestRepository(engine *Engine) *TestRepositoryImpl {
 	return &TestRepositoryImpl{
 		Repository: NewRepository[*Test](engine),
 	}
+}
+
+func TestRepositoryWrapperPrimaryKeyErrors(t *testing.T) {
+	engine := &Engine{config: &Config{}}
+
+	noPKRepo := NewRepository[*testNoPrimaryKeyModel](engine)
+	_, err := noPKRepo.Lock(context.Background(), 1)
+	assert.ErrorContains(t, err, "single-column primary keys")
+	_, err = noPKRepo.Exist(context.Background(), 1)
+	assert.ErrorContains(t, err, "single-column primary keys")
+
+	compositeRepo := NewRepository[*testCompositePrimaryKeyModel](engine)
+	_, err = compositeRepo.Lock(context.Background(), 1)
+	assert.ErrorContains(t, err, "single-column primary keys")
+	_, err = compositeRepo.Exist(context.Background(), 1)
+	assert.ErrorContains(t, err, "single-column primary keys")
 }

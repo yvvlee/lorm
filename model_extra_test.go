@@ -1,11 +1,31 @@
 package lorm
 
 import (
+	"database/sql/driver"
 	"testing"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 )
+
+type jsonWrapperValuer struct {
+	value driver.Value
+	err   error
+}
+
+func (v jsonWrapperValuer) Value() (driver.Value, error) {
+	return v.value, v.err
+}
+
+type jsonWrapperScanner struct {
+	value any
+	err   error
+}
+
+func (s *jsonWrapperScanner) Scan(src any) error {
+	s.value = src
+	return s.err
+}
 
 func TestModelToInsertData(t *testing.T) {
 	m := &Test{}
@@ -61,6 +81,17 @@ func TestGeneratedModelLormFieldPtr(t *testing.T) {
 	assert.Same(t, &m.Struct, structWrapper.v)
 }
 
+func TestGeneratedFieldsWithAliasDoesNotMutateDefault(t *testing.T) {
+	m := &Test{}
+
+	a := m.Fields().WithAlias("a")
+	b := m.Fields().WithAlias("b")
+
+	assert.Equal(t, "a.id", a.ID())
+	assert.Equal(t, "b.id", b.ID())
+	assert.Equal(t, "id", m.Fields().ID())
+}
+
 func TestJSONFieldWrapperStringAndUnmarshal(t *testing.T) {
 	var v []int
 	w := NewJSONFieldWrapper(&v)
@@ -98,6 +129,18 @@ func TestJSONFieldWrapperScan(t *testing.T) {
 	// unsupported type
 	err = w.Scan(123)
 	assert.Error(t, err)
+}
+
+func TestJSONFieldWrapperDelegatesDatabaseInterfaces(t *testing.T) {
+	wrapped := NewJSONFieldWrapper(jsonWrapperValuer{value: "stored"})
+	value, err := wrapped.Value()
+	assert.NoError(t, err)
+	assert.Equal(t, driver.Value("stored"), value)
+
+	scanner := &jsonWrapperScanner{}
+	err = NewJSONFieldWrapper(scanner).Scan([]byte(`{"a":1}`))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`{"a":1}`), scanner.value)
 }
 
 func TestUnimplementedMarkers(t *testing.T) {
