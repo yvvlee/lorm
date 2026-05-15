@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -434,23 +435,15 @@ func benchmarkUpdateByIDLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		if _, err := lorm.Update[*LormUser](engine).
+		affected, err := lorm.Update[*LormUser](engine).
 			ID(user.ID).
-			SetMap(map[string]any{
-				"name":     input.Name,
-				"alias":    input.Alias,
-				"age":      input.Age,
-				"age_p":    input.AgeP,
-				"active":   input.Active,
-				"active_p": input.ActiveP,
-				"email":    input.Email,
-				"tags":     input.Tags,
-				"meta":     input.Meta,
-				"profile":  input.Profile,
-				"contacts": input.Contacts,
-			}).
-			Exec(benchmarkCtx); err != nil {
+			SetMap(benchUpdateMap(input, benchmarkUpdatedAt(i+1))).
+			Exec(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("lorm update: %v", err)
+		}
+		if affected != 1 {
+			b.Fatalf("lorm update: affected %d rows", affected)
 		}
 	}
 }
@@ -466,20 +459,14 @@ func benchmarkUpdateByIDGorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		if err := db.Model(&GormUser{}).Where("id = ?", user.ID).Updates(map[string]any{
-			"name":     input.Name,
-			"alias":    input.Alias,
-			"age":      input.Age,
-			"age_p":    input.AgeP,
-			"active":   input.Active,
-			"active_p": input.ActiveP,
-			"email":    input.Email,
-			"tags":     input.Tags,
-			"meta":     input.Meta,
-			"profile":  input.Profile,
-			"contacts": input.Contacts,
-		}).Error; err != nil {
-			b.Fatalf("gorm update: %v", err)
+		result := db.Model(&GormUser{}).
+			Where("id = ?", user.ID).
+			Updates(benchUpdateMap(input, benchmarkUpdatedAt(i+1)))
+		if result.Error != nil {
+			b.Fatalf("gorm update: %v", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			b.Fatalf("gorm update: affected %d rows", result.RowsAffected)
 		}
 	}
 }
@@ -499,11 +486,15 @@ func benchmarkUpdateByIDXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		if _, err := engine.ID(user.ID).Cols(
-			"name", "alias", "age", "age_p", "active", "active_p",
-			"email", "tags", "meta", "profile", "contacts",
-		).Update(newXormUser(input)); err != nil {
+		affected, err := engine.NoAutoTime().
+			Table(&XormUser{}).
+			ID(user.ID).
+			Update(benchUpdateMap(input, benchmarkUpdatedAt(i+1)))
+		if err != nil {
 			b.Fatalf("xorm update: %v", err)
+		}
+		if affected != 1 {
+			b.Fatalf("xorm update: affected %d rows", affected)
 		}
 	}
 }
@@ -522,9 +513,13 @@ func benchmarkUpdateByIDEnt(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
 		update := client.User.UpdateOneID(user.ID)
-		applyEntBenchInputUpdateOne(update, input)
-		if _, err := update.Save(benchmarkCtx); err != nil {
+		applyEntBenchInputUpdateOne(update, input, benchmarkUpdatedAt(i+1))
+		updated, err := update.Save(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("ent update: %v", err)
+		}
+		if updated.ID != user.ID {
+			b.Fatalf("ent update: got id %d", updated.ID)
 		}
 	}
 }
@@ -544,8 +539,12 @@ func benchmarkDeleteByIDLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := lorm.Delete[*LormUser](engine).ID(ids[i]).Exec(benchmarkCtx); err != nil {
+		affected, err := lorm.Delete[*LormUser](engine).ID(ids[i]).Exec(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("lorm delete: %v", err)
+		}
+		if affected != 1 {
+			b.Fatalf("lorm delete: affected %d rows", affected)
 		}
 	}
 }
@@ -564,8 +563,12 @@ func benchmarkDeleteByIDGorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := db.Delete(&GormUser{}, ids[i]).Error; err != nil {
-			b.Fatalf("gorm delete: %v", err)
+		result := db.Delete(&GormUser{}, ids[i])
+		if result.Error != nil {
+			b.Fatalf("gorm delete: %v", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			b.Fatalf("gorm delete: affected %d rows", result.RowsAffected)
 		}
 	}
 }
@@ -588,8 +591,12 @@ func benchmarkDeleteByIDXorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := engine.ID(ids[i]).Delete(&XormUser{}); err != nil {
+		affected, err := engine.NoAutoCondition().ID(ids[i]).Delete(&XormUser{})
+		if err != nil {
 			b.Fatalf("xorm delete: %v", err)
+		}
+		if affected != 1 {
+			b.Fatalf("xorm delete: affected %d rows", affected)
 		}
 	}
 }
@@ -847,21 +854,15 @@ func benchmarkBatchUpdateLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 10_000)
-		if _, err := lorm.Update[*LormUser](engine).
+		affected, err := lorm.Update[*LormUser](engine).
 			Where(builder.In("email", emails)).
-			SetMap(map[string]any{
-				"alias":    input.Alias,
-				"age":      input.Age,
-				"age_p":    input.AgeP,
-				"active":   input.Active,
-				"active_p": input.ActiveP,
-				"tags":     input.Tags,
-				"meta":     input.Meta,
-				"profile":  input.Profile,
-				"contacts": input.Contacts,
-			}).
-			Exec(benchmarkCtx); err != nil {
+			SetMap(benchBatchUpdateMap(input, benchmarkUpdatedAt(i+10_000))).
+			Exec(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("lorm batch update: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("lorm batch update: affected %d rows", affected)
 		}
 	}
 }
@@ -877,18 +878,14 @@ func benchmarkBatchUpdateGorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 10_000)
-		if err := db.Model(&GormUser{}).Where("email IN ?", emails).Updates(map[string]any{
-			"alias":    input.Alias,
-			"age":      input.Age,
-			"age_p":    input.AgeP,
-			"active":   input.Active,
-			"active_p": input.ActiveP,
-			"tags":     input.Tags,
-			"meta":     input.Meta,
-			"profile":  input.Profile,
-			"contacts": input.Contacts,
-		}).Error; err != nil {
-			b.Fatalf("gorm batch update: %v", err)
+		result := db.Model(&GormUser{}).
+			Where("email IN ?", emails).
+			Updates(benchBatchUpdateMap(input, benchmarkUpdatedAt(i+10_000)))
+		if result.Error != nil {
+			b.Fatalf("gorm batch update: %v", result.Error)
+		}
+		if result.RowsAffected != batchSize {
+			b.Fatalf("gorm batch update: affected %d rows", result.RowsAffected)
 		}
 	}
 }
@@ -904,18 +901,15 @@ func benchmarkBatchUpdateXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 10_000)
-		if _, err := engine.Table("bench_users").In("email", emails).Update(map[string]any{
-			"alias":    input.Alias,
-			"age":      input.Age,
-			"age_p":    input.AgeP,
-			"active":   input.Active,
-			"active_p": input.ActiveP,
-			"tags":     input.Tags,
-			"meta":     input.Meta,
-			"profile":  input.Profile,
-			"contacts": input.Contacts,
-		}); err != nil {
+		affected, err := engine.NoAutoTime().
+			Table(&XormUser{}).
+			In("email", emails).
+			Update(benchBatchUpdateMap(input, benchmarkUpdatedAt(i+10_000)))
+		if err != nil {
 			b.Fatalf("xorm batch update: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("xorm batch update: affected %d rows", affected)
 		}
 	}
 }
@@ -932,9 +926,13 @@ func benchmarkBatchUpdateEnt(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 10_000)
 		update := client.User.Update().Where(entuser.EmailIn(emails...))
-		applyEntBenchInputBatchUpdate(update, input)
-		if _, err := update.Save(benchmarkCtx); err != nil {
+		applyEntBenchInputBatchUpdate(update, input, benchmarkUpdatedAt(i+10_000))
+		affected, err := update.Save(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("ent batch update: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("ent batch update: affected %d rows", affected)
 		}
 	}
 }
@@ -958,10 +956,14 @@ func benchmarkBatchDeleteLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		if _, err := lorm.Delete[*LormUser](engine).
+		affected, err := lorm.Delete[*LormUser](engine).
 			Where(builder.In("email", batchEmails)).
-			Exec(benchmarkCtx); err != nil {
+			Exec(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("lorm batch delete: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("lorm batch delete: affected %d rows", affected)
 		}
 	}
 }
@@ -984,8 +986,12 @@ func benchmarkBatchDeleteGorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		if err := db.Where("email IN ?", batchEmails).Delete(&GormUser{}).Error; err != nil {
-			b.Fatalf("gorm batch delete: %v", err)
+		result := db.Where("email IN ?", batchEmails).Delete(&GormUser{})
+		if result.Error != nil {
+			b.Fatalf("gorm batch delete: %v", result.Error)
+		}
+		if result.RowsAffected != batchSize {
+			b.Fatalf("gorm batch delete: affected %d rows", result.RowsAffected)
 		}
 	}
 }
@@ -1009,8 +1015,12 @@ func benchmarkBatchDeleteXorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		if _, err := engine.In("email", batchEmails).Delete(&XormUser{}); err != nil {
+		affected, err := engine.NoAutoCondition().In("email", batchEmails).Delete(&XormUser{})
+		if err != nil {
 			b.Fatalf("xorm batch delete: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("xorm batch delete: affected %d rows", affected)
 		}
 	}
 }
@@ -1035,8 +1045,12 @@ func benchmarkBatchDeleteEnt(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		if _, err := client.User.Delete().Where(entuser.EmailIn(batchEmails...)).Exec(benchmarkCtx); err != nil {
+		affected, err := client.User.Delete().Where(entuser.EmailIn(batchEmails...)).Exec(benchmarkCtx)
+		if err != nil {
 			b.Fatalf("ent batch delete: %v", err)
+		}
+		if affected != batchSize {
+			b.Fatalf("ent batch delete: affected %d rows", affected)
 		}
 	}
 }
@@ -1200,10 +1214,11 @@ func applyEntBenchInputCreate(create *entbench.UserCreate, input benchInput) {
 	_ = m.SetField(entuser.FieldContacts, input.Contacts)
 }
 
-func applyEntBenchInputUpdateOne(update *entbench.UserUpdateOne, input benchInput) {
+func applyEntBenchInputUpdateOne(update *entbench.UserUpdateOne, input benchInput, updatedAt time.Time) {
 	update.SetName(input.Name)
 	update.SetAge(input.Age)
 	update.SetEmail(input.Email)
+	update.SetUpdatedAt(updatedAt)
 	m := update.Mutation()
 	if input.Alias != nil {
 		_ = m.SetField(entuser.FieldAlias, *input.Alias)
@@ -1221,30 +1236,9 @@ func applyEntBenchInputUpdateOne(update *entbench.UserUpdateOne, input benchInpu
 	_ = m.SetField(entuser.FieldContacts, input.Contacts)
 }
 
-func applyEntBenchInputUpdate(update *entbench.UserUpdate, input benchInput) {
-	update.SetName(input.Name)
+func applyEntBenchInputBatchUpdate(update *entbench.UserUpdate, input benchInput, updatedAt time.Time) {
 	update.SetAge(input.Age)
-	update.SetEmail(input.Email)
-	m := update.Mutation()
-	if input.Alias != nil {
-		_ = m.SetField(entuser.FieldAlias, *input.Alias)
-	}
-	if input.AgeP != nil {
-		_ = m.SetField(entuser.FieldAgeP, *input.AgeP)
-	}
-	_ = m.SetField(entuser.FieldActive, input.Active)
-	if input.ActiveP != nil {
-		_ = m.SetField(entuser.FieldActiveP, *input.ActiveP)
-	}
-	_ = m.SetField(entuser.FieldTags, input.Tags)
-	_ = m.SetField(entuser.FieldMeta, input.Meta)
-	_ = m.SetField(entuser.FieldProfile, input.Profile)
-	_ = m.SetField(entuser.FieldContacts, input.Contacts)
-}
-
-func applyEntBenchInputBatchUpdate(update *entbench.UserUpdate, input benchInput) {
-	update.SetName(input.Name)
-	update.SetAge(input.Age)
+	update.SetUpdatedAt(updatedAt)
 	m := update.Mutation()
 	if input.Alias != nil {
 		_ = m.SetField(entuser.FieldAlias, *input.Alias)

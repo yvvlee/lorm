@@ -356,9 +356,9 @@ func (b *SelectBuilder) CrossJoin(join string, rest ...any) *SelectBuilder {
 //
 // map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
-// bound to the placeholderFormat. If the value is nil, the expression will be "<key>
-// IS NULL". Slices and arrays are not expanded automatically; use In or NotIn
-// explicitly when you need an IN-style predicate.
+// bound to the placeholderFormat. Nil, slices, arrays, pointers, and driver
+// values are passed as one bound value; use IsNull, IsNotNull, In, or NotIn
+// explicitly when you need those predicate forms.
 //
 // Where will panic if pred isn't any of the above types.
 func (b *SelectBuilder) Where(pred any, args ...any) *SelectBuilder {

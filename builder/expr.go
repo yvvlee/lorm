@@ -3,9 +3,7 @@ package builder
 import (
 	"bytes"
 	"cmp"
-	"database/sql/driver"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -140,6 +138,11 @@ func (e aliasExpr) ToSql() (sql string, args []any, err error) {
 }
 
 // Eq is syntactic sugar for use with Where/Having/Set methods.
+//
+// Each entry renders as "<key> = ?" and the value is passed as one bound
+// argument. Eq does not special-case nil into IS NULL, dereference pointers,
+// call driver.Valuer, or expand slices/arrays into IN (...). Use IsNull,
+// IsNotNull, In, or NotIn explicitly when you need those predicate forms.
 type Eq map[string]any
 
 func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
@@ -149,38 +152,16 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 		return
 	}
 
-	var (
-		exprs    []Sqlizer
-		equalOpr = "="
-		nullOpr  = "IS"
-	)
-
+	equalOpr := "="
 	if useNotOpr {
 		equalOpr = "<>"
-		nullOpr = "IS NOT"
 	}
 	keys := lo.Keys(eq)
 	slices.Sort(keys)
-	for _, key := range keys {
-		var e Sqlizer
-		val := eq[key]
-		if val, err = normalizePredicateValue(val); err != nil {
-			return
-		}
 
-		if val == nil {
-			e = Expr(fmt.Sprintf("%s %s NULL", key, nullOpr))
-		} else {
-			r := reflect.ValueOf(val)
-			if r.Kind() == reflect.Slice || r.Kind() == reflect.Array {
-				if _, ok := val.([]byte); !ok {
-					err = fmt.Errorf("cannot use array or slice with Eq; use builder.In() for IN predicates")
-					return
-				}
-			}
-			e = Expr(fmt.Sprintf("%s %s ?", key, equalOpr), val)
-		}
-		exprs = append(exprs, e)
+	var exprs []Sqlizer
+	for _, key := range keys {
+		exprs = append(exprs, Expr(fmt.Sprintf("%s %s ?", key, equalOpr), eq[key]))
 	}
 
 	var sqlParts []string
@@ -204,34 +185,13 @@ func (eq Eq) ToSql() (sql string, args []any, err error) {
 	return eq.toSQL(false)
 }
 
-func normalizePredicateValue(value any) (any, error) {
-	for {
-		if value == nil {
-			return nil, nil
-		}
-		refValue := reflect.ValueOf(value)
-		if refValue.Kind() == reflect.Ptr {
-			if refValue.IsNil() {
-				return nil, nil
-			}
-		}
-		if valuer, ok := value.(driver.Valuer); ok {
-			var err error
-			value, err = valuer.Value()
-			if err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if refValue.Kind() == reflect.Ptr {
-			value = refValue.Elem().Interface()
-			continue
-		}
-		return value, nil
-	}
-}
-
 // NotEq is syntactic sugar for use with Where/Having/Set methods.
+//
+// Each entry renders as "<key> <> ?" and the value is passed as one bound
+// argument. NotEq does not special-case nil into IS NOT NULL, dereference
+// pointers, call driver.Valuer, or expand slices/arrays into NOT IN (...).
+// Use IsNull, IsNotNull, In, or NotIn explicitly when you need those predicate
+// forms.
 // Ex:
 //
 //	.Where(NotEq{"id": 1}) == "id <> 1"
@@ -297,6 +257,20 @@ func ILike(field, value string) Sqlizer {
 //	.Where(NotILike("name", "sq%"))
 func NotILike(field, value string) Sqlizer {
 	return Expr(fmt.Sprintf("%s NOT ILIKE ?", field), value)
+}
+
+// IsNull builds a field IS NULL predicate.
+//
+// Use this instead of Eq{field: nil} when you need SQL NULL semantics.
+func IsNull(field string) Sqlizer {
+	return Expr(fmt.Sprintf("%s IS NULL", field))
+}
+
+// IsNotNull builds a field IS NOT NULL predicate.
+//
+// Use this instead of NotEq{field: nil} when you need SQL NULL semantics.
+func IsNotNull(field string) Sqlizer {
+	return Expr(fmt.Sprintf("%s IS NOT NULL", field))
 }
 
 // Lt is syntactic sugar for use with Where/Having/Set methods.

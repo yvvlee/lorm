@@ -46,6 +46,42 @@ type benchInput struct {
 	Contacts benchmodel.ContactList
 }
 
+func benchmarkUpdatedAt(i int) time.Time {
+	return time.Unix(1_700_000_000+int64(i), 0).UTC()
+}
+
+func benchUpdateMap(input benchInput, updatedAt time.Time) map[string]any {
+	return map[string]any{
+		"name":       input.Name,
+		"alias":      input.Alias,
+		"age":        input.Age,
+		"age_p":      input.AgeP,
+		"active":     input.Active,
+		"active_p":   input.ActiveP,
+		"email":      input.Email,
+		"tags":       input.Tags,
+		"meta":       input.Meta,
+		"profile":    input.Profile,
+		"contacts":   input.Contacts,
+		"updated_at": updatedAt,
+	}
+}
+
+func benchBatchUpdateMap(input benchInput, updatedAt time.Time) map[string]any {
+	return map[string]any{
+		"alias":      input.Alias,
+		"age":        input.Age,
+		"age_p":      input.AgeP,
+		"active":     input.Active,
+		"active_p":   input.ActiveP,
+		"tags":       input.Tags,
+		"meta":       input.Meta,
+		"profile":    input.Profile,
+		"contacts":   input.Contacts,
+		"updated_at": updatedAt,
+	}
+}
+
 type benchmarkBackend struct {
 	name       string
 	sqlDriver  string

@@ -56,6 +56,5 @@ func TestDebugSqlizerErrors(t *testing.T) {
 	errorMsg = DebugSqlizer(Expr("x = ? AND y = ?", 1)) // Too many placeholders
 	assert.True(t, strings.HasPrefix(errorMsg, "[DebugSqlizer error: "))
 
-	errorMsg = DebugSqlizer(Eq{"x": []int{1, 2}}) // Cannot use array with Eq
-	assert.True(t, strings.HasPrefix(errorMsg, "[ToSql error: "))
+	assert.Equal(t, "x = '[1 2]'", DebugSqlizer(Eq{"x": []int{1, 2}}))
 }

@@ -71,6 +71,8 @@ func TestUpdateSetModelCoverage(t *testing.T) {
 	require.Equal(t, "UPDATE update_semantics_models SET name = ?, updated_at = ?, version = version+1 WHERE id = ? AND version = ?", sql)
 	require.IsType(t, (*string)(nil), args[0])
 	require.Equal(t, "published", *args[0].(*string))
-	require.Equal(t, int64(7), args[2])
-	require.Equal(t, int64(3), args[3])
+	require.IsType(t, (*int64)(nil), args[2])
+	require.Equal(t, int64(7), *args[2].(*int64))
+	require.IsType(t, (*int64)(nil), args[3])
+	require.Equal(t, int64(3), *args[3].(*int64))
 }

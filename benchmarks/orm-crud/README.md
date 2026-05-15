@@ -42,6 +42,10 @@ All backends use the same benchmark schema:
 - nullable scalar fields such as `alias`, `age_p`, `active_p`
 - non-null JSON-style fields such as `tags`, `meta`, `profile`, `contacts`
 
+Update benchmarks explicitly write `updated_at` so ORM-specific auto timestamp
+behavior does not change the measured field set. Update and delete benchmarks
+also check the affected row count where the ORM exposes it.
+
 ## Run
 
 SQLite, the default backend:
@@ -74,7 +78,7 @@ go generate ./ent
 
 ## Latest Recorded Result
 
-Recorded on April 30, 2026 with:
+Recorded on May 15, 2026 with:
 
 ```bash
 cd benchmarks/orm-crud
@@ -98,46 +102,46 @@ database, schema, driver, and hardware before using them for a final decision.
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 1,913,144 | 2,613,786 | 1,788,054 | 1,817,208 |
-| ReadByID | 1,262,759 | 1,258,343 | 1,321,836 | 1,199,787 |
-| ReadByIDComplex | 1,132,911 | 1,386,360 | 1,353,234 | 1,167,020 |
-| UpdateByID | 1,690,392 | 2,496,637 | 1,486,555 | 4,337,282 |
-| DeleteByID | 1,791,673 | 2,577,342 | 1,078,675 | 1,469,701 |
-| BatchCreate100 | 9,816,171 | 10,372,265 | 14,042,917 | 11,062,927 |
-| BatchRead100 | 3,668,220 | 4,154,132 | 4,040,834 | 3,969,475 |
-| BatchRead100Complex | 4,653,190 | 4,950,072 | 4,541,484 | 4,436,015 |
-| BatchUpdate100 | 8,032,387 | 8,486,618 | 6,988,625 | 8,843,135 |
-| BatchDelete100 | 5,277,316 | 6,698,076 | 2,085,592 | 5,679,043 |
+| Create | 1,131,710 | 1,637,111 | 1,135,509 | 1,175,650 |
+| ReadByID | 915,563 | 944,430 | 860,244 | 891,313 |
+| ReadByIDComplex | 864,774 | 844,448 | 877,075 | 893,103 |
+| UpdateByID | 1,129,918 | 1,550,989 | 1,129,751 | 2,246,057 |
+| DeleteByID | 1,031,749 | 1,519,377 | 1,040,008 | 1,002,177 |
+| BatchCreate100 | 8,568,069 | 9,221,738 | 9,517,663 | 9,264,969 |
+| BatchRead100 | 2,214,064 | 2,357,154 | 2,673,822 | 2,458,871 |
+| BatchRead100Complex | 2,828,336 | 3,037,882 | 3,343,130 | 2,979,974 |
+| BatchUpdate100 | 6,963,767 | 7,179,490 | 6,770,990 | 6,630,287 |
+| BatchDelete100 | 5,415,382 | 5,366,887 | 5,024,017 | 5,089,361 |
 
 `B/op`:
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 7,881 | 10,992 | 7,757 | 8,864 |
-| ReadByID | 10,815 | 8,155 | 11,673 | 10,240 |
-| ReadByIDComplex | 11,519 | 8,866 | 12,649 | 11,504 |
-| UpdateByID | 10,277 | 15,396 | 9,982 | 16,887 |
-| DeleteByID | 1,791 | 5,708 | 4,972 | 1,975 |
-| BatchCreate100 | 561,968 | 527,086 | 1,573,028 | 862,170 |
-| BatchRead100 | 252,106 | 341,115 | 515,174 | 359,089 |
-| BatchRead100Complex | 322,755 | 412,789 | 613,322 | 484,599 |
-| BatchUpdate100 | 27,347 | 33,963 | 33,801 | 34,949 |
-| BatchDelete100 | 18,929 | 25,336 | 34,171 | 26,912 |
+| Create | 7,906 | 11,072 | 7,761 | 8,869 |
+| ReadByID | 10,816 | 8,151 | 11,673 | 10,240 |
+| ReadByIDComplex | 11,520 | 8,857 | 12,649 | 11,504 |
+| UpdateByID | 10,716 | 13,613 | 10,934 | 16,944 |
+| DeleteByID | 1,791 | 5,692 | 2,897 | 1,977 |
+| BatchCreate100 | 562,427 | 528,155 | 1,572,787 | 864,439 |
+| BatchRead100 | 252,142 | 341,609 | 515,275 | 359,096 |
+| BatchRead100Complex | 322,829 | 413,005 | 613,305 | 484,603 |
+| BatchUpdate100 | 27,510 | 32,616 | 34,765 | 34,872 |
+| BatchDelete100 | 18,927 | 25,336 | 31,706 | 26,912 |
 
 `allocs/op`:
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 132 | 153 | 129 | 171 |
+| Create | 134 | 154 | 129 | 172 |
 | ReadByID | 211 | 142 | 237 | 228 |
 | ReadByIDComplex | 236 | 167 | 262 | 253 |
-| UpdateByID | 173 | 171 | 198 | 333 |
-| DeleteByID | 34 | 66 | 135 | 44 |
-| BatchCreate100 | 8,551 | 8,862 | 49,261 | 12,656 |
-| BatchRead100 | 5,759 | 7,182 | 12,757 | 8,276 |
-| BatchRead100Complex | 8,259 | 9,686 | 15,258 | 10,776 |
-| BatchUpdate100 | 263 | 374 | 398 | 299 |
-| BatchDelete100 | 133 | 272 | 347 | 163 |
+| UpdateByID | 179 | 171 | 210 | 335 |
+| DeleteByID | 34 | 66 | 56 | 45 |
+| BatchCreate100 | 8,554 | 8,866 | 49,267 | 12,662 |
+| BatchRead100 | 5,759 | 7,185 | 12,758 | 8,276 |
+| BatchRead100Complex | 8,260 | 9,687 | 15,258 | 10,776 |
+| BatchUpdate100 | 268 | 372 | 406 | 295 |
+| BatchDelete100 | 133 | 272 | 268 | 163 |
 
 ### PostgreSQL
 
@@ -145,43 +149,52 @@ database, schema, driver, and hardware before using them for a final decision.
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 518,071 | 947,152 | 555,380 | 591,445 |
-| ReadByID | 298,036 | 431,630 | 309,724 | 373,995 |
-| ReadByIDComplex | 344,650 | 474,724 | 317,436 | 399,537 |
-| UpdateByID | 713,365 | 989,863 | 679,395 | 1,097,098 |
-| DeleteByID | 463,347 | 863,456 | 276,317 | 462,638 |
-| BatchCreate100 | 4,676,179 | 5,024,113 | 5,872,695 | 4,653,561 |
-| BatchRead100 | 1,471,637 | 1,770,276 | 1,787,619 | 1,459,470 |
-| BatchRead100Complex | 1,876,657 | 2,126,904 | 2,403,127 | 1,882,766 |
-| BatchUpdate100 | 902,407 | 1,370,367 | 1,499,549 | 1,753,552 |
-| BatchDelete100 | 809,539 | 1,429,966 | 531,330 | 950,048 |
+| Create | 336,537 | 656,602 | 348,557 | 324,479 |
+| ReadByID | 219,798 | 213,939 | 225,971 | 219,507 |
+| ReadByIDComplex | 218,168 | 220,517 | 227,949 | 219,516 |
+| UpdateByID | 321,847 | 669,114 | 654,825 | 880,432 |
+| DeleteByID | 303,406 | 627,643 | 297,395 | 296,478 |
+| BatchCreate100 | 2,908,882 | 2,980,674 | 4,608,589 | 2,782,881 |
+| BatchRead100 | 987,042 | 1,237,686 | 1,407,165 | 1,073,514 |
+| BatchRead100Complex | 1,519,387 | 1,882,029 | 2,038,405 | 1,636,961 |
+| BatchUpdate100 | 721,963 | 1,034,409 | 940,146 | 723,326 |
+| BatchDelete100 | 562,371 | 833,474 | 540,432 | 521,771 |
 
 `B/op`:
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 8,038 | 11,848 | 9,162 | 8,678 |
-| ReadByID | 11,899 | 8,502 | 12,622 | 10,585 |
-| ReadByIDComplex | 12,892 | 9,500 | 13,872 | 12,121 |
-| UpdateByID | 10,126 | 14,575 | 11,013 | 16,636 |
-| DeleteByID | 1,833 | 5,679 | 5,081 | 1,902 |
-| BatchCreate100 | 821,140 | 789,922 | 2,015,561 | 1,129,008 |
-| BatchRead100 | 293,057 | 380,924 | 546,988 | 398,888 |
-| BatchRead100Complex | 391,187 | 479,878 | 672,518 | 551,911 |
-| BatchUpdate100 | 43,949 | 48,732 | 53,480 | 50,624 |
-| BatchDelete100 | 35,904 | 40,947 | 52,716 | 43,217 |
+| Create | 8,041 | 11,868 | 9,150 | 8,673 |
+| ReadByID | 11,900 | 8,502 | 12,621 | 10,584 |
+| ReadByIDComplex | 12,893 | 9,505 | 13,872 | 12,120 |
+| UpdateByID | 10,485 | 12,774 | 11,816 | 16,670 |
+| DeleteByID | 1,833 | 5,680 | 3,010 | 1,903 |
+| BatchCreate100 | 821,761 | 790,847 | 2,016,207 | 1,129,679 |
+| BatchRead100 | 293,065 | 381,044 | 546,975 | 398,889 |
+| BatchRead100Complex | 391,194 | 479,972 | 672,533 | 551,907 |
+| BatchUpdate100 | 44,131 | 47,378 | 54,686 | 49,762 |
+| BatchDelete100 | 35,910 | 40,955 | 50,219 | 43,219 |
 
 `allocs/op`:
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 118 | 148 | 171 | 176 |
+| Create | 118 | 149 | 172 | 177 |
 | ReadByID | 228 | 156 | 269 | 243 |
 | ReadByIDComplex | 253 | 181 | 294 | 268 |
-| UpdateByID | 152 | 146 | 241 | 346 |
-| DeleteByID | 31 | 60 | 140 | 40 |
-| BatchCreate100 | 7,317 | 8,033 | 52,971 | 13,716 |
-| BatchRead100 | 6,186 | 7,608 | 12,803 | 8,798 |
+| UpdateByID | 158 | 144 | 243 | 346 |
+| DeleteByID | 31 | 60 | 59 | 40 |
+| BatchCreate100 | 7,323 | 8,039 | 52,973 | 13,723 |
+| BatchRead100 | 6,186 | 7,609 | 12,803 | 8,798 |
 | BatchRead100Complex | 8,686 | 10,111 | 15,303 | 11,298 |
-| BatchUpdate100 | 264 | 371 | 629 | 412 |
-| BatchDelete100 | 146 | 279 | 565 | 270 |
+| BatchUpdate100 | 271 | 369 | 643 | 405 |
+| BatchDelete100 | 146 | 279 | 484 | 270 |
+
+## Summary
+
+- MySQL `ns/op`: `lorm` is fastest in 4 of 10 cases, `xorm` in 3,
+  `ent` in 2, and `gorm` in 1.
+- PostgreSQL `ns/op`: `lorm` is fastest in 5 of 10 cases, `ent` in 4,
+  and `gorm` in 1.
+- `B/op`: `lorm` has the lowest allocation bytes in 6 of 10 MySQL cases and
+  7 of 10 PostgreSQL cases.

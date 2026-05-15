@@ -1,20 +1,10 @@
 package builder
 
 import (
-	"database/sql"
-	"database/sql/driver"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
-
-const eqSliceError = "cannot use array or slice with Eq; use builder.In() for IN predicates"
-
-type stringValuer string
-
-func (v stringValuer) Value() (driver.Value, error) {
-	return string(v), nil
-}
 
 func TestConcatExpr(t *testing.T) {
 	b := ConcatExpr("COALESCE(name,", Expr("CONCAT(?,' ',?)", "f", "l"), ")")
@@ -56,32 +46,43 @@ func TestEqEmptyToSql(t *testing.T) {
 	assert.Empty(t, args)
 }
 
-func TestEqInToSql(t *testing.T) {
+func TestEqNilToSql(t *testing.T) {
+	sql, args, err := Eq{"name": nil}.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "name = ?", sql)
+	assert.Equal(t, []any{nil}, args)
+}
+
+func TestEqSliceToSql(t *testing.T) {
 	b := Eq{"id": []int{1, 2, 3}}
-	_, _, err := b.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id = ?", sql)
+	assert.Equal(t, []any{[]int{1, 2, 3}}, args)
 }
 
-func TestEqNotInToSql(t *testing.T) {
+func TestNotEqSliceToSql(t *testing.T) {
 	b := NotEq{"id": []int{1, 2, 3}}
-	_, _, err := b.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id <> ?", sql)
+	assert.Equal(t, []any{[]int{1, 2, 3}}, args)
 }
 
-func TestEqInEmptyToSql(t *testing.T) {
+func TestEqEmptySliceToSql(t *testing.T) {
 	b := Eq{"id": []int{}}
-	_, _, err := b.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id = ?", sql)
+	assert.Equal(t, []any{[]int{}}, args)
 }
 
-func TestNotEqInEmptyToSql(t *testing.T) {
+func TestNotEqEmptySliceToSql(t *testing.T) {
 	b := NotEq{"id": []int{}}
-	_, _, err := b.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
+	sql, args, err := b.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id <> ?", sql)
+	assert.Equal(t, []any{[]int{}}, args)
 }
 
 func TestNotEqToSql(t *testing.T) {
@@ -204,183 +205,18 @@ func TestGtOrEqToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
-func TestExprNilToSql(t *testing.T) {
-	var b Sqlizer
-	b = NotEq{"name": nil}
-	sql, args, err := b.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-
-	expectedSql := "name IS NOT NULL"
-	assert.Equal(t, expectedSql, sql)
-
-	b = Eq{"name": nil}
-	sql, args, err = b.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-
-	expectedSql = "name IS NULL"
-	assert.Equal(t, expectedSql, sql)
-}
-
-func TestNullTypeString(t *testing.T) {
-	var b Sqlizer
-	var name sql.NullString
-
-	b = Eq{"name": name}
-	sql, args, err := b.ToSql()
-
+func TestIsNullToSql(t *testing.T) {
+	sql, args, err := IsNull("name").ToSql()
 	assert.NoError(t, err)
 	assert.Empty(t, args)
 	assert.Equal(t, "name IS NULL", sql)
-
-	name.Scan("Name")
-	b = Eq{"name": name}
-	sql, args, err = b.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{"Name"}, args)
-	assert.Equal(t, "name = ?", sql)
 }
 
-func TestNullTypeInt64(t *testing.T) {
-	var userID sql.NullInt64
-	userID.Scan(nil)
-	b := Eq{"user_id": userID}
-	sql, args, err := b.ToSql()
-
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "user_id IS NULL", sql)
-
-	userID.Scan(int64(10))
-	b = Eq{"user_id": userID}
-	sql, args, err = b.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{int64(10)}, args)
-	assert.Equal(t, "user_id = ?", sql)
-}
-
-func TestNilPointer(t *testing.T) {
-	var name *string = nil
-	eq := Eq{"name": name}
-	sql, args, err := eq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "name IS NULL", sql)
-
-	neq := NotEq{"name": name}
-	sql, args, err = neq.ToSql()
-
+func TestIsNotNullToSql(t *testing.T) {
+	sql, args, err := IsNotNull("name").ToSql()
 	assert.NoError(t, err)
 	assert.Empty(t, args)
 	assert.Equal(t, "name IS NOT NULL", sql)
-
-	var ids *[]int = nil
-	eq = Eq{"id": ids}
-	sql, args, err = eq.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "id IS NULL", sql)
-
-	neq = NotEq{"id": ids}
-	sql, args, err = neq.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "id IS NOT NULL", sql)
-
-	var ida *[3]int = nil
-	eq = Eq{"id": ida}
-	sql, args, err = eq.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "id IS NULL", sql)
-
-	neq = NotEq{"id": ida}
-	sql, args, err = neq.ToSql()
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "id IS NOT NULL", sql)
-
-}
-
-func TestNotNilPointer(t *testing.T) {
-	c := "Name"
-	name := &c
-	eq := Eq{"name": name}
-	sql, args, err := eq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{"Name"}, args)
-	assert.Equal(t, "name = ?", sql)
-
-	neq := NotEq{"name": name}
-	sql, args, err = neq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{"Name"}, args)
-	assert.Equal(t, "name <> ?", sql)
-
-	s := []int{1, 2, 3}
-	ids := &s
-	eq = Eq{"id": ids}
-	_, _, err = eq.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
-
-	neq = NotEq{"id": ids}
-	_, _, err = neq.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
-
-	a := [3]int{1, 2, 3}
-	ida := &a
-	eq = Eq{"id": ida}
-	_, _, err = eq.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
-
-	neq = NotEq{"id": ida}
-	_, _, err = neq.ToSql()
-	assert.Error(t, err)
-	assert.Equal(t, eqSliceError, err.Error())
-}
-
-func TestNilNestedDriverValuerPointer(t *testing.T) {
-	var inner *stringValuer
-	eq := Eq{"name": &inner}
-	sql, args, err := eq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "name IS NULL", sql)
-
-	neq := NotEq{"name": &inner}
-	sql, args, err = neq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Empty(t, args)
-	assert.Equal(t, "name IS NOT NULL", sql)
-}
-
-func TestNotNilNestedDriverValuerPointer(t *testing.T) {
-	value := stringValuer("Name")
-	inner := &value
-	eq := Eq{"name": &inner}
-	sql, args, err := eq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{"Name"}, args)
-	assert.Equal(t, "name = ?", sql)
-
-	neq := NotEq{"name": &inner}
-	sql, args, err = neq.ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, []any{"Name"}, args)
-	assert.Equal(t, "name <> ?", sql)
 }
 
 func TestEmptyAndToSql(t *testing.T) {

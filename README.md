@@ -48,6 +48,10 @@ It keeps application code short, stable, and easy to test.
 Keep complex reads, reports, search pages, and custom joins inside repository
 implementations as well. The SQL builder supports repository code and keeps the
 final query shape explicit and reviewable.
+Its fluent API is inspired by
+[Squirrel](https://github.com/Masterminds/squirrel), while LORM keeps the
+builder scoped to repository implementations and its own generated model
+metadata.
 
 LORM intentionally does not provide automatic relation loading, implicit eager
 loading, lazy loading, or magic model association queries. In production
@@ -148,8 +152,11 @@ _, err = lorm.DeleteModel[*User](engine).
 > **Update note**: `Update.SetModel(model)` performs a full-field update. Zero
 > values are written as well, so prefer `SetMap` / `Set` for partial updates.
 
-> **Where note**: `builder.Eq` does not expand slices into `IN (...)`. Use
-> `builder.In` / `builder.NotIn` explicitly for membership predicates.
+> **Where note**: `builder.Eq{field: value}` always renders `field = ?` and
+> binds `value` as a single argument. It does not special-case `nil` into
+> `IS NULL`, dereference pointers, call `driver.Valuer`, or expand slices into
+> `IN (...)`. Use `builder.IsNull(field)` / `builder.IsNotNull(field)` for null
+> checks, and `builder.In` / `builder.NotIn` for membership predicates.
 
 > **Insert note**: batch inserts only backfill generated IDs when the driver
 > returns one generated value per inserted row. `LastInsertId`-only dialects do
@@ -361,7 +368,7 @@ override one field.
 
 The benchmark suite lives in [benchmarks/orm-crud](benchmarks/orm-crud).
 
-Results below were captured on April 30, 2026 with:
+Results below were captured on May 15, 2026 with:
 
 ```bash
 cd benchmarks/orm-crud
@@ -380,39 +387,40 @@ MySQL, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | 1,913,144 | 2,613,786 | **1,788,054** | 1,817,208 |
-| ReadByID | 1,262,759 | 1,258,343 | 1,321,836 | **1,199,787** |
-| ReadByIDComplex | **1,132,911** | 1,386,360 | 1,353,234 | 1,167,020 |
-| UpdateByID | 1,690,392 | 2,496,637 | **1,486,555** | 4,337,282 |
-| DeleteByID | 1,791,673 | 2,577,342 | **1,078,675** | 1,469,701 |
-| BatchCreate100 | **9,816,171** | 10,372,265 | 14,042,917 | 11,062,927 |
-| BatchRead100 | **3,668,220** | 4,154,132 | 4,040,834 | 3,969,475 |
-| BatchRead100Complex | 4,653,190 | 4,950,072 | 4,541,484 | **4,436,015** |
-| BatchUpdate100 | 8,032,387 | 8,486,618 | **6,988,625** | 8,843,135 |
-| BatchDelete100 | 5,277,316 | 6,698,076 | **2,085,592** | 5,679,043 |
+| Create | **1,131,710** | 1,637,111 | 1,135,509 | 1,175,650 |
+| ReadByID | 915,563 | 944,430 | **860,244** | 891,313 |
+| ReadByIDComplex | 864,774 | **844,448** | 877,075 | 893,103 |
+| UpdateByID | 1,129,918 | 1,550,989 | **1,129,751** | 2,246,057 |
+| DeleteByID | 1,031,749 | 1,519,377 | 1,040,008 | **1,002,177** |
+| BatchCreate100 | **8,568,069** | 9,221,738 | 9,517,663 | 9,264,969 |
+| BatchRead100 | **2,214,064** | 2,357,154 | 2,673,822 | 2,458,871 |
+| BatchRead100Complex | **2,828,336** | 3,037,882 | 3,343,130 | 2,979,974 |
+| BatchUpdate100 | 6,963,767 | 7,179,490 | 6,770,990 | **6,630,287** |
+| BatchDelete100 | 5,415,382 | 5,366,887 | **5,024,017** | 5,089,361 |
 
 PostgreSQL, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent |
 | --- | ---: | ---: | ---: | ---: |
-| Create | **518,071** | 947,152 | 555,380 | 591,445 |
-| ReadByID | **298,036** | 431,630 | 309,724 | 373,995 |
-| ReadByIDComplex | 344,650 | 474,724 | **317,436** | 399,537 |
-| UpdateByID | 713,365 | 989,863 | **679,395** | 1,097,098 |
-| DeleteByID | 463,347 | 863,456 | **276,317** | 462,638 |
-| BatchCreate100 | 4,676,179 | 5,024,113 | 5,872,695 | **4,653,561** |
-| BatchRead100 | 1,471,637 | 1,770,276 | 1,787,619 | **1,459,470** |
-| BatchRead100Complex | **1,876,657** | 2,126,904 | 2,403,127 | 1,882,766 |
-| BatchUpdate100 | **902,407** | 1,370,367 | 1,499,549 | 1,753,552 |
-| BatchDelete100 | 809,539 | 1,429,966 | **531,330** | 950,048 |
+| Create | 336,537 | 656,602 | 348,557 | **324,479** |
+| ReadByID | 219,798 | **213,939** | 225,971 | 219,507 |
+| ReadByIDComplex | **218,168** | 220,517 | 227,949 | 219,516 |
+| UpdateByID | **321,847** | 669,114 | 654,825 | 880,432 |
+| DeleteByID | 303,406 | 627,643 | 297,395 | **296,478** |
+| BatchCreate100 | 2,908,882 | 2,980,674 | 4,608,589 | **2,782,881** |
+| BatchRead100 | **987,042** | 1,237,686 | 1,407,165 | 1,073,514 |
+| BatchRead100Complex | **1,519,387** | 1,882,029 | 2,038,405 | 1,636,961 |
+| BatchUpdate100 | **721,963** | 1,034,409 | 940,146 | 723,326 |
+| BatchDelete100 | 562,371 | 833,474 | 540,432 | **521,771** |
 
 Notes from this run:
 
-- On MySQL, `lorm` is fastest in 3 of the 10 `ns/op` cases. `xorm` is fastest
-  in single-row create/update/delete and batch update/delete in this run.
-- On PostgreSQL, `lorm` is fastest in 4 of the 10 `ns/op` cases, including
-  create, read by ID, complex batch read, and batch update.
-- `lorm` has the lowest `B/op` in 5 of the 10 MySQL cases and 7 of the 10
+- On MySQL, `lorm` is fastest in 4 of the 10 `ns/op` cases: single-row create,
+  batch create, batch read, and complex batch read.
+- On PostgreSQL, `lorm` is fastest in 5 of the 10 `ns/op` cases, including
+  complex single-row read, single-row update, batch read, complex batch read,
+  and batch update.
+- `lorm` has the lowest `B/op` in 6 of the 10 MySQL cases and 7 of the 10
   PostgreSQL cases in this run.
 
 Treat these numbers as directional rather than universal. Re-run the suite on

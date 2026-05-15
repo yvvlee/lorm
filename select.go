@@ -286,9 +286,9 @@ func (s *QueryModelStmt[T]) CrossJoin(join string, rest ...any) *QueryModelStmt[
 //
 // map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
-// bound to the placeholder. If the value is nil, the expression will be "<key>
-// IS NULL". Slices and arrays are not expanded automatically; use builder.In or
-// builder.NotIn explicitly when you need an IN-style predicate.
+// bound to the placeholder. Nil, slices, arrays, pointers, and driver values
+// are passed as one bound value; use builder.IsNull, builder.IsNotNull,
+// builder.In, or builder.NotIn explicitly when you need those predicate forms.
 //
 // Where will panic if pred isn't any of the above types.
 func (s *QueryModelStmt[T]) Where(pred any, args ...any) *QueryModelStmt[T] {
@@ -561,9 +561,9 @@ func (s *QueryColStmt[T]) CrossJoin(join string, rest ...any) *QueryColStmt[T] {
 //
 // map[string]any OR Eq - map of SQL expressions to values. Each key is
 // transformed into an expression like "<key> = ?", with the corresponding value
-// bound to the placeholder. If the value is nil, the expression will be "<key>
-// IS NULL". Slices and arrays are not expanded automatically; use builder.In or
-// builder.NotIn explicitly when you need an IN-style predicate.
+// bound to the placeholder. Nil, slices, arrays, pointers, and driver values
+// are passed as one bound value; use builder.IsNull, builder.IsNotNull,
+// builder.In, or builder.NotIn explicitly when you need those predicate forms.
 //
 // Where will panic if pred isn't any of the above types.
 func (s *QueryColStmt[T]) Where(pred any, args ...any) *QueryColStmt[T] {

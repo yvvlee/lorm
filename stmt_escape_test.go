@@ -15,7 +15,7 @@ func TestEscapePredicateNestedSqlizers(t *testing.T) {
 		builder.Eq{"group": "staff"},
 		builder.Or{
 			builder.NotEq{"id": 7},
-			builder.Eq{"name": nil},
+			builder.IsNull("`name`"),
 		},
 	})
 
