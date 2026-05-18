@@ -41,6 +41,24 @@ LORM 有意不提供自动关联加载、隐式 eager loading、lazy loading，�
 - 第一优先级：MySQL/MariaDB、PostgreSQL
 - 第二优先级：SQLite
 
+推荐的 `database/sql` 驱动：
+
+| 数据库 | 驱动包 | 传给 `NewEngine` 的 driver name |
+| --- | --- | --- |
+| MySQL/MariaDB | `github.com/go-sql-driver/mysql` | `mysql` |
+| PostgreSQL | `github.com/jackc/pgx/v5/stdlib` | `pgx` |
+| SQLite | `github.com/mattn/go-sqlite3` | `sqlite3` |
+
+LORM 主 module 不会引入数据库驱动。应用只需要按需空导入自己使用的驱动：
+
+```go
+import (
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/mattn/go-sqlite3"
+)
+```
+
 ## 安装
 
 ```bash

@@ -68,6 +68,25 @@ repository implementations own database details.
 - **First-class**: MySQL/MariaDB, PostgreSQL
 - **Secondary**: SQLite
 
+Recommended `database/sql` drivers:
+
+| Database | Driver package | Driver name for `NewEngine` |
+| --- | --- | --- |
+| MySQL/MariaDB | `github.com/go-sql-driver/mysql` | `mysql` |
+| PostgreSQL | `github.com/jackc/pgx/v5/stdlib` | `pgx` |
+| SQLite | `github.com/mattn/go-sqlite3` | `sqlite3` |
+
+LORM does not import database drivers from the root module. Import only the
+drivers your application uses:
+
+```go
+import (
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/mattn/go-sqlite3"
+)
+```
+
 ## Installation
 
 ```bash
