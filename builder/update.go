@@ -176,7 +176,7 @@ func (b *UpdateBuilder) SetMap(clauses map[string]any) *UpdateBuilder {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		val, _ := clauses[key]
+		val := clauses[key]
 		b.Set(key, val)
 	}
 	return b

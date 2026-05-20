@@ -538,7 +538,7 @@ func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
 	var buf bytes.Buffer
 	err := modelTpl.Execute(&buf, fileInfo)
 	if err != nil {
-		return nil, fmt.Errorf("template execution failed: %v\n", err)
+		return nil, fmt.Errorf("template execution failed: %v", err)
 	}
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {

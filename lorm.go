@@ -3,6 +3,7 @@ package lorm
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -243,7 +244,7 @@ func connect(ctx context.Context, driverName, dataSourceName string) (*sql.DB, e
 		return nil, err
 	}
 	if err = db.PingContext(ctx); err != nil {
-		db.Close()
+		err = errors.Join(err, db.Close())
 		return nil, err
 	}
 	return db, nil

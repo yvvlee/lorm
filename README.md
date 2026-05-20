@@ -181,6 +181,10 @@ _, err = lorm.DeleteModel[*User](engine).
 > returns one generated value per inserted row. `LastInsertId`-only dialects do
 > not infer per-row IDs for multi-row inserts.
 
+> **Get note**: `Query.Get` and repository `Get` helpers return the zero value
+> of `T` with a nil error when no row matches. For pointer model types such as
+> `*User`, this means `nil, nil`.
+
 Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
 `Update` / `Delete` chain for each operation, and do not share the same
 statement across goroutines.

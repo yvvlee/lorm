@@ -46,7 +46,7 @@ type FileDescriptor struct {
 
 // RawVarPrefix returns the stable generated variable prefix for the file.
 func (d *FileDescriptor) RawVarPrefix() string {
-	return "_lorm_file_" + strings.Replace(strings.TrimSuffix(d.Path, ".go"), "/", "_", -1)
+	return "_lorm_file_" + strings.ReplaceAll(strings.TrimSuffix(d.Path, ".go"), "/", "_")
 }
 
 // JsonMarshal returns d encoded as JSON.

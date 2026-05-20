@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var sqlizer = Select("test")
-
 var testDebugUpdateSQL = Update("table").SetMap(Eq{"x": 1, "y": "val"})
 var expectedDebugUpateSQL = "UPDATE table SET x = '1', y = 'val'"
 

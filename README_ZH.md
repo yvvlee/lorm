@@ -149,6 +149,10 @@ _, err = lorm.DeleteModel[*User](engine).
 > **Insert 说明**：批量插入只有在驱动能逐行返回生成主键时才会回填 ID。只支持
 > `LastInsertId` 的方言不会为多行插入推算每条记录的主键。
 
+> **Get 说明**：`Query.Get` 和 Repository 的 `Get` 类方法查不到行时，会返回
+> `T` 的零值和 `nil` 错误。对 `*User` 这类指针模型来说，返回值就是
+> `nil, nil`。
+
 Statement builder 是轻量级对象。每次数据库操作都应重新创建一条新的
 `Query` / `Insert` / `Update` / `Delete` 调用链，不要在多个 goroutine
 之间共享同一个 statement。

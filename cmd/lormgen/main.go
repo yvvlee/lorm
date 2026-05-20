@@ -73,7 +73,7 @@ func run(args []string) error {
 
 	files, err := argsToFiles(args)
 	if err != nil {
-		return fmt.Errorf("file parsing failed: %v\n", err)
+		return fmt.Errorf("file parsing failed: %v", err)
 	}
 	if len(ignorePatterns) > 0 {
 		files, err = filterIgnoredFiles(files, ignorePatterns)
