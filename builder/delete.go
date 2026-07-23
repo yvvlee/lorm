@@ -118,6 +118,9 @@ func (b *DeleteBuilder) From(from string) *DeleteBuilder {
 //
 // See SelectBuilder.Where for more information.
 func (b *DeleteBuilder) Where(pred any, args ...any) *DeleteBuilder {
+	if pred == nil || pred == "" {
+		return b
+	}
 	b.whereParts = append(b.whereParts, newWherePart(pred, args...))
 	return b
 }

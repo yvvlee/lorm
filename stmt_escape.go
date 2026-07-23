@@ -22,6 +22,8 @@ func escapeSqlizer(escaper names.Escaper, sqlizer builder.Sqlizer) builder.Sqliz
 		return builder.Eq(escapeMap(escaper, v))
 	case builder.NotEq:
 		return builder.NotEq(escapeMap(escaper, builder.Eq(v)))
+	case builder.FieldExpression:
+		return v.WithFieldName(escaper.Escape(v.FieldName()))
 	case builder.And:
 		items := make(builder.And, len(v))
 		for i, item := range v {

@@ -199,22 +199,6 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 		return builder.Select("COUNT(1)")
 	}
 
-	if len(b.groupBys) == 1 &&
-		len(b.havingParts) == 0 &&
-		!strings.Contains(b.groupBys[0], ",") {
-		// A single grouping key without HAVING can be reduced to COUNT(DISTINCT key).
-		builder := &SelectBuilder{
-			withParts:  cloneSqlizers(b.withParts),
-			prefixes:   cloneSqlizers(b.prefixes),
-			columns:    nil,
-			from:       b.from,
-			joins:      cloneSqlizers(b.joins),
-			whereParts: cloneSqlizers(b.whereParts),
-			suffixes:   cloneSqlizers(b.suffixes),
-		}
-		return builder.Select(fmt.Sprintf("COUNT(DISTINCT %s)", b.groupBys[0]))
-	}
-
 	// Complex GROUP BY or HAVING queries must be counted from a subquery to preserve semantics.
 	subBuilder := &SelectBuilder{
 		options:     cloneStrings(b.options),
@@ -379,6 +363,9 @@ func (b *SelectBuilder) GroupBy(groupBys ...string) *SelectBuilder {
 //
 // See Where.
 func (b *SelectBuilder) Having(pred any, rest ...any) *SelectBuilder {
+	if pred == nil || pred == "" {
+		return b
+	}
 	b.havingParts = append(b.havingParts, newWherePart(pred, rest...))
 	return b
 }

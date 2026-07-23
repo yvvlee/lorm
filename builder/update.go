@@ -198,6 +198,9 @@ func (b *UpdateBuilder) FromSelect(from *SelectBuilder, alias string) *UpdateBui
 //
 // See SelectBuilder.Where for more information.
 func (b *UpdateBuilder) Where(pred any, args ...any) *UpdateBuilder {
+	if pred == nil || pred == "" {
+		return b
+	}
 	b.whereParts = append(b.whereParts, newWherePart(pred, args...))
 	return b
 }

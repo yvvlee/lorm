@@ -30,9 +30,11 @@ func TestTXFailureBranchesCoverage(t *testing.T) {
 	})
 
 	t.Run("rollbackError", func(t *testing.T) {
-		engine := newTxBehaviorEngine(t, txBehavior{rollbackErr: errors.New("rollback failed")})
+		rollbackErr := errors.New("rollback failed")
+		engine := newTxBehaviorEngine(t, txBehavior{rollbackErr: rollbackErr})
 		err := engine.TX(context.Background(), func(context.Context) error { return assert.AnError })
 		assert.ErrorIs(t, err, assert.AnError)
+		assert.ErrorIs(t, err, rollbackErr)
 	})
 
 	t.Run("commitError", func(t *testing.T) {

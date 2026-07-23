@@ -957,6 +957,24 @@ func insertBasicRows(t *testing.T, e *Engine, ctx context.Context) {
 	require.NoError(t, err)
 }
 
+func TestCountBuilderIncludesNullGroup(t *testing.T) {
+	engine := initEngine(t)
+	defer engine.Close()
+	ctx := context.Background()
+	insertBasicRows(t, engine, ctx)
+
+	countBuilder := builder.Select("str_p").From("test").GroupBy("str_p").ToCountBuilder()
+	query, args, err := countBuilder.ToSql()
+	require.NoError(t, err)
+	rows, err := engine.Query(ctx, query, args...)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var count uint64
+	require.NoError(t, ScanCol(rows, &count))
+	assert.EqualValues(t, 1, count)
+}
+
 func initReturningCompatibleEngine(t *testing.T) *Engine {
 	t.Helper()
 	if ok, reason := sqlite3TestAvailable(); !ok {

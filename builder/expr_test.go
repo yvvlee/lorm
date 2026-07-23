@@ -241,6 +241,27 @@ func TestEmptyOrToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
+func TestConjunctionIgnoresNilPredicates(t *testing.T) {
+	tests := []struct {
+		name string
+		pred Sqlizer
+		want string
+	}{
+		{name: "empty and", pred: And{nil}, want: sqlTrue},
+		{name: "empty or", pred: Or{nil}, want: sqlFalse},
+		{name: "mixed and", pred: And{nil, Eq{"id": 1}}, want: "(id = ?)"},
+		{name: "mixed or", pred: Or{nil, Eq{"id": 1}}, want: "(id = ?)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _, err := tt.pred.ToSql()
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, sql)
+		})
+	}
+}
+
 func TestLikeToSql(t *testing.T) {
 	b := Like("name", "%irrel")
 	sql, args, err := b.ToSql()

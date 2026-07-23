@@ -21,6 +21,33 @@ type expr struct {
 	args []any
 }
 
+// FieldExpression is a structured field predicate whose identifier can be
+// rewritten by callers before SQL generation.
+type FieldExpression interface {
+	Sqlizer
+	FieldName() string
+	WithFieldName(field string) Sqlizer
+}
+
+type fieldExpr struct {
+	field  string
+	suffix string
+	args   []any
+}
+
+func (e fieldExpr) ToSql() (sql string, args []any, err error) {
+	return e.field + e.suffix, e.args, nil
+}
+
+func (e fieldExpr) FieldName() string {
+	return e.field
+}
+
+func (e fieldExpr) WithFieldName(field string) Sqlizer {
+	e.field = field
+	return e
+}
+
 // Expr builds an expression from a SQL fragment and arguments.
 //
 // Ex:
@@ -211,7 +238,7 @@ func In[T any](field string, val []T) Sqlizer {
 	s := lo.Map(val, func(item T, index int) any {
 		return any(item)
 	})
-	return Expr(fmt.Sprintf("%s IN (%s)", field, Placeholders(len(val))), s...)
+	return fieldExpr{field: field, suffix: fmt.Sprintf(" IN (%s)", Placeholders(len(val))), args: s}
 }
 
 // NotIn builds a field NOT IN (...) predicate.
@@ -224,7 +251,7 @@ func NotIn[T any](field string, val []T) Sqlizer {
 	s := lo.Map(val, func(item T, index int) any {
 		return any(item)
 	})
-	return Expr(fmt.Sprintf("%s NOT IN (%s)", field, Placeholders(len(val))), s...)
+	return fieldExpr{field: field, suffix: fmt.Sprintf(" NOT IN (%s)", Placeholders(len(val))), args: s}
 }
 
 // Like is syntactic sugar for use with LIKE conditions.
@@ -232,7 +259,7 @@ func NotIn[T any](field string, val []T) Sqlizer {
 //
 //	.Where(Like("name", "%irrel"))
 func Like(field, value string) Sqlizer {
-	return Expr(fmt.Sprintf("%s LIKE ?", field), value)
+	return fieldExpr{field: field, suffix: " LIKE ?", args: []any{value}}
 }
 
 // NotLike is syntactic sugar for use with LIKE conditions.
@@ -240,7 +267,7 @@ func Like(field, value string) Sqlizer {
 //
 //	.Where(NotLike("name": "%irrel"))
 func NotLike(field, value string) Sqlizer {
-	return Expr(fmt.Sprintf("%s NOT LIKE ?", field), value)
+	return fieldExpr{field: field, suffix: " NOT LIKE ?", args: []any{value}}
 }
 
 // ILike is syntactic sugar for use with ILIKE conditions.
@@ -248,7 +275,7 @@ func NotLike(field, value string) Sqlizer {
 //
 //	.Where(ILike("name", "sq%"))
 func ILike(field, value string) Sqlizer {
-	return Expr(fmt.Sprintf("%s ILIKE ?", field), value)
+	return fieldExpr{field: field, suffix: " ILIKE ?", args: []any{value}}
 }
 
 // NotILike is syntactic sugar for use with ILIKE conditions.
@@ -256,21 +283,21 @@ func ILike(field, value string) Sqlizer {
 //
 //	.Where(NotILike("name", "sq%"))
 func NotILike(field, value string) Sqlizer {
-	return Expr(fmt.Sprintf("%s NOT ILIKE ?", field), value)
+	return fieldExpr{field: field, suffix: " NOT ILIKE ?", args: []any{value}}
 }
 
 // IsNull builds a field IS NULL predicate.
 //
 // Use this instead of Eq{field: nil} when you need SQL NULL semantics.
 func IsNull(field string) Sqlizer {
-	return Expr(fmt.Sprintf("%s IS NULL", field))
+	return fieldExpr{field: field, suffix: " IS NULL"}
 }
 
 // IsNotNull builds a field IS NOT NULL predicate.
 //
 // Use this instead of NotEq{field: nil} when you need SQL NULL semantics.
 func IsNotNull(field string) Sqlizer {
-	return Expr(fmt.Sprintf("%s IS NOT NULL", field))
+	return fieldExpr{field: field, suffix: " IS NOT NULL"}
 }
 
 // Lt is syntactic sugar for use with Where/Having/Set methods.
@@ -278,7 +305,7 @@ func IsNotNull(field string) Sqlizer {
 //
 //	.Where(Lt("id", 1))
 func Lt[T cmp.Ordered](field string, value T) Sqlizer {
-	return Expr(fmt.Sprintf("%s < ?", field), value)
+	return fieldExpr{field: field, suffix: " < ?", args: []any{value}}
 }
 
 // Lte is syntactic sugar for use with Where/Having/Set methods.
@@ -286,7 +313,7 @@ func Lt[T cmp.Ordered](field string, value T) Sqlizer {
 //
 //	.Where(Lte("id", 1)) == "id <= 1"
 func Lte[T cmp.Ordered](field string, value T) Sqlizer {
-	return Expr(fmt.Sprintf("%s <= ?", field), value)
+	return fieldExpr{field: field, suffix: " <= ?", args: []any{value}}
 }
 
 // Gt is syntactic sugar for use with Where/Having/Set methods.
@@ -294,7 +321,7 @@ func Lte[T cmp.Ordered](field string, value T) Sqlizer {
 //
 //	.Where(Gt("id", 1)) == "id > 1"
 func Gt[T cmp.Ordered](field string, value T) Sqlizer {
-	return Expr(fmt.Sprintf("%s > ?", field), value)
+	return fieldExpr{field: field, suffix: " > ?", args: []any{value}}
 }
 
 // Gte is syntactic sugar for use with Where/Having/Set methods.
@@ -302,12 +329,12 @@ func Gt[T cmp.Ordered](field string, value T) Sqlizer {
 //
 //	.Where(Gte("id", 1)) == "id >= 1"
 func Gte[T cmp.Ordered](field string, value T) Sqlizer {
-	return Expr(fmt.Sprintf("%s >= ?", field), value)
+	return fieldExpr{field: field, suffix: " >= ?", args: []any{value}}
 }
 
 // Between builds a field BETWEEN ? AND ? predicate.
 func Between[T cmp.Ordered](field string, start, end T) Sqlizer {
-	return Expr(fmt.Sprintf("%s BETWEEN ? AND ?", field), start, end)
+	return fieldExpr{field: field, suffix: " BETWEEN ? AND ?", args: []any{start, end}}
 }
 
 type conj []Sqlizer
@@ -318,6 +345,9 @@ func (c conj) join(sep, defaultExpr string) (sql string, args []any, err error) 
 	}
 	var sqlParts []string
 	for _, sqlizer := range c {
+		if sqlizer == nil {
+			continue
+		}
 		partSQL, partArgs, err := sqlizer.ToSql()
 		if err != nil {
 			return "", nil, err
@@ -329,6 +359,8 @@ func (c conj) join(sep, defaultExpr string) (sql string, args []any, err error) 
 	}
 	if len(sqlParts) > 0 {
 		sql = fmt.Sprintf("(%s)", strings.Join(sqlParts, sep))
+	} else {
+		sql = defaultExpr
 	}
 	return
 }

@@ -161,7 +161,7 @@ _, err = lorm.Update[*User](engine).
 	Exec(ctx)
 
 // Delete
-_, err = lorm.DeleteModel[*User](engine).
+_, err = lorm.Delete[*User](engine).
 	ID(user.ID).
 	Exec(ctx)
 ```

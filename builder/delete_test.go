@@ -34,6 +34,16 @@ func TestDeleteBuilderToSqlErr(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDeleteBuilderIgnoresNilAndEmptyWhereClauses(t *testing.T) {
+	sql, args, err := Delete("users").
+		Where(nil).
+		Where("").
+		ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "DELETE FROM users", sql)
+	assert.Empty(t, args)
+}
+
 func TestDeleteBuilderReturningWithSuffix(t *testing.T) {
 	b := Delete("").
 		From("users").

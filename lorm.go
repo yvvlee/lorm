@@ -166,9 +166,9 @@ func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Co
 		rbErr := tx.Rollback()
 		if rbErr != nil {
 			e.logger.ErrorContext(ctx, "ROLLBACK failed", "sessionID", sessionID, "err", err, "rbErr", rbErr)
-		} else {
-			e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID, "err", err)
+			return errors.Join(err, rbErr)
 		}
+		e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID, "err", err)
 		return err
 	}
 	err = tx.Commit()

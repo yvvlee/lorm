@@ -38,4 +38,17 @@ func TestQueryModelPageCoverage(t *testing.T) {
 		assert.Nil(t, list)
 		assert.EqualValues(t, 1, total)
 	})
+
+	t.Run("returnsNilWhenOffsetOverflows", func(t *testing.T) {
+		recorder := newScriptedQueryRecorder()
+		recorder.QueueQueryRows([]string{"count"}, []driver.Value{int64(5)})
+		engine := newScriptedEngine(t, recorder)
+
+		page := uint64(1)<<63 + 1
+		list, total, err := Query[*reservedWordModel](engine).Page(context.Background(), page, 2)
+		require.NoError(t, err)
+		assert.Nil(t, list)
+		assert.EqualValues(t, 5, total)
+		assert.Len(t, recorder.queryCalls, 1)
+	})
 }

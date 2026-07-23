@@ -47,6 +47,17 @@ func TestUpdateBuilderToSqlErr(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestUpdateBuilderIgnoresNilAndEmptyWhereClauses(t *testing.T) {
+	sql, args, err := Update("users").
+		Set("name", "Alice").
+		Where(nil).
+		Where("").
+		ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "UPDATE users SET name = ?", sql)
+	assert.Equal(t, []any{"Alice"}, args)
+}
+
 func TestUpdateBuilderPlaceholders(t *testing.T) {
 	b := Update("test").SetMap(Eq{"x": 1, "y": 2})
 

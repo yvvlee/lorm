@@ -96,7 +96,7 @@ func TestCountBuilder(t *testing.T) {
 
 		sql, args, err := countBuilder.ToSql()
 		assert.NoError(t, err)
-		assert.Equal(t, "SELECT COUNT(DISTINCT department) FROM employees WHERE salary > ?", sql)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT department, COUNT(*) as cnt FROM employees WHERE salary > ? GROUP BY department) AS sub", sql)
 		assert.Equal(t, []any{30000}, args)
 	})
 
@@ -381,6 +381,17 @@ func TestSelectWithEmptyStringWhereClause(t *testing.T) {
 	sql, _, err := Select("*").From("users").Where("").ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "SELECT * FROM users", sql)
+}
+
+func TestSelectWithNilOrEmptyHavingClause(t *testing.T) {
+	sql, _, err := Select("department").
+		From("employees").
+		GroupBy("department").
+		Having(nil).
+		Having("").
+		ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT department FROM employees GROUP BY department", sql)
 }
 
 func TestSelectSubqueryPlaceholderNumbering(t *testing.T) {

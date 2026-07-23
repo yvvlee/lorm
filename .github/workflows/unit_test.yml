@@ -2,14 +2,56 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  test:
-    name: Test
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
+      - name: Test example module
+        working-directory: example
+        env:
+          CGO_ENABLED: 1
+        run: go test ./...
+
+  integration:
+    name: Integration (${{ matrix.database }})
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: MySQL
+            driver: mysql
+            dsn: root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local
+          - database: PostgreSQL
+            driver: pgx
+            dsn: host=127.0.0.1 user=postgres password=123456 dbname=test port=5432 sslmode=disable TimeZone=Asia/Shanghai
+          - database: SQLite
+            driver: sqlite3
+            dsn: file:test.db?cache=shared&mode=memory
     services:
       mysql:
         image: mysql:8.0
@@ -19,7 +61,7 @@ jobs:
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-      
+
       postgres:
         image: postgres:13
         env:
@@ -28,62 +70,25 @@ jobs:
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      
-      sqlite:
-        image: alpine:latest
-        ports:
-          - 8080:8080
 
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.22'
-
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Get dependencies
-        run: |
-          go mod download
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: integration/go.mod
+          cache-dependency-path: integration/go.sum
 
-      - name: Wait for MySQL to be ready
-        run: |
-          for i in {1..30}; do
-            if mysqladmin ping -h 127.0.0.1 -u root --password=123456 --silent; then
-              echo "MySQL is ready"
-              break
-            fi
-            echo "Waiting for MySQL..."
-            sleep 2
-          done
+      - name: Download dependencies
+        working-directory: integration
+        run: go mod download
 
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          for i in {1..30}; do
-            if pg_isready -h 127.0.0.1 -U postgres; then
-              echo "PostgreSQL is ready"
-              break
-            fi
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-
-      - name: Run MySQL tests
-        run: go test -v ./...
-        env:
-          DB_DRIVER: mysql
-          DB_DSN: root:123456@tcp(127.0.0.1:3306)/test?parseTime=true&charset=utf8mb4&collation=utf8mb4_general_ci&loc=Local
-
-      - name: Run PostgreSQL tests
-        run: go test -v ./...
-        env:
-          DB_DRIVER: pgx
-          DB_DSN: host=127.0.0.1 user=postgres password=123456 dbname=test port=5432 sslmode=disable TimeZone=Asia/Shanghai
-
-      - name: Run SQLite tests
-        run: go test -v ./...
+      - name: Run integration tests
+        working-directory: integration
         env:
           CGO_ENABLED: 1
-          DB_DRIVER: sqlite3
-          DB_DSN: file:test.db?cache=shared&mode=memory
+          DB_DRIVER: ${{ matrix.driver }}
+          DB_DSN: ${{ matrix.dsn }}
+        run: go test -count=1 -v ./...

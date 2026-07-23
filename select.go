@@ -132,7 +132,12 @@ func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, u
 	if page == 0 {
 		page = 1
 	}
-	offset := (page - 1) * size
+	pageIndex := page - 1
+	offsetOverflow := pageIndex > ^uint64(0)/size
+	var offset uint64
+	if !offsetOverflow {
+		offset = pageIndex * size
+	}
 	countStmt := QueryCol[uint64](s.engine)
 	// Count with a derived builder so filters stay in sync with the data query.
 	countStmt.builder = s.builder.ToCountBuilder()
@@ -143,7 +148,7 @@ func (s *QueryModelStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, u
 	if !ok || count == 0 {
 		return nil, 0, nil
 	}
-	if offset >= count {
+	if offsetOverflow || offset >= count {
 		return nil, count, nil
 	}
 	s.builder.Limit(size).Offset(offset)
