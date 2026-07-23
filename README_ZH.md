@@ -88,7 +88,7 @@ lormgen ./...
 ```
 
 这会生成 `_lorm_gen.go` 文件，包含 `TableName()`、`Fields()`、`New()`、
-`LormFieldPtr()` 和 `LormModelDescriptor()` 等方法。
+`LormFieldPtr()`、`LormFieldValue()` 和 `LormModelDescriptor()` 等方法。
 
 ### 3. 初始化引擎
 

@@ -59,6 +59,69 @@ func (m *Test) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Test) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "index":
+		return m.Int
+	case "int_p":
+		if m.IntP == nil {
+			return nil
+		}
+		return m.IntP
+	case "bool":
+		return m.Bool
+	case "bool_p":
+		if m.BoolP == nil {
+			return nil
+		}
+		return m.BoolP
+	case "str":
+		return m.Str
+	case "str_p":
+		if m.StrP == nil {
+			return nil
+		}
+		return m.StrP
+	case "timestamp":
+		return m.Timestamp
+	case "timestamp_p":
+		if m.TimestampP == nil {
+			return nil
+		}
+		return m.TimestampP
+	case "datetime":
+		return m.Datetime
+	case "datetime_p":
+		if m.DatetimeP == nil {
+			return nil
+		}
+		return m.DatetimeP
+	case "decimal":
+		return m.Decimal
+	case "decimal_p":
+		if m.DecimalP == nil {
+			return nil
+		}
+		return m.DecimalP
+	case "int_slice":
+		return NewJSONFieldWrapper(&m.IntSlice)
+	case "int_slice_p":
+		return NewJSONFieldWrapper(&m.IntSliceP)
+	case "struct":
+		return NewJSONFieldWrapper(&m.Struct)
+	case "struct_p":
+		return NewJSONFieldWrapper(&m.StructP)
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *Test) LormModelDescriptor() *ModelDescriptor {
 	return _lorm_file_test_model_model_descriptor_map["Test"]
 }

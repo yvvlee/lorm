@@ -37,6 +37,27 @@ func (m *Product) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Product) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "name":
+		return m.Name
+	case "category":
+		return m.Category
+	case "price":
+		return m.Price
+	case "status":
+		return m.Status
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *Product) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Product"]
 }

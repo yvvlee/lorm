@@ -33,6 +33,23 @@ func (m *Post) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Post) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "title":
+		return m.Title
+	case "category":
+		return m.Category
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *Post) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Post"]
 }

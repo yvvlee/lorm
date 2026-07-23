@@ -89,6 +89,7 @@ type FieldDescriptor struct {
 	DBField        string
 	Type           string
 	Flag           FieldFlag
+	Pointer        bool   `json:"-"`
 	EnsureFullName string `json:",omitempty"`
 	EnsureType     string `json:",omitempty"`
 }

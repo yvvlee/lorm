@@ -259,7 +259,7 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 								return false
 							}
 							for _, embedField := range structType.Fields.List {
-								fieldList, err := g.parseField(structInfo.Name+"."+embedName, embedField)
+								fieldList, err := g.parseField(pkg, structInfo.Name+"."+embedName, embedField)
 								if err != nil {
 									extractErr = err
 									return false
@@ -278,7 +278,7 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 							}
 						} else {
 							// Regular field
-							fieldList, err := g.parseField(structInfo.Name, field)
+							fieldList, err := g.parseField(pkg, structInfo.Name, field)
 							if err != nil {
 								extractErr = err
 								return false
@@ -317,13 +317,22 @@ func relativeToWorkingDir(filePath string) string {
 }
 
 // parseField expands grouped declarations like "A, B string" into one descriptor per field name.
-func (g *Generator) parseField(structName string, field *ast.Field) ([]*lorm.FieldDescriptor, error) {
+func (g *Generator) parseField(pkg *packages.Package, structName string, field *ast.Field) ([]*lorm.FieldDescriptor, error) {
 	fieldType, err := exprToString(field.Type)
 	if err != nil {
 		return nil, fmt.Errorf("unsupported field type %q for %s.%s", exprSource(field.Type), structName, fieldNames(field))
 	}
 
 	dbField, flag := parseTag(field, g.tagKey)
+	pointer := false
+	if _, ok := field.Type.(*ast.StarExpr); ok {
+		pointer = true
+	}
+	if pkg != nil && pkg.TypesInfo != nil {
+		if typ := pkg.TypesInfo.TypeOf(field.Type); typ != nil {
+			_, pointer = types.Unalias(typ).Underlying().(*types.Pointer)
+		}
+	}
 	var fields []*lorm.FieldDescriptor
 	for i, name := range field.Names {
 		fieldInfo := &lorm.FieldDescriptor{
@@ -340,6 +349,7 @@ func (g *Generator) parseField(structName string, field *ast.Field) ([]*lorm.Fie
 		}
 
 		fieldInfo.Type = fieldType
+		fieldInfo.Pointer = pointer
 		fields = append(fields, fieldInfo)
 	}
 	return fields, nil

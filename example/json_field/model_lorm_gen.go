@@ -35,6 +35,25 @@ func (m *UserProfile) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *UserProfile) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "name":
+		return m.Name
+	case "tags":
+		return lorm.NewJSONFieldWrapper(&m.Tags)
+	case "preferences":
+		return lorm.NewJSONFieldWrapper(&m.Preferences)
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *UserProfile) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["UserProfile"]
 }

@@ -65,19 +65,19 @@ User code
 - **`scanner.go`** — Maps `sql.Rows` back into model instances using `Model.LormFieldPtr(name)` for per-instance field pointers.
 - **`builder/`** — Pure SQL construction, no engine dependency. Dialect differences (placeholder `?` vs `$N`, quoting style) are injected via `PlaceholderFormat` and `Escaper` interfaces.
 - **`names/`** — SQL identifier quoters for different dialects (backtick, double-quote, brackets).
-- **`cmd/lormgen/`** — Code generator. Scans structs embedding `lorm.UnimplementedTable` or `lorm.UnimplementedModel` and emits `*_lorm_gen.go` files with `TableName()`, `Fields()`, `LormModelDescriptor()`, `New()`, and `LormFieldPtr(name)` methods.
+- **`cmd/lormgen/`** — Code generator. Scans structs embedding `lorm.UnimplementedTable` or `lorm.UnimplementedModel` and emits `*_lorm_gen.go` files with `TableName()`, `Fields()`, `LormModelDescriptor()`, `New()`, `LormFieldPtr(name)`, and `LormFieldValue(name)` methods.
 - **`benchmarks/orm-crud/`** — Separate benchmark submodule for comparing `lorm`, `GORM`, `XORM`, and `ent` on single-row and batch CRUD across SQLite/MySQL/PostgreSQL. Its dependencies are intentionally isolated from the root module.
 
 ### Code generation
 
 Models must embed `lorm.UnimplementedTable` (for table models) or `lorm.UnimplementedModel` (for custom query result types). Running `lormgen` generates `*_lorm_gen.go` beside each source file. These generated files must exist before the package compiles — do not delete them without regenerating.
 
-Generated models implement `LormFieldPtr(name string) any`. Runtime code uses that method for:
+Generated models implement two field access paths:
 
-- scanning rows back into a specific model instance
-- extracting insert/update values without building a per-call field map
+- `LormFieldPtr(name string) any` supplies destinations for scanning and pointers for managed-field mutation.
+- `LormFieldValue(name string) any` supplies insert/update values and converts nil pointer fields to SQL `NULL` without reflection.
 
-For JSON-tagged fields, generated `LormFieldPtr` returns `lorm.NewJSONFieldWrapper(&field)`.
+For JSON-tagged fields, both generated accessors return `lorm.NewJSONFieldWrapper(&field)`.
 
 ### Struct tags
 

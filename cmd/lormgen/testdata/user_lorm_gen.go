@@ -33,6 +33,23 @@ func (m *User) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *User) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "name":
+		return m.Name
+	case "age":
+		return m.Age
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *User) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_testdata_user_model_descriptor_map["User"]
 }

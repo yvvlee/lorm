@@ -31,6 +31,21 @@ func (m *Document) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Document) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "title":
+		return m.Title
+	case "version":
+		return m.Version
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *Document) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Document"]
 }

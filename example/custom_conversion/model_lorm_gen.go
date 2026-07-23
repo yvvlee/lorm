@@ -33,6 +33,23 @@ func (m *Report) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Report) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "title":
+		return m.Title
+	case "scores":
+		return m.Scores
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
 func (m *Report) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Report"]
 }

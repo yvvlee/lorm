@@ -29,6 +29,19 @@ func (m *Account) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Account) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "owner":
+		return m.Owner
+	case "balance":
+		return m.Balance
+	default:
+		return nil
+	}
+}
+
 func (m *Account) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Account"]
 }

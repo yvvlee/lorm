@@ -27,6 +27,17 @@ func (m *Role) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Role) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "name":
+		return m.Name
+	default:
+		return nil
+	}
+}
+
 func (m *Role) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_model_descriptor_map["Role"]
 }
@@ -88,6 +99,25 @@ func (m *User) LormFieldPtr(name string) any {
 		return &m.CreatedAt
 	case "updated_at":
 		return &m.UpdatedAt
+	default:
+		return nil
+	}
+}
+
+func (m *User) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "name":
+		return m.Name
+	case "email":
+		return m.Email
+	case "role_id":
+		return m.RoleID
+	case "created_at":
+		return m.CreatedAt
+	case "updated_at":
+		return m.UpdatedAt
 	default:
 		return nil
 	}
@@ -174,6 +204,21 @@ func (m *UserWithRole) LormFieldPtr(name string) any {
 		return &m.Email
 	case "role_name":
 		return &m.RoleName
+	default:
+		return nil
+	}
+}
+
+func (m *UserWithRole) LormFieldValue(name string) any {
+	switch name {
+	case "user_id":
+		return m.UserID
+	case "user_name":
+		return m.UserName
+	case "email":
+		return m.Email
+	case "role_name":
+		return m.RoleName
 	default:
 		return nil
 	}

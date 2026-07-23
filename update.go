@@ -104,6 +104,7 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 	}
 	escaper := s.engine.Escaper()
 	descriptor := t.LormModelDescriptor()
+	valueAccessor, hasValueAccessor := any(t).(ModelFieldValueAccessor)
 	var (
 		hasPrimaryKey bool
 		now           = time.Now()
@@ -111,9 +112,13 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 	)
 
 	for _, field := range descriptor.Fields {
-		value := t.LormFieldPtr(field.DBField)
-		if value == nil {
+		valuePtr := t.LormFieldPtr(field.DBField)
+		if valuePtr == nil {
 			continue
+		}
+		value := valuePtr
+		if hasValueAccessor {
+			value = valueAccessor.LormFieldValue(field.DBField)
 		}
 
 		if field.Flag.HasFlag(FlagPrimaryKey) {
@@ -128,7 +133,7 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 			dataMap[escaper.Escape(field.DBField)] = builder.Expr(escaper.Escape(field.DBField) + "+1")
 			s.after = append(s.after, func(rowsAffected int64) {
 				if rowsAffected > 0 {
-					incrementVersionValue(value)
+					incrementVersionValue(valuePtr)
 				}
 			})
 			continue
@@ -137,7 +142,7 @@ func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
 			continue
 		}
 		if field.Flag.HasFlag(FlagUpdated) {
-			if updatedValue, syncValue, ok := newUpdatedFieldValue(value, now); ok {
+			if updatedValue, syncValue, ok := newUpdatedFieldValue(valuePtr, now); ok {
 				dataMap[escaper.Escape(field.DBField)] = updatedValue
 				s.after = append(s.after, func(rowsAffected int64) {
 					if rowsAffected > 0 {

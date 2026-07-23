@@ -29,6 +29,23 @@ func (m *UserAddress) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *UserAddress) LormFieldValue(name string) any {
+	switch name {
+	case "id":
+		return m.ID
+	case "int64_alias":
+		return m.Int64Alias
+	case "strings":
+		return lorm.NewJSONFieldWrapper(&m.Strings)
+	case "addr_address":
+		return m.Address.Address
+	case "addr_post_code":
+		return m.Address.PostCode
+	default:
+		return nil
+	}
+}
+
 func (m *UserAddress) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_testdata_user_address_model_descriptor_map["UserAddress"]
 }

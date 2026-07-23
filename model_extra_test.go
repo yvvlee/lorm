@@ -52,9 +52,10 @@ func TestModelsToInsertDataTransformsFields(t *testing.T) {
 		indexByColumn[col] = i
 	}
 
-	assert.Same(t, &m.Str, vals[indexByColumn["str"]])
-	assert.Same(t, &m.CreatedAt, vals[indexByColumn["created_at"]])
-	assert.Same(t, &m.UpdatedAt, vals[indexByColumn["updated_at"]])
+	assert.Equal(t, m.Str, vals[indexByColumn["str"]])
+	assert.Equal(t, m.CreatedAt, vals[indexByColumn["created_at"]])
+	assert.Equal(t, m.UpdatedAt, vals[indexByColumn["updated_at"]])
+	assert.Nil(t, vals[indexByColumn["decimal_p"]])
 
 	intSliceWrapper, ok := vals[indexByColumn["int_slice"]].(*JSONFieldWrapper)
 	assert.True(t, ok)

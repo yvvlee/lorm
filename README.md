@@ -116,7 +116,8 @@ lormgen ./...
 ```
 
 This generates `_lorm_gen.go` files with methods such as `TableName()`,
-`Fields()`, `New()`, `LormFieldPtr()`, and `LormModelDescriptor()`.
+`Fields()`, `New()`, `LormFieldPtr()`, `LormFieldValue()`, and
+`LormModelDescriptor()`.
 
 ### 3. Open an engine
 

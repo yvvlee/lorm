@@ -41,6 +41,31 @@ import (
         }
     }
 
+    func (m *{{$struct.Name}}) LormFieldValue(name string) any {
+        switch name {
+            {{- range $struct.Fields}}
+            case "{{.DBField}}":
+                {{- if .EnsureFullName }}
+                if m.{{.EnsureFullName}} == nil {
+                    return nil
+                }
+                {{- end }}
+                {{- if .Flag.HasFlag 4 }}
+                return {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})
+                {{- else }}
+                    {{- if .Pointer }}
+                    if m.{{.FullName}} == nil {
+                        return nil
+                    }
+                    {{- end }}
+                return m.{{.FullName}}
+                {{- end }}
+            {{- end}}
+        default:
+            return nil
+        }
+    }
+
     func (m *{{$struct.Name}}) LormModelDescriptor() *{{$.LormImportAlias}}.ModelDescriptor {
         return {{$.RawVarPrefix}}_model_descriptor_map["{{$struct.Name}}"]
     }

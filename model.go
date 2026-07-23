@@ -33,6 +33,13 @@ type Model interface {
 	LormModelDescriptor() *ModelDescriptor
 }
 
+// ModelFieldValueAccessor is implemented by generated models to expose values
+// for database writes without reflection. LormFieldPtr remains the scan and
+// in-memory mutation path.
+type ModelFieldValueAccessor interface {
+	LormFieldValue(name string) any
+}
+
 // UnimplementedModel can be embedded to satisfy the Model marker method.
 type UnimplementedModel struct{}
 
@@ -75,11 +82,15 @@ func ModelsToInsertData[T Model](models []T, ignoreFields ...string) (columns []
 	now := time.Now()
 	values = make([][]any, 0, len(models))
 	for _, model := range models {
+		valueAccessor, hasValueAccessor := any(model).(ModelFieldValueAccessor)
 		rowValues := make([]any, len(columns))
 		for i, field := range columns {
 			value := model.LormFieldPtr(field)
 			if columnNeedsCurrentTime[i] {
 				fillCurrentTime(value, now)
+			}
+			if hasValueAccessor {
+				value = valueAccessor.LormFieldValue(field)
 			}
 			rowValues[i] = value
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/names"
 )
 
@@ -69,6 +70,60 @@ func Test_Generate(t *testing.T) {
 	exceptContent, err = testdata.ReadFile("testdata/user_address_lorm_gen.go")
 	assert.Nil(t, err)
 	assert.Equal(t, string(exceptContent), string(content))
+}
+
+func TestGenerateCodeEmitsNilSafeFieldValues(t *testing.T) {
+	content, err := generateCode(&lorm.FileDescriptor{
+		Path:            "model.go",
+		Package:         "models",
+		LormImportAlias: "lorm",
+		Structs: []*lorm.ModelDescriptor{{
+			Name: "Record",
+			Fields: []*lorm.FieldDescriptor{{
+				Name:     "Amount",
+				FullName: "Amount",
+				DBField:  "amount",
+				Type:     "*decimal.Decimal",
+				Pointer:  true,
+			}},
+		}},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "func (m *Record) LormFieldValue(name string) any")
+	assert.Contains(t, string(content), "if m.Amount == nil")
+	assert.Contains(t, string(content), "return m.Amount")
+}
+
+func TestExtractFileRecognizesPointerAlias(t *testing.T) {
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	repoRoot := findRepoRoot(t, root)
+	tmp := t.TempDir()
+	writeFile(t, filepath.Join(tmp, "go.mod"), "module example.com/pointeralias\n\ngo 1.25.0\n\nrequire github.com/yvvlee/lorm v0.0.0\n\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repoRoot)+"\n")
+	copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(tmp, "go.sum"))
+	modelPath := filepath.Join(tmp, "model.go")
+	writeFile(t, modelPath, `package pointeralias
+
+import "github.com/yvvlee/lorm"
+
+type OptionalInt *int
+
+type Result struct {
+	lorm.UnimplementedModel
+	Value OptionalInt
+}
+`)
+
+	generator := NewGenerator(new(names.SnakeMapper), new(names.SnakeMapper), "lorm", "_lorm_gen")
+	pkgs, err := generator.load([]string{modelPath})
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	file := findSyntaxFile(t, generator, pkgs[0], "model.go")
+	info, err := generator.extractFile(pkgs[0], file)
+	require.NoError(t, err)
+	require.Len(t, info.Structs, 1)
+	require.Len(t, info.Structs[0].Fields, 1)
+	assert.True(t, info.Structs[0].Fields[0].Pointer)
 }
 
 func Test_Generate_FlattensEmbeddedStructsAcrossFiles(t *testing.T) {
