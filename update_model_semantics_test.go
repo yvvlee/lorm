@@ -62,7 +62,7 @@ func TestUpdateSetModelCoverage(t *testing.T) {
 		UpdatedAt: time.Unix(100, 0),
 	}
 
-	stmt := Update[*updateSemanticsModel](engine).SetModel(model)
+	stmt := engine.Update[*updateSemanticsModel]().SetModel(model)
 	require.NoError(t, stmt.err)
 
 	sql, args, err := stmt.builder.ToSql()

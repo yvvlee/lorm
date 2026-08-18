@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -22,16 +21,16 @@ func main() {
 	defer cleanup()
 
 	admin := &Role{Name: "admin"}
-	if _, err := lorm.Insert[*Role](engine).AddModel(admin).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Role]().AddModel(admin).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
 	viewer := &Role{Name: "viewer"}
-	if _, err := lorm.Insert[*Role](engine).AddModel(viewer).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Role]().AddModel(viewer).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err := lorm.Insert[*User](engine).AddModels(
+	if _, err := engine.Insert[*User]().AddModels(
 		&User{Name: "Alice", Email: "alice@example.com", RoleID: admin.ID},
 		&User{Name: "Bob", Email: "bob@example.com", RoleID: viewer.ID},
 	).Exec(ctx); err != nil {
@@ -45,7 +44,7 @@ func main() {
 		r    = role.Fields().WithAlias("r")
 	)
 
-	rows, err := lorm.Query[*UserWithRole](engine).
+	rows, err := engine.Select[*UserWithRole]().
 		Select(
 			u.ID()+" AS user_id",
 			u.Name()+" AS user_name",

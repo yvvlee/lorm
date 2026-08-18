@@ -13,13 +13,13 @@ type UserRepository struct {
 
 func NewUserRepository(engine *lorm.Engine) *UserRepository {
 	return &UserRepository{
-		Repository: lorm.NewRepository[*User](engine),
+		Repository: engine.Repository[*User](),
 	}
 }
 
 func (r *UserRepository) ListAdults(ctx context.Context, minAge int) ([]*User, error) {
 	var u User
-	return lorm.Query[*User](r.Engine).
+	return r.Engine.Select[*User]().
 		Where(builder.Gte(u.Fields().Age(), minAge)).
 		OrderBy(u.Fields().ID() + " ASC").
 		Find(ctx)

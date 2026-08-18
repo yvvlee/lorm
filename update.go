@@ -14,10 +14,10 @@ func newUpdateBuilder[T Table](engine *Engine) *builder.UpdateBuilder {
 }
 
 // Update builds an UPDATE statement for table T.
-func Update[T Table](engine *Engine) *UpdateStmt[T] {
+func (e *Engine) Update[T Table]() *UpdateStmt[T] {
 	return &UpdateStmt[T]{
-		engine:  engine,
-		builder: newUpdateBuilder[T](engine),
+		engine:  e,
+		builder: newUpdateBuilder[T](e),
 	}
 }
 

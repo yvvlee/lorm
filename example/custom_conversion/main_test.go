@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -24,16 +23,16 @@ func TestCustomConversionFlow(t *testing.T) {
 		Title:  "quarterly-report",
 		Scores: CSVInts{90, 95, 88},
 	}
-	_, err = lorm.Insert[*Report](engine).AddModel(report).Exec(ctx)
+	_, err = engine.Insert[*Report]().AddModel(report).Exec(ctx)
 	assert.NoError(t, err)
 
-	repo := lorm.NewRepository[*Report](engine)
+	repo := engine.Repository[*Report]()
 	loaded, err := repo.Get(ctx, report.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, CSVInts{90, 95, 88}, loaded.Scores)
 
 	var r Report
-	_, err = lorm.Update[*Report](engine).
+	_, err = engine.Update[*Report]().
 		ID(report.ID).
 		SetMap(map[string]any{r.Fields().Scores(): CSVInts{100, 99, 98}}).
 		Exec(ctx)

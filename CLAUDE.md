@@ -49,7 +49,7 @@ LORM is a lightweight, type-safe ORM for Go built on `database/sql`. It uses cod
 
 ```
 User code
-  → Query/Insert/Update/DeleteModel[T]() — typed entry points in select.go, insert.go, update.go, delete.go
+  → Engine.Select/Insert/Update/Delete[T]() — typed entry points in select.go, insert.go, update.go, delete.go
   → Delete() — untyped delete builder for custom table/condition deletes
   → builder/* — SQL string construction (SelectBuilder, InsertBuilder, etc.)
   → Engine (lorm.go) — holds the *sql.DB, resolves transactions from context
@@ -107,6 +107,6 @@ The `INSERT IGNORE` syntax and `RETURNING` clause are handled per-driver in `ins
 
 ### Statement lifecycle
 
-`Query`, `Insert`, `Update`, `DeleteModel`, and `Delete` create a fresh builder for each call. There is no `sync.Pool` or manual release path for statement builders.
+`Engine.Select`, `Engine.Insert`, `Engine.Update`, and `Engine.Delete` create a fresh builder for each call. There is no `sync.Pool` or manual release path for statement builders.
 
 Statement values are mutable and intended for a single logical operation. Create a new statement chain per query/update/insert/delete, and do not share the same statement across goroutines.

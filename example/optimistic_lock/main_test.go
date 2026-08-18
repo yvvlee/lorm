@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -19,7 +18,7 @@ func TestOptimisticLockFlow(t *testing.T) {
 	}
 	defer cleanup()
 
-	repo := lorm.NewRepository[*Document](engine)
+	repo := engine.Repository[*Document]()
 	doc := &Document{Title: "Draft", Version: 1}
 	_, err = repo.Insert(ctx, doc)
 	assert.NoError(t, err)
@@ -30,13 +29,13 @@ func TestOptimisticLockFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	firstCopy.Title = "Published"
-	rowsAffected, err := lorm.Update[*Document](engine).SetModel(firstCopy).Exec(ctx)
+	rowsAffected, err := engine.Update[*Document]().SetModel(firstCopy).Exec(ctx)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 1, rowsAffected)
 	assert.Equal(t, 2, firstCopy.Version)
 
 	staleCopy.Title = "Stale Write"
-	rowsAffected, err = lorm.Update[*Document](engine).SetModel(staleCopy).Exec(ctx)
+	rowsAffected, err = engine.Update[*Document]().SetModel(staleCopy).Exec(ctx)
 	assert.NoError(t, err)
 	assert.Zero(t, rowsAffected)
 	assert.Equal(t, 1, staleCopy.Version)

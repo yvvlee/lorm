@@ -194,7 +194,7 @@ var testModelDescriptor = &ModelDescriptor{
 }
 
 func newTestRepository(engine *Engine) *Repository[*Test] {
-	return NewRepository[*Test](engine)
+	return engine.Repository[*Test]()
 }
 
 var (
@@ -437,21 +437,22 @@ func TestEngine(t *testing.T) {
 		assert.Equal(t, "updated_by_map", model.Str)
 	}
 
-	list, err := Query[*Test](engine).
+	list, err := engine.Select[*Test]().
 		Where("id < ?", 3).
 		Find(ctx)
 	require.NoError(t, err)
 	assert.Len(t, list, 2)
 
-	single, err := Query[*Test](engine).
+	single, found, err := engine.Select[*Test]().
 		Where("id < ?", 2).
 		Limit(1).
 		Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	require.NotNil(t, single)
 	assert.Equal(t, uint64(1), single.ID)
 
-	ids, err := QueryCol[uint64](engine).
+	ids, err := engine.Select[uint64]().
 		Select("id").
 		From("test").
 		Where("id < ?", 3).
@@ -460,7 +461,7 @@ func TestEngine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []uint64{1, 2}, ids)
 
-	id, ok, err := QueryCol[uint64](engine).
+	id, ok, err := engine.Select[uint64]().
 		Select("id").
 		From("test").
 		Where("id < ?", 2).
@@ -470,15 +471,16 @@ func TestEngine(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, uint64(1), id)
 
-	res, err := Query[*Test](engine).Where("id = ?", -1).Limit(1).Get(ctx)
+	res, found, err := engine.Select[*Test]().Where("id = ?", -1).Limit(1).Get(ctx)
 	require.NoError(t, err)
+	assert.False(t, found)
 	assert.Nil(t, res)
 
-	list, err = Query[*Test](engine).Where("id = ?", -1).Find(ctx)
+	list, err = engine.Select[*Test]().Where("id = ?", -1).Find(ctx)
 	require.NoError(t, err)
 	assert.Nil(t, list)
 
-	list, err = Query[*Test](engine).Where("id > ?", 0).Find(ctx)
+	list, err = engine.Select[*Test]().Where("id > ?", 0).Find(ctx)
 	require.NoError(t, err)
 	assert.NotEmpty(t, list)
 
@@ -491,7 +493,7 @@ func TestEngine(t *testing.T) {
 		IntSlice:  []int{1},
 		Struct:    Sub{ID: 1, Name: "x"},
 	}
-	rowsAffected, err = Insert[*Test](engine).AddModel(m).Exec(ctx)
+	rowsAffected, err = engine.Insert[*Test]().AddModel(m).Exec(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), rowsAffected)
 
@@ -570,7 +572,7 @@ func TestInsertSingle(t *testing.T) {
 		IntSlice:  []int{7},
 		Struct:    Sub{ID: 7, Name: "s"},
 	}
-	rows, err := Insert[*Test](engine).AddModel(m).Exec(ctx)
+	rows, err := engine.Insert[*Test]().AddModel(m).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rows)
 	assert.True(t, m.ID > 0)
@@ -591,7 +593,7 @@ func TestInsertIgnore(t *testing.T) {
 		IntSlice:  []int{8},
 		Struct:    Sub{ID: 8, Name: "s8"},
 	}
-	rows, err := Insert[*Test](engine).AddModel(m1).Exec(ctx)
+	rows, err := engine.Insert[*Test]().AddModel(m1).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rows)
 	assert.True(t, m1.ID > 0)
@@ -606,11 +608,12 @@ func TestInsertIgnore(t *testing.T) {
 		IntSlice:  []int{9},
 		Struct:    Sub{ID: 9, Name: "s9"},
 	}
-	_, err = Insert[*Test](engine).Ignore().AddModel(m2).Exec(ctx)
+	_, err = engine.Insert[*Test]().Ignore().AddModel(m2).Exec(ctx)
 	require.NoError(t, err)
 
-	result, err := Query[*Test](engine).Where("id = ?", m1.ID).Get(ctx)
+	result, found, err := engine.Select[*Test]().Where("id = ?", m1.ID).Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	assert.Equal(t, 888, result.Int)
 	assert.Equal(t, "insert_ignore_test", result.Str)
 }
@@ -630,7 +633,7 @@ func TestInsertIgnoreAll(t *testing.T) {
 		IntSlice:  []int{1},
 		Struct:    Sub{ID: 1, Name: "s1"},
 	}
-	_, err := Insert[*Test](engine).AddModel(m1).Exec(ctx)
+	_, err := engine.Insert[*Test]().AddModel(m1).Exec(ctx)
 	require.NoError(t, err)
 
 	models := []*Test{
@@ -654,11 +657,12 @@ func TestInsertIgnoreAll(t *testing.T) {
 			Struct:    Sub{ID: 3, Name: "s3"},
 		},
 	}
-	_, err = Insert[*Test](engine).Ignore().AddModels(models...).Exec(ctx)
+	_, err = engine.Insert[*Test]().Ignore().AddModels(models...).Exec(ctx)
 	require.NoError(t, err)
 
-	result, err := Query[*Test](engine).Where("id = ?", m1.ID).Get(ctx)
+	result, found, err := engine.Select[*Test]().Where("id = ?", m1.ID).Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	assert.Equal(t, 111, result.Int)
 	assert.Equal(t, "batch_insert_1", result.Str)
 }
@@ -678,7 +682,7 @@ func TestInsertIgnoreReturningRowsAffected(t *testing.T) {
 		IntSlice:  []int{4},
 		Struct:    Sub{ID: 4, Name: "existing"},
 	}
-	rows, err := Insert[*Test](engine).AddModel(existing).Exec(ctx)
+	rows, err := engine.Insert[*Test]().AddModel(existing).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rows)
 	assert.True(t, existing.ID > 0)
@@ -703,14 +707,15 @@ func TestInsertIgnoreReturningRowsAffected(t *testing.T) {
 			Struct:    Sub{ID: 6, Name: "inserted"},
 		},
 	}
-	rows, err = Insert[*Test](engine).Ignore().AddModels(models...).Exec(ctx)
+	rows, err = engine.Insert[*Test]().Ignore().AddModels(models...).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rows)
 	assert.Zero(t, models[0].ID)
 	assert.Zero(t, models[1].ID)
 
-	inserted, err := Query[*Test](engine).Where("str = ?", "returning_inserted").Get(ctx)
+	inserted, found, err := engine.Select[*Test]().Where("str = ?", "returning_inserted").Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	require.NotNil(t, inserted)
 	assert.True(t, inserted.ID > 0)
 }
@@ -744,7 +749,7 @@ func TestInsertAllWithoutReturningDoesNotBackfillGeneratedIDs(t *testing.T) {
 			Struct:    Sub{ID: 52, Name: "b2"},
 		},
 	}
-	rows, err := Insert[*Test](engine).AddModels(models...).Exec(ctx)
+	rows, err := engine.Insert[*Test]().AddModels(models...).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, rows)
 	assert.Zero(t, models[0].ID)
@@ -754,7 +759,7 @@ func TestInsertAllWithoutReturningDoesNotBackfillGeneratedIDs(t *testing.T) {
 func TestDeleteExecErrorWithInvalidPrefix(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
-	_, err := Delete[*Test](e).Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
+	_, err := e.Delete[*Test]().Prefix("INVALID").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }
 
@@ -764,7 +769,7 @@ func TestDeleteByID(t *testing.T) {
 	ctx := context.TODO()
 
 	testTime, _ := time.ParseInLocation(time.DateTime, "2025-01-23 16:17:18", time.Local)
-	_, err := Insert[*Test](e).AddModel(&Test{
+	_, err := e.Insert[*Test]().AddModel(&Test{
 		Int:       42,
 		Bool:      true,
 		Str:       "typed_delete_target",
@@ -776,71 +781,73 @@ func TestDeleteByID(t *testing.T) {
 	}).Exec(ctx)
 	require.NoError(t, err)
 
-	target, err := Query[*Test](e).Where("str = ?", "typed_delete_target").Get(ctx)
+	target, found, err := e.Select[*Test]().Where("str = ?", "typed_delete_target").Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	require.NotNil(t, target)
 
-	rowsAffected, err := Delete[*Test](e).ID(target.ID).Exec(ctx)
+	rowsAffected, err := e.Delete[*Test]().ID(target.ID).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rowsAffected)
 
-	deleted, err := Query[*Test](e).Where("id = ?", target.ID).Get(ctx)
+	deleted, found, err := e.Select[*Test]().Where("id = ?", target.ID).Get(ctx)
 	require.NoError(t, err)
+	assert.False(t, found)
 	assert.Nil(t, deleted)
 }
 
 func TestUpdateExecErrorWithInvalidPrefix(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
-	_, err := Update[*Test](e).Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
+	_, err := e.Update[*Test]().Prefix("INVALID").Set("str", "x").Where("id = ?", -1).Exec(context.TODO())
 	assert.Error(t, err)
 }
 
-func TestQueryModelPageBranches(t *testing.T) {
+func TestSelectModelPageBranches(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 	insertBasicRows(t, e, ctx)
 
-	_, _, err := Query[*Test](e).Page(ctx, 1, 0)
+	_, _, err := e.Select[*Test]().Page(ctx, 1, 0)
 	assert.Error(t, err)
 
-	list, total, err := Query[*Test](e).Where("id < ?", 0).Page(ctx, 1, 10)
+	list, total, err := e.Select[*Test]().Where("id < ?", 0).Page(ctx, 1, 10)
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, total)
 	assert.Nil(t, list)
 
-	_, total, err = Query[*Test](e).Where("id > ?", 0).Page(ctx, 100, 10)
+	_, total, err = e.Select[*Test]().Where("id > ?", 0).Page(ctx, 100, 10)
 	require.NoError(t, err)
 	assert.True(t, total > 0)
 
-	list, total, err = Query[*Test](e).Where("id > ?", 0).Page(ctx, 1, 1)
+	list, total, err = e.Select[*Test]().Where("id > ?", 0).Page(ctx, 1, 1)
 	require.NoError(t, err)
 	assert.True(t, total > 0)
 	assert.LessOrEqual(t, len(list), 1)
 }
 
-func TestQueryModelExistBranches(t *testing.T) {
+func TestSelectModelExistBranches(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 	insertBasicRows(t, e, ctx)
 
-	ex, err := Query[*Test](e).Where("id > ?", 0).Exist(ctx)
+	ex, err := e.Select[*Test]().Where("id > ?", 0).Exist(ctx)
 	require.NoError(t, err)
 	assert.True(t, ex)
 
-	ex, err = Query[*Test](e).Where("id < ?", 0).Exist(ctx)
+	ex, err = e.Select[*Test]().Where("id < ?", 0).Exist(ctx)
 	require.NoError(t, err)
 	assert.False(t, ex)
 }
 
-func TestQueryColGetFalseAndError(t *testing.T) {
+func TestSelectScalarGetFalseAndError(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
 
-	_, ok, err := QueryCol[uint64](e).
+	_, ok, err := e.Select[uint64]().
 		Select("id").
 		From("test").
 		Where("id < ?", 0).
@@ -849,7 +856,7 @@ func TestQueryColGetFalseAndError(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 
-	_, _, err = QueryCol[uint64](e).Prefix("INVALID").
+	_, _, err = e.Select[uint64]().Prefix("INVALID").
 		Select("id").
 		From("test").
 		Limit(1).
@@ -857,7 +864,7 @@ func TestQueryColGetFalseAndError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestQueryModelGetIgnoresExtraColumns(t *testing.T) {
+func TestSelectModelGetIgnoresExtraColumns(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
 	ctx := context.TODO()
@@ -873,30 +880,31 @@ func TestQueryModelGetIgnoresExtraColumns(t *testing.T) {
 		IntSlice:  []int{7, 7, 7},
 		Struct:    Sub{ID: 7, Name: "extra"},
 	}
-	_, err := Insert[*Test](e).AddModel(model).Exec(ctx)
+	_, err := e.Insert[*Test]().AddModel(model).Exec(ctx)
 	require.NoError(t, err)
 
-	got, err := Query[*Test](e).
+	got, found, err := e.Select[*Test]().
 		Where("id = ?", model.ID).
 		AddColumn("1 AS extra_value").
 		Get(ctx)
 	require.NoError(t, err)
+	require.True(t, found)
 	require.NotNil(t, got)
 	assert.Equal(t, model.ID, got.ID)
 	assert.Equal(t, model.Str, got.Str)
 }
 
-func TestQueryModelFindErrorBranch(t *testing.T) {
+func TestSelectModelFindErrorBranch(t *testing.T) {
 	engine := initEngine(t)
 	defer engine.Close()
-	_, err := Query[*Test](engine).Prefix("INVALID").Find(context.TODO())
+	_, err := engine.Select[*Test]().Prefix("INVALID").Find(context.TODO())
 	assert.Error(t, err)
 }
 
-func TestQueryModelGetErrorBranch(t *testing.T) {
+func TestSelectModelGetErrorBranch(t *testing.T) {
 	e := initEngine(t)
 	defer e.Close()
-	_, err := Query[*Test](e).Prefix("INVALID /*error*/").Limit(1).Get(context.TODO())
+	_, _, err := e.Select[*Test]().Prefix("INVALID /*error*/").Limit(1).Get(context.TODO())
 	assert.Error(t, err)
 }
 
@@ -939,10 +947,10 @@ func TestUpdateSetModelRefreshesUpdatedAt(t *testing.T) {
 	defer engine.Close()
 
 	model := &updateSemanticsModel{Name: "draft", Version: 1}
-	_, err := Insert[*updateSemanticsModel](engine).AddModel(model).Exec(ctx)
+	_, err := engine.Insert[*updateSemanticsModel]().AddModel(model).Exec(ctx)
 	require.NoError(t, err)
 
-	repo := NewRepository[*updateSemanticsModel](engine)
+	repo := engine.Repository[*updateSemanticsModel]()
 	loaded, err := repo.Get(ctx, model.ID)
 	require.NoError(t, err)
 	before := loaded.UpdatedAt
@@ -950,7 +958,7 @@ func TestUpdateSetModelRefreshesUpdatedAt(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	loaded.Name = "published"
-	rowsAffected, err := Update[*updateSemanticsModel](engine).SetModel(loaded).Exec(ctx)
+	rowsAffected, err := engine.Update[*updateSemanticsModel]().SetModel(loaded).Exec(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rowsAffected)
 	require.True(t, loaded.UpdatedAt.After(before), "expected in-memory updated_at to advance")
@@ -966,22 +974,22 @@ func TestUpdateSetModelSyncsVersionBackToModel(t *testing.T) {
 	defer engine.Close()
 
 	model := &updateSemanticsModel{Name: "draft", Version: 1}
-	_, err := Insert[*updateSemanticsModel](engine).AddModel(model).Exec(ctx)
+	_, err := engine.Insert[*updateSemanticsModel]().AddModel(model).Exec(ctx)
 	require.NoError(t, err)
 
-	repo := NewRepository[*updateSemanticsModel](engine)
+	repo := engine.Repository[*updateSemanticsModel]()
 	loaded, err := repo.Get(ctx, model.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), loaded.Version)
 
 	loaded.Name = "published"
-	rowsAffected, err := Update[*updateSemanticsModel](engine).SetModel(loaded).Exec(ctx)
+	rowsAffected, err := engine.Update[*updateSemanticsModel]().SetModel(loaded).Exec(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rowsAffected)
 	require.Equal(t, int64(2), loaded.Version, "expected in-memory version to increment after successful update")
 
 	loaded.Name = "published-again"
-	rowsAffected, err = Update[*updateSemanticsModel](engine).SetModel(loaded).Exec(ctx)
+	rowsAffected, err = engine.Update[*updateSemanticsModel]().SetModel(loaded).Exec(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rowsAffected)
 	require.Equal(t, int64(3), loaded.Version)

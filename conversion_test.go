@@ -105,7 +105,7 @@ func TestCustomConversionIsUsedForInsertAndUpdateArgs(t *testing.T) {
 	ctx := context.Background()
 
 	model := &conversionModel{Name: "alpha", Codes: csvInts{1, 2, 3}}
-	rowsAffected, err := Insert[*conversionModel](engine).AddModel(model).Exec(ctx)
+	rowsAffected, err := engine.Insert[*conversionModel]().AddModel(model).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rowsAffected)
 
@@ -117,7 +117,7 @@ func TestCustomConversionIsUsedForInsertAndUpdateArgs(t *testing.T) {
 	assert.Equal(t, []byte("1,2,3"), call.args[1])
 
 	recorder.Reset()
-	rowsAffected, err = Update[*conversionModel](engine).
+	rowsAffected, err = engine.Update[*conversionModel]().
 		ID(7).
 		SetMap(map[string]any{"codes": csvInts{4, 5, 6}}).
 		Exec(ctx)
@@ -137,10 +137,11 @@ func TestCustomConversionIsUsedForQueryArgsAndScan(t *testing.T) {
 	recorder.SetQueryRows([]string{"id", "name", "codes"}, []driver.Value{int64(9), "alpha", []byte("7,8,9")})
 	engine := newConversionTestEngine(t, recorder)
 
-	model, err := Query[*conversionModel](engine).
+	model, ok, err := engine.Select[*conversionModel]().
 		Where("codes = ?", csvInts{1, 2, 3}).
 		Get(context.Background())
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.NotNil(t, model)
 	assert.EqualValues(t, 9, model.ID)
 	assert.Equal(t, "alpha", model.Name)

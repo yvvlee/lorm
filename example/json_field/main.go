@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -29,11 +28,11 @@ func main() {
 			EmailsEnabled: true,
 		},
 	}
-	if _, err := lorm.Insert[*UserProfile](engine).AddModel(profile).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*UserProfile]().AddModel(profile).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
-	loaded, err := lorm.NewRepository[*UserProfile](engine).Get(ctx, profile.ID)
+	loaded, err := engine.Repository[*UserProfile]().Get(ctx, profile.ID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,11 +42,11 @@ func main() {
 	loaded.Tags = append(loaded.Tags, "lorm")
 	loaded.Preferences.Theme = "dark"
 	loaded.Preferences.EmailsEnabled = false
-	if _, err := lorm.Update[*UserProfile](engine).SetModel(loaded).Exec(ctx); err != nil {
+	if _, err := engine.Update[*UserProfile]().SetModel(loaded).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
-	reloaded, err := lorm.NewRepository[*UserProfile](engine).Get(ctx, profile.ID)
+	reloaded, err := engine.Repository[*UserProfile]().Get(ctx, profile.ID)
 	if err != nil {
 		log.Fatal(err)
 	}

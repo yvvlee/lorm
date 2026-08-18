@@ -11,7 +11,7 @@ import (
 
 func TestUpdateWrappers(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_ = Update[*Test](e).
+	_ = e.Update[*Test]().
 		Table("test_archive").
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).
@@ -28,20 +28,20 @@ func TestUpdateWrappers(t *testing.T) {
 
 func TestUpdateExecError_NoSet(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_, err := Update[*Test](e).Exec(context.TODO())
+	_, err := e.Update[*Test]().Exec(context.TODO())
 	assert.Error(t, err)
 }
 
 func TestUpdateSetModelRequiresPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_, err := Update[*testNoPrimaryKeyModel](e).
+	_, err := e.Update[*testNoPrimaryKeyModel]().
 		SetModel(&testNoPrimaryKeyModel{Name: "unsafe"}).
 		Exec(context.TODO())
 	assert.ErrorContains(t, err, "primary key")
 }
 
 func TestRepositoryUpdateRequiresPrimaryKey(t *testing.T) {
-	repo := NewRepository[*testNoPrimaryKeyModel](&Engine{config: &Config{}})
+	repo := (&Engine{config: &Config{}}).Repository[*testNoPrimaryKeyModel]()
 	_, err := repo.Update(context.TODO(), &testNoPrimaryKeyModel{Name: "unsafe"})
 	assert.ErrorContains(t, err, "primary key")
 }

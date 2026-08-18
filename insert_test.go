@@ -14,20 +14,20 @@ import (
 
 func TestInsertAllEmpty(t *testing.T) {
 	var models []*Test
-	rows, err := Insert[*Test](&Engine{config: &Config{}}).AddModels(models...).Exec(context.TODO())
+	rows, err := (&Engine{config: &Config{}}).Insert[*Test]().AddModels(models...).Exec(context.TODO())
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, rows)
 }
 
 func TestInsertStmtBuilderWrappers(t *testing.T) {
-	stmt := Insert[*Test](&Engine{
+	stmt := (&Engine{
 		config: &Config{
 			Dialect: DialectConfig{
 				PlaceholderFormat: builder.Question,
 				Escaper:           names.NoEscaper,
 			},
 		},
-	}).
+	}).Insert[*Test]().
 		Prefix("WITH audit AS ?", 0).
 		PrefixExpr(builder.Expr("/* insert */")).
 		Columns("id", "str").
@@ -54,7 +54,7 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 		engine.config.Dialect.SupportsLastInsertID = false
 
 		model := &conversionModel{Name: "alpha", Codes: csvInts{1, 2}}
-		rowsAffected, err := Insert[*conversionModel](engine).AddModel(model).Exec(context.Background())
+		rowsAffected, err := engine.Insert[*conversionModel]().AddModel(model).Exec(context.Background())
 		require.NoError(t, err)
 		assert.EqualValues(t, 1, rowsAffected)
 		assert.EqualValues(t, 41, model.ID)
@@ -76,7 +76,7 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 			{Name: "a", Codes: csvInts{1}},
 			{Name: "b", Codes: csvInts{2}},
 		}
-		rowsAffected, err := Insert[*conversionModel](engine).AddModels(models...).Exec(context.Background())
+		rowsAffected, err := engine.Insert[*conversionModel]().AddModels(models...).Exec(context.Background())
 		assert.ErrorContains(t, err, "expected 2 returned rows, got 1")
 		assert.Zero(t, rowsAffected)
 	})
@@ -93,7 +93,7 @@ func TestInsertExecWithReturningCoverage(t *testing.T) {
 			{Name: "a", Codes: csvInts{1}},
 			{Name: "b", Codes: csvInts{2}},
 		}
-		rowsAffected, err := Insert[*conversionModel](engine).Ignore().AddModels(models...).Exec(context.Background())
+		rowsAffected, err := engine.Insert[*conversionModel]().Ignore().AddModels(models...).Exec(context.Background())
 		require.NoError(t, err)
 		assert.EqualValues(t, 1, rowsAffected)
 	})

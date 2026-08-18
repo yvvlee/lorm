@@ -8,7 +8,7 @@ import (
 
 func TestDeleteWrappers(t *testing.T) {
 	e := &Engine{config: &Config{}}
-	_ = Delete[*Test](e).
+	_ = e.Delete[*Test]().
 		From("test").
 		Prefix("/*pre*/").
 		PrefixExpr(builder.Expr("/*prex*/")).

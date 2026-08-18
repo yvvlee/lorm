@@ -1,6 +1,8 @@
 module github.com/yvvlee/lorm/integration
 
-go 1.25.0
+go 1.27
+
+toolchain go1.27rc2
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

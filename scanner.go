@@ -7,12 +7,25 @@ import (
 
 // ScanModels scans all rows into models using their descriptor field mapping.
 func ScanModels[T Model](rows *sql.Rows, models *[]T) error {
-	columns, err := rows.Columns()
+	res, err := scanModelValues[T](rows)
 	if err != nil {
 		return err
 	}
+	*models = res
+	return nil
+}
+
+func scanModelValues[T any](rows *sql.Rows) ([]T, error) {
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
 	var res []T
-	var model T
+	var zero T
+	model, ok := any(zero).(Model)
+	if !ok {
+		return nil, fmt.Errorf("lorm: %T does not implement Model", zero)
+	}
 	for rows.Next() {
 		item := model.New()
 		values := make([]any, len(columns))
@@ -26,16 +39,49 @@ func ScanModels[T Model](rows *sql.Rows, models *[]T) error {
 			values[i] = field
 		}
 		if err = rows.Scan(values...); err != nil {
-			return err
+			return nil, err
 		}
-		res = append(res, item.(T))
+		typed, ok := item.(T)
+		if !ok {
+			return nil, fmt.Errorf("lorm: Model.New returned %T, want %T", item, zero)
+		}
+		res = append(res, typed)
 	}
-	// Check if there was an error during iteration
 	if err = rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	*models = res
-	return nil
+	return res, nil
+}
+
+func scanSelectValue[T any](rows *sql.Rows, modelResult bool) (T, error) {
+	var value T
+	if !modelResult {
+		return value, ScanCol(rows, &value)
+	}
+	prototype, ok := any(value).(Model)
+	if !ok {
+		return value, fmt.Errorf("lorm: %T does not implement Model", value)
+	}
+	item := prototype.New()
+	if err := ScanModel(rows, item); err != nil {
+		return value, err
+	}
+	typed, ok := item.(T)
+	if !ok {
+		return value, fmt.Errorf("lorm: Model.New returned %T, want %T", item, value)
+	}
+	return typed, nil
+}
+
+func scanSelectValues[T any](rows *sql.Rows, modelResult bool) ([]T, error) {
+	if modelResult {
+		return scanModelValues[T](rows)
+	}
+	var values []T
+	if err := ScanCols(rows, &values); err != nil {
+		return nil, err
+	}
+	return values, nil
 }
 
 // ScanCols scans the first column of each row into v.

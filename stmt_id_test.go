@@ -61,26 +61,33 @@ func (m *testCompositePrimaryKeyModel) LormModelDescriptor() *ModelDescriptor {
 	}
 }
 
-func TestQueryIDRequiresSingleColumnPrimaryKey(t *testing.T) {
+func TestSelectIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
 
-	_, err := Query[*testNoPrimaryKeyModel](e).ID(1).Get(context.TODO())
+	_, _, err := e.Select[*testNoPrimaryKeyModel]().ID(1).Get(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	_, err = Query[*testCompositePrimaryKeyModel](e).ID(1).Exist(context.TODO())
+	_, err = e.Select[*testCompositePrimaryKeyModel]().ID(1).Exist(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
+}
+
+func TestSelectIDRequiresModelResult(t *testing.T) {
+	e := &Engine{config: &Config{}}
+
+	_, _, err := e.Select[int64]().ID(1).Get(context.TODO())
+	assert.ErrorContains(t, err, "requires a Model result type")
 }
 
 func TestUpdateIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
 
-	_, err := Update[*testNoPrimaryKeyModel](e).
+	_, err := e.Update[*testNoPrimaryKeyModel]().
 		ID(1).
 		Set("name", "unsafe").
 		Exec(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	_, err = Update[*testCompositePrimaryKeyModel](e).
+	_, err = e.Update[*testCompositePrimaryKeyModel]().
 		ID(1).
 		Set("name", "unsafe").
 		Exec(context.TODO())
@@ -90,9 +97,9 @@ func TestUpdateIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 func TestDeleteIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
 
-	_, err := Delete[*testNoPrimaryKeyModel](e).ID(1).Exec(context.TODO())
+	_, err := e.Delete[*testNoPrimaryKeyModel]().ID(1).Exec(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	_, err = Delete[*testCompositePrimaryKeyModel](e).ID(1).Exec(context.TODO())
+	_, err = e.Delete[*testCompositePrimaryKeyModel]().ID(1).Exec(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 }

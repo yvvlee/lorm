@@ -54,7 +54,7 @@ func TestRunGenerateRecursiveAcrossPackages(t *testing.T) {
 
 	tmp := t.TempDir()
 	repoRoot := findRepoRoot(t, oldCwd)
-	writeFile(t, filepath.Join(tmp, "go.mod"), "module example.com/multipkg\n\ngo 1.25.0\n\nrequire github.com/yvvlee/lorm v0.0.0\n\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repoRoot)+"\n")
+	writeFile(t, filepath.Join(tmp, "go.mod"), "module example.com/multipkg\n\ngo 1.27\n\ntoolchain go1.27rc2\n\nrequire github.com/yvvlee/lorm v0.0.0\n\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repoRoot)+"\n")
 	copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(tmp, "go.sum"))
 	writeFile(t, filepath.Join(tmp, "base", "audit.go"), `package base
 

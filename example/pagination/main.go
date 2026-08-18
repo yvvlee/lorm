@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -28,12 +27,12 @@ func main() {
 		{Title: "JSON Fields in Practice", Category: "advanced"},
 		{Title: "Projection Models and Joins", Category: "advanced"},
 	}
-	if _, err := lorm.Insert[*Post](engine).AddModels(posts...).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Post]().AddModels(posts...).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
 	var p Post
-	pageRows, total, err := lorm.Query[*Post](engine).
+	pageRows, total, err := engine.Select[*Post]().
 		OrderBy(p.Fields().ID()+" ASC").
 		Page(ctx, 2, 2)
 	if err != nil {

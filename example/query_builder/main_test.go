@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
@@ -20,7 +19,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 	}
 	defer cleanup()
 
-	_, err = lorm.Insert[*Product](engine).AddModels(
+	_, err = engine.Insert[*Product]().AddModels(
 		&Product{Name: "Go in Action", Category: "book", Price: 3200, Status: "active"},
 		&Product{Name: "Go Sticker Pack", Category: "merch", Price: 500, Status: "active"},
 		&Product{Name: "Mechanical Keyboard", Category: "tool", Price: 8900, Status: "active"},
@@ -30,7 +29,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	var p Product
-	filtered, err := lorm.Query[*Product](engine).
+	filtered, err := engine.Select[*Product]().
 		Where(builder.And{
 			builder.In(p.Fields().Category(), []string{"book", "tool"}),
 			builder.Or{
@@ -45,7 +44,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 	assert.Len(t, filtered, 2)
 	assert.Equal(t, "Go CLI Cheatsheet", filtered[0].Name)
 
-	count, ok, err := lorm.QueryCol[int64](engine).
+	count, ok, err := engine.Select[int64]().
 		Select("COUNT(1)").
 		From(p.TableName()).
 		Where(builder.Eq{p.Fields().Status(): "active"}).

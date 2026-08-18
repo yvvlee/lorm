@@ -83,10 +83,10 @@ func TestFlagFieldsKeepsNonAutoPrimaryKeysOutOfGeneratedKeyPath(t *testing.T) {
 	assert.Equal(t, []string{"id", "name"}, fields)
 }
 
-func TestQueryEscapesModelTableAndPrimaryKeyPredicate(t *testing.T) {
+func TestSelectEscapesModelTableAndPrimaryKeyPredicate(t *testing.T) {
 	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
 
-	sqlStr, args, err := Query[*reservedWordModel](engine).ID(7).builder.ToSql()
+	sqlStr, args, err := engine.Select[*reservedWordModel]().ID(7).builder.ToSql()
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ?", sqlStr)
 	assert.Equal(t, []any{7}, args)
@@ -95,7 +95,7 @@ func TestQueryEscapesModelTableAndPrimaryKeyPredicate(t *testing.T) {
 func TestRepositoryMethodsEscapeIdentifiers(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
-	repo := NewRepository[*reservedWordModel](engine)
+	repo := engine.Repository[*reservedWordModel]()
 	ctx := context.Background()
 
 	rowsAffected, err := repo.UpdateMap(ctx, 1, map[string]any{"group": "updated"})
@@ -128,7 +128,7 @@ func TestRepositoryMethodsEscapeIdentifiers(t *testing.T) {
 func TestRepositoryWrapperMethodsWithCaptureEngine(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
-	repo := NewRepository[*reservedWordModel](engine)
+	repo := engine.Repository[*reservedWordModel]()
 	ctx := context.Background()
 
 	rowsAffected, err := repo.Insert(ctx, &reservedWordModel{Group: "first"})
@@ -189,7 +189,7 @@ func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	engine.config.Dialect.Escaper = names.NoEscaper
-	repo := NewRepository[*manualPrimaryKeyModel](engine)
+	repo := engine.Repository[*manualPrimaryKeyModel]()
 	ctx := context.Background()
 
 	_, err := repo.Get(ctx, "manual-1")
@@ -212,14 +212,14 @@ func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 func TestStmtMethodsEscapeIdentifiersWithoutRepositoryHelp(t *testing.T) {
 	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
 
-	sqlStr, args, err := Query[*reservedWordModel](engine).
+	sqlStr, args, err := engine.Select[*reservedWordModel]().
 		Where(builder.Eq{"group": "g1"}).
 		builder.ToSql()
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ?", sqlStr)
 	assert.Equal(t, []any{"g1"}, args)
 
-	sqlStr, args, err = Update[*reservedWordModel](engine).
+	sqlStr, args, err = engine.Update[*reservedWordModel]().
 		ID(1).
 		SetMap(map[string]any{"group": "g2"}).
 		builder.ToSql()
@@ -227,7 +227,7 @@ func TestStmtMethodsEscapeIdentifiersWithoutRepositoryHelp(t *testing.T) {
 	assert.Equal(t, "UPDATE `order` SET `group` = ? WHERE `id` = ?", sqlStr)
 	assert.Equal(t, []any{"g2", 1}, args)
 
-	sqlStr, args, err = Delete[*reservedWordModel](engine).
+	sqlStr, args, err = engine.Delete[*reservedWordModel]().
 		Where(builder.Eq{"group": "g3"}).
 		builder.ToSql()
 	require.NoError(t, err)

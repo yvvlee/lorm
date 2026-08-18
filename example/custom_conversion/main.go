@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -25,17 +24,17 @@ func main() {
 		Title:  "quarterly-report",
 		Scores: CSVInts{90, 95, 88},
 	}
-	if _, err := lorm.Insert[*Report](engine).AddModel(report).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Report]().AddModel(report).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
-	loaded, err := lorm.NewRepository[*Report](engine).Get(ctx, report.ID)
+	loaded, err := engine.Repository[*Report]().Get(ctx, report.ID)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("loaded report: id=%d title=%s scores=%v\n", loaded.ID, loaded.Title, loaded.Scores)
 
-	if _, err := lorm.Update[*Report](engine).
+	if _, err := engine.Update[*Report]().
 		ID(report.ID).
 		SetMap(map[string]any{
 			"scores": CSVInts{100, 99, 98},
@@ -44,7 +43,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	reloaded, err := lorm.NewRepository[*Report](engine).Get(ctx, report.ID)
+	reloaded, err := engine.Repository[*Report]().Get(ctx, report.ID)
 	if err != nil {
 		log.Fatal(err)
 	}

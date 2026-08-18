@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -27,10 +26,10 @@ func TestJSONFieldFlow(t *testing.T) {
 			EmailsEnabled: true,
 		},
 	}
-	_, err = lorm.Insert[*UserProfile](engine).AddModel(profile).Exec(ctx)
+	_, err = engine.Insert[*UserProfile]().AddModel(profile).Exec(ctx)
 	assert.NoError(t, err)
 
-	repo := lorm.NewRepository[*UserProfile](engine)
+	repo := engine.Repository[*UserProfile]()
 	loaded, err := repo.Get(ctx, profile.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"golang", "sqlite", "json"}, loaded.Tags)
@@ -39,7 +38,7 @@ func TestJSONFieldFlow(t *testing.T) {
 	loaded.Tags = append(loaded.Tags, "lorm")
 	loaded.Preferences.Theme = "dark"
 	loaded.Preferences.EmailsEnabled = false
-	_, err = lorm.Update[*UserProfile](engine).SetModel(loaded).Exec(ctx)
+	_, err = engine.Update[*UserProfile]().SetModel(loaded).Exec(ctx)
 	assert.NoError(t, err)
 
 	reloaded, err := repo.Get(ctx, profile.ID)

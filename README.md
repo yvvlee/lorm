@@ -89,6 +89,8 @@ import (
 
 ## Installation
 
+LORM requires Go 1.27. Use the `go1.27rc2` toolchain until Go 1.27 is released.
+
 ```bash
 go get github.com/yvvlee/lorm
 go install github.com/yvvlee/lorm/cmd/lormgen@latest
@@ -144,17 +146,17 @@ user := &User{
 }
 
 // Insert
-_, err = lorm.Insert[*User](engine).
+_, err = engine.Insert[*User]().
 	AddModel(user).
 	Exec(ctx)
 
-// Query
-savedUser, err := lorm.Query[*User](engine).
+// Select
+savedUser, ok, err := engine.Select[*User]().
 	Where(builder.Eq{u.Fields().ID(): user.ID}).
 	Get(ctx)
 
 // Update
-_, err = lorm.Update[*User](engine).
+_, err = engine.Update[*User]().
 	ID(user.ID).
 	SetMap(map[string]any{
 		u.Fields().Name(): "Jane Doe",
@@ -162,7 +164,7 @@ _, err = lorm.Update[*User](engine).
 	Exec(ctx)
 
 // Delete
-_, err = lorm.Delete[*User](engine).
+_, err = engine.Delete[*User]().
 	ID(user.ID).
 	Exec(ctx)
 ```
@@ -182,11 +184,11 @@ _, err = lorm.Delete[*User](engine).
 > returns one generated value per inserted row. `LastInsertId`-only dialects do
 > not infer per-row IDs for multi-row inserts.
 
-> **Get note**: `Query.Get` and repository `Get` helpers return the zero value
-> of `T` with a nil error when no row matches. For pointer model types such as
-> `*User`, this means `nil, nil`.
+> **Get note**: `Select.Get` returns `(T, bool, error)`. The boolean reports
+> whether a row was found. Repository `Get` helpers retain `(T, error)` and
+> return the zero value of `T` when no row matches.
 
-Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
+Statement builders are cheap to create. Build a fresh `Select` / `Insert` /
 `Update` / `Delete` chain for each operation, and do not share the same
 statement across goroutines.
 Use `Clone()` when one operation needs to branch from an existing statement.
@@ -215,14 +217,14 @@ the callback, and automatically commits or rolls back.
 
 ```go
 err := engine.TX(context.Background(), func(ctx context.Context) error {
-	_, err := lorm.Insert[*User](engine).
+	_, err := engine.Insert[*User]().
 		AddModel(&User{Name: "User 1", Email: "user1@example.com"}).
 		Exec(ctx)
 	if err != nil {
 		return err
 	}
 
-	_, err = lorm.Insert[*User](engine).
+	_, err = engine.Insert[*User]().
 		AddModel(&User{Name: "User 2", Email: "user2@example.com"}).
 		Exec(ctx)
 	return err
@@ -282,13 +284,13 @@ type UserRepositoryImpl struct {
 
 func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 	return &UserRepositoryImpl{
-		Repository: lorm.NewRepository[*User](engine),
+		Repository: engine.Repository[*User](),
 	}
 }
 
 func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
-	return lorm.Query[*User](r.Engine).
+	return r.Engine.Select[*User]().
 		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
 		OrderBy(u.Fields().ID() + " DESC").
 		Page(ctx, page, size)
@@ -313,7 +315,7 @@ type UserRole struct {
 	RoleName string
 }
 
-roles, err := lorm.Query[*UserRole](engine).
+roles, err := engine.Select[*UserRole]().
 	Select(
 		"u.id AS user_id",
 		"u.name AS user_name",

@@ -30,20 +30,20 @@ type TestRepositoryImpl struct {
 
 func NewTestRepository(engine *Engine) *TestRepositoryImpl {
 	return &TestRepositoryImpl{
-		Repository: NewRepository[*Test](engine),
+		Repository: engine.Repository[*Test](),
 	}
 }
 
 func TestRepositoryWrapperPrimaryKeyErrors(t *testing.T) {
 	engine := &Engine{config: &Config{}}
 
-	noPKRepo := NewRepository[*testNoPrimaryKeyModel](engine)
+	noPKRepo := engine.Repository[*testNoPrimaryKeyModel]()
 	_, err := noPKRepo.Lock(context.Background(), 1)
 	assert.ErrorContains(t, err, "single-column primary keys")
 	_, err = noPKRepo.Exist(context.Background(), 1)
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	compositeRepo := NewRepository[*testCompositePrimaryKeyModel](engine)
+	compositeRepo := engine.Repository[*testCompositePrimaryKeyModel]()
 	_, err = compositeRepo.Lock(context.Background(), 1)
 	assert.ErrorContains(t, err, "single-column primary keys")
 	_, err = compositeRepo.Exist(context.Background(), 1)

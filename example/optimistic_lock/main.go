@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -21,7 +20,7 @@ func main() {
 	}
 	defer cleanup()
 
-	repo := lorm.NewRepository[*Document](engine)
+	repo := engine.Repository[*Document]()
 	doc := &Document{
 		Title:   "Draft",
 		Version: 1,
@@ -40,14 +39,14 @@ func main() {
 	}
 
 	firstCopy.Title = "Published"
-	rowsAffected, err := lorm.Update[*Document](engine).SetModel(firstCopy).Exec(ctx)
+	rowsAffected, err := engine.Update[*Document]().SetModel(firstCopy).Exec(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("first update rows=%d version(in memory)=%d\n", rowsAffected, firstCopy.Version)
 
 	staleCopy.Title = "Stale Write"
-	rowsAffected, err = lorm.Update[*Document](engine).SetModel(staleCopy).Exec(ctx)
+	rowsAffected, err = engine.Update[*Document]().SetModel(staleCopy).Exec(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

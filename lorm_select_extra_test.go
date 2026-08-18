@@ -11,12 +11,12 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
-func TestQueryColGetSuccessCoverage(t *testing.T) {
+func TestSelectScalarGetSuccessCoverage(t *testing.T) {
 	recorder := newScriptedQueryRecorder()
 	recorder.QueueQueryRows([]string{"id"}, []driver.Value{int64(9)})
 	engine := newScriptedEngine(t, recorder)
 
-	value, ok, err := QueryCol[int64](engine).
+	value, ok, err := engine.Select[int64]().
 		Select("id").
 		From("conversion_models").
 		Where("name = ?", "alpha").
@@ -31,16 +31,17 @@ func TestQueryColGetSuccessCoverage(t *testing.T) {
 	assert.Equal(t, []any{"alpha"}, call.args)
 }
 
-func TestQueryModelGetAndFindCoverage(t *testing.T) {
+func TestSelectModelGetAndFindCoverage(t *testing.T) {
 	t.Run("getSuccess", func(t *testing.T) {
 		recorder := newScriptedQueryRecorder()
 		recorder.QueueQueryRows([]string{"id", "group"}, []driver.Value{int64(3), "ops"})
 		engine := newScriptedEngine(t, recorder)
 
-		model, err := Query[*reservedWordModel](engine).
+		model, ok, err := engine.Select[*reservedWordModel]().
 			Where(builder.Eq{"group": "ops"}).
 			Get(context.Background())
 		require.NoError(t, err)
+		require.True(t, ok)
 		require.NotNil(t, model)
 		assert.EqualValues(t, 3, model.ID)
 		assert.Equal(t, "ops", model.Group)
@@ -55,7 +56,7 @@ func TestQueryModelGetAndFindCoverage(t *testing.T) {
 		)
 		engine := newScriptedEngine(t, recorder)
 
-		list, err := Query[*reservedWordModel](engine).
+		list, err := engine.Select[*reservedWordModel]().
 			Where("id > ?", 0).
 			Find(context.Background())
 		require.NoError(t, err)
@@ -71,7 +72,7 @@ func TestQueryModelGetAndFindCoverage(t *testing.T) {
 		recorder.QueueQueryRows([]string{"id"}, []driver.Value{int64(1)}, []driver.Value{int64(2)})
 		engine := newScriptedEngine(t, recorder)
 
-		list, err := QueryCol[int64](engine).
+		list, err := engine.Select[int64]().
 			Select("id").
 			From("reserved_word_models").
 			Find(context.Background())

@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -26,11 +25,11 @@ func TestPaginationFlow(t *testing.T) {
 		{Title: "JSON Fields in Practice", Category: "advanced"},
 		{Title: "Projection Models and Joins", Category: "advanced"},
 	}
-	_, err = lorm.Insert[*Post](engine).AddModels(posts...).Exec(ctx)
+	_, err = engine.Insert[*Post]().AddModels(posts...).Exec(ctx)
 	assert.NoError(t, err)
 
 	var p Post
-	pageRows, total, err := lorm.Query[*Post](engine).
+	pageRows, total, err := engine.Select[*Post]().
 		OrderBy(p.Fields().ID()+" ASC").
 		Page(ctx, 2, 2)
 	assert.NoError(t, err)

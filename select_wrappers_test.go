@@ -9,9 +9,9 @@ import (
 	"github.com/yvvlee/lorm/names"
 )
 
-func TestQueryModelStmtWrappers(t *testing.T) {
+func TestSelectStmtModelWrappers(t *testing.T) {
 	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
-	_ = Query[*Test](engine).
+	_ = engine.Select[*Test]().
 		Prefix("/*p*/").
 		PrefixExpr(builder.Expr("/*px*/")).
 		Distinct().
@@ -41,9 +41,9 @@ func TestQueryModelStmtWrappers(t *testing.T) {
 		SuffixExpr(builder.Expr("/*x*/"))
 }
 
-func TestQueryColStmtWrappers(t *testing.T) {
+func TestSelectStmtScalarWrappers(t *testing.T) {
 	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
-	_ = QueryCol[uint64](engine).
+	_ = engine.Select[uint64]().
 		Prefix("/*p*/").
 		PrefixExpr(builder.Expr("/*px*/")).
 		Distinct().
@@ -73,11 +73,11 @@ func TestQueryColStmtWrappers(t *testing.T) {
 		SuffixExpr(builder.Expr("/*x*/"))
 }
 
-func TestQueryStatementsUseIndependentBuilders(t *testing.T) {
+func TestSelectStatementsUseIndependentBuilders(t *testing.T) {
 	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NoEscaper}}}
 
-	q1 := Query[*Test](engine).Where("id = ?", 1)
-	q2 := Query[*Test](engine).Where("id = ?", 2)
+	q1 := engine.Select[*Test]().Where("id = ?", 1)
+	q2 := engine.Select[*Test]().Where("id = ?", 2)
 
 	assert.NotSame(t, q1.builder, q2.builder)
 

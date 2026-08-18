@@ -10,12 +10,12 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
-func TestQueryModelStmtResetsAfterTerminalMethod(t *testing.T) {
+func TestSelectStmtModelResetsAfterTerminalMethod(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := Query[*reservedWordModel](engine).Where(builder.Eq{"group": "first"})
+	stmt := engine.Select[*reservedWordModel]().Where(builder.Eq{"group": "first"})
 	_, err := stmt.Find(ctx)
 	require.NoError(t, err)
 
@@ -29,12 +29,12 @@ func TestQueryModelStmtResetsAfterTerminalMethod(t *testing.T) {
 	assert.Equal(t, []any{int64(2)}, call.args)
 }
 
-func TestQueryColStmtResetsAfterTerminalMethod(t *testing.T) {
+func TestSelectStmtScalarResetsAfterTerminalMethod(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := QueryCol[string](engine).
+	stmt := engine.Select[string]().
 		Select("id").
 		From("manual_keys").
 		Where("id = ?", "manual-1")
@@ -60,7 +60,7 @@ func TestInsertStmtResetsAfterExec(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := Insert[*reservedWordModel](engine).Ignore()
+	stmt := engine.Insert[*reservedWordModel]().Ignore()
 	rowsAffected, err := stmt.AddModel(&reservedWordModel{Group: "first"}).Exec(ctx)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, rowsAffected)
@@ -81,7 +81,7 @@ func TestDeleteStmtResetsAfterExec(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := Delete[*reservedWordModel](engine).
+	stmt := engine.Delete[*reservedWordModel]().
 		Where(builder.Eq{"group": "first"}).
 		Limit(1)
 	rowsAffected, err := stmt.Exec(ctx)
@@ -104,7 +104,7 @@ func TestUpdateStmtResetsAfterExec(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := Update[*reservedWordModel](engine).
+	stmt := engine.Update[*reservedWordModel]().
 		SetMap(map[string]any{"group": "first"}).
 		ID(1)
 	rowsAffected, err := stmt.Exec(ctx)
@@ -129,7 +129,7 @@ func TestUpdateStmtResetsAfterCallbacks(t *testing.T) {
 	ctx := context.Background()
 	engine := newConversionTestEngine(t, newConversionRecorder())
 
-	stmt := Update[*updateSemanticsModel](engine)
+	stmt := engine.Update[*updateSemanticsModel]()
 	model := &updateSemanticsModel{ID: 1, Name: "draft", Version: 1}
 	model.Name = "published"
 	rowsAffected, err := stmt.SetModel(model).Exec(ctx)
@@ -144,12 +144,12 @@ func TestUpdateStmtResetsAfterCallbacks(t *testing.T) {
 	require.EqualValues(t, 3, model.Version)
 }
 
-func TestQueryModelStmtCloneExecDoesNotResetSource(t *testing.T) {
+func TestSelectStmtModelCloneExecDoesNotResetSource(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := Query[*reservedWordModel](engine).Where(builder.Eq{"group": "staff"})
+	stmt := engine.Select[*reservedWordModel]().Where(builder.Eq{"group": "staff"})
 	clone := stmt.Clone().Where(builder.Eq{"id": int64(7)})
 	_, err := clone.Find(ctx)
 	require.NoError(t, err)
@@ -164,12 +164,12 @@ func TestQueryModelStmtCloneExecDoesNotResetSource(t *testing.T) {
 	assert.Equal(t, []any{"staff"}, call.args)
 }
 
-func TestQueryColStmtCloneExecDoesNotResetSource(t *testing.T) {
+func TestSelectStmtScalarCloneExecDoesNotResetSource(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := QueryCol[int64](engine).
+	stmt := engine.Select[int64]().
 		Select("id").
 		From("manual_keys").
 		Where("name = ?", "alice")
@@ -192,7 +192,7 @@ func TestWriteStmtCloneExecDoesNotResetSource(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	updateStmt := Update[*reservedWordModel](engine).
+	updateStmt := engine.Update[*reservedWordModel]().
 		SetMap(map[string]any{"group": "base"}).
 		Where(builder.Eq{"id": int64(1)})
 	updateClone := updateStmt.Clone().Where(builder.Eq{"group": "clone"})
@@ -206,7 +206,7 @@ func TestWriteStmtCloneExecDoesNotResetSource(t *testing.T) {
 	assert.Equal(t, "UPDATE `order` SET `group` = ? WHERE `id` = ?", call.query)
 	assert.Equal(t, []any{"base", int64(1)}, call.args)
 
-	deleteStmt := Delete[*reservedWordModel](engine).Where(builder.Eq{"id": int64(1)})
+	deleteStmt := engine.Delete[*reservedWordModel]().Where(builder.Eq{"id": int64(1)})
 	deleteClone := deleteStmt.Clone().Where(builder.Eq{"group": "clone"})
 	_, err = deleteClone.Exec(ctx)
 	require.NoError(t, err)
@@ -218,7 +218,7 @@ func TestWriteStmtCloneExecDoesNotResetSource(t *testing.T) {
 	assert.Equal(t, "DELETE FROM `order` WHERE `id` = ?", call.query)
 	assert.Equal(t, []any{int64(1)}, call.args)
 
-	insertStmt := Insert[*reservedWordModel](engine).AddModel(&reservedWordModel{Group: "base"})
+	insertStmt := engine.Insert[*reservedWordModel]().AddModel(&reservedWordModel{Group: "base"})
 	insertClone := insertStmt.Clone().AddModel(&reservedWordModel{Group: "clone"})
 	_, err = insertClone.Exec(ctx)
 	require.NoError(t, err)

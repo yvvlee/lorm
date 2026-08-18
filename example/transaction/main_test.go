@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -20,17 +19,17 @@ func TestTransactionFlow(t *testing.T) {
 	defer cleanup()
 
 	alice := &Account{Owner: "Alice", Balance: 100}
-	_, err = lorm.Insert[*Account](engine).AddModel(alice).Exec(ctx)
+	_, err = engine.Insert[*Account]().AddModel(alice).Exec(ctx)
 	assert.NoError(t, err)
 
 	bob := &Account{Owner: "Bob", Balance: 20}
-	_, err = lorm.Insert[*Account](engine).AddModel(bob).Exec(ctx)
+	_, err = engine.Insert[*Account]().AddModel(bob).Exec(ctx)
 	assert.NoError(t, err)
 
 	err = transfer(ctx, engine, alice.ID, bob.ID, 30)
 	assert.NoError(t, err)
 
-	repo := lorm.NewRepository[*Account](engine)
+	repo := engine.Repository[*Account]()
 	aliceAfter, err := repo.Get(ctx, alice.ID)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 70, aliceAfter.Balance)

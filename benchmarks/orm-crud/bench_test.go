@@ -211,7 +211,7 @@ func setupEnt(b *testing.B, name string) *entbench.Client {
 
 func benchmarkCreateLorm(b *testing.B) {
 	engine := setupLorm(b, "create")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -265,7 +265,7 @@ func benchmarkCreateEnt(b *testing.B) {
 
 func benchmarkReadByIDLorm(b *testing.B) {
 	engine := setupLorm(b, "read")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	seed := makeBenchInput(0)
 	user := newLormUser(seed)
 	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
@@ -342,7 +342,7 @@ func benchmarkReadByIDEnt(b *testing.B) {
 
 func benchmarkReadByIDComplexLorm(b *testing.B) {
 	engine := setupLorm(b, "read_complex")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	seed := makeComplexBenchInput(0)
 	user := newLormUser(seed)
 	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
@@ -425,7 +425,7 @@ func benchmarkReadByIDComplexEnt(b *testing.B) {
 
 func benchmarkUpdateByIDLorm(b *testing.B) {
 	engine := setupLorm(b, "update")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	seed := makeBenchInput(0)
 	user := newLormUser(seed)
 	if _, err := repo.Insert(benchmarkCtx, user); err != nil {
@@ -435,7 +435,7 @@ func benchmarkUpdateByIDLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 1)
-		affected, err := lorm.Update[*LormUser](engine).
+		affected, err := engine.Update[*LormUser]().
 			ID(user.ID).
 			SetMap(benchUpdateMap(input, benchmarkUpdatedAt(i+1))).
 			Exec(benchmarkCtx)
@@ -526,7 +526,7 @@ func benchmarkUpdateByIDEnt(b *testing.B) {
 
 func benchmarkDeleteByIDLorm(b *testing.B) {
 	engine := setupLorm(b, "delete")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	ids := make([]int64, b.N)
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i)
@@ -539,7 +539,7 @@ func benchmarkDeleteByIDLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		affected, err := lorm.Delete[*LormUser](engine).ID(ids[i]).Exec(benchmarkCtx)
+		affected, err := engine.Delete[*LormUser]().ID(ids[i]).Exec(benchmarkCtx)
 		if err != nil {
 			b.Fatalf("lorm delete: %v", err)
 		}
@@ -625,7 +625,7 @@ func benchmarkDeleteByIDEnt(b *testing.B) {
 
 func benchmarkBatchCreateLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_create")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -674,7 +674,7 @@ func benchmarkBatchCreateEnt(b *testing.B) {
 
 func benchmarkBatchReadLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_read")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	users := makeLormUsers(0, batchSize)
 	if _, err := repo.InsertAll(benchmarkCtx, users); err != nil {
 		b.Fatalf("seed lorm batch read: %v", err)
@@ -683,7 +683,7 @@ func benchmarkBatchReadLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		out, err := lorm.Query[*LormUser](engine).
+		out, err := engine.Select[*LormUser]().
 			Where(builder.In("email", emails)).
 			Find(benchmarkCtx)
 		if err != nil {
@@ -757,7 +757,7 @@ func benchmarkBatchReadEnt(b *testing.B) {
 
 func benchmarkBatchReadComplexLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_read_complex")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	users := makeComplexLormUsers(0, batchSize)
 	if _, err := repo.InsertAll(benchmarkCtx, users); err != nil {
 		b.Fatalf("seed lorm batch complex read: %v", err)
@@ -766,7 +766,7 @@ func benchmarkBatchReadComplexLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		out, err := lorm.Query[*LormUser](engine).
+		out, err := engine.Select[*LormUser]().
 			Where(builder.In("email", emails)).
 			Find(benchmarkCtx)
 		if err != nil {
@@ -844,7 +844,7 @@ func benchmarkBatchReadComplexEnt(b *testing.B) {
 
 func benchmarkBatchUpdateLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_update")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	users := makeLormUsers(0, batchSize)
 	if _, err := repo.InsertAll(benchmarkCtx, users); err != nil {
 		b.Fatalf("seed lorm batch update: %v", err)
@@ -854,7 +854,7 @@ func benchmarkBatchUpdateLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		input := makeBenchInput(i + 10_000)
-		affected, err := lorm.Update[*LormUser](engine).
+		affected, err := engine.Update[*LormUser]().
 			Where(builder.In("email", emails)).
 			SetMap(benchBatchUpdateMap(input, benchmarkUpdatedAt(i+10_000))).
 			Exec(benchmarkCtx)
@@ -939,7 +939,7 @@ func benchmarkBatchUpdateEnt(b *testing.B) {
 
 func benchmarkBatchDeleteLorm(b *testing.B) {
 	engine := setupLorm(b, "batch_delete")
-	repo := lorm.NewRepository[*LormUser](engine)
+	repo := engine.Repository[*LormUser]()
 	total := b.N * batchSize
 	seed := makeLormUsers(0, total)
 	for start := 0; start < total; start += batchSize {
@@ -956,7 +956,7 @@ func benchmarkBatchDeleteLorm(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batchEmails := emails[i*batchSize : (i+1)*batchSize]
-		affected, err := lorm.Delete[*LormUser](engine).
+		affected, err := engine.Delete[*LormUser]().
 			Where(builder.In("email", batchEmails)).
 			Exec(benchmarkCtx)
 		if err != nil {

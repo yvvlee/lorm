@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
@@ -22,7 +21,7 @@ func main() {
 	}
 	defer cleanup()
 
-	if _, err := lorm.Insert[*Product](engine).AddModels(
+	if _, err := engine.Insert[*Product]().AddModels(
 		&Product{Name: "Go in Action", Category: "book", Price: 3200, Status: "active"},
 		&Product{Name: "Go Sticker Pack", Category: "merch", Price: 500, Status: "active"},
 		&Product{Name: "Mechanical Keyboard", Category: "tool", Price: 8900, Status: "active"},
@@ -33,7 +32,7 @@ func main() {
 	}
 
 	var p Product
-	filtered, err := lorm.Query[*Product](engine).
+	filtered, err := engine.Select[*Product]().
 		Where(builder.And{
 			builder.In(p.Fields().Category(), []string{"book", "tool"}),
 			builder.Or{
@@ -54,7 +53,7 @@ func main() {
 			item.ID, item.Name, item.Category, item.Price, item.Status)
 	}
 
-	count, ok, err := lorm.QueryCol[int64](engine).
+	count, ok, err := engine.Select[int64]().
 		Select("COUNT(1)").
 		From(p.TableName()).
 		Where(builder.Eq{p.Fields().Status(): "active"}).

@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
 
@@ -20,14 +19,14 @@ func TestCustomModelFlow(t *testing.T) {
 	defer cleanup()
 
 	admin := &Role{Name: "admin"}
-	_, err = lorm.Insert[*Role](engine).AddModel(admin).Exec(ctx)
+	_, err = engine.Insert[*Role]().AddModel(admin).Exec(ctx)
 	assert.NoError(t, err)
 
 	viewer := &Role{Name: "viewer"}
-	_, err = lorm.Insert[*Role](engine).AddModel(viewer).Exec(ctx)
+	_, err = engine.Insert[*Role]().AddModel(viewer).Exec(ctx)
 	assert.NoError(t, err)
 
-	_, err = lorm.Insert[*User](engine).AddModels(
+	_, err = engine.Insert[*User]().AddModels(
 		&User{Name: "Alice", Email: "alice@example.com", RoleID: admin.ID},
 		&User{Name: "Bob", Email: "bob@example.com", RoleID: viewer.ID},
 	).Exec(ctx)
@@ -40,7 +39,7 @@ func TestCustomModelFlow(t *testing.T) {
 		r    = role.Fields().WithAlias("r")
 	)
 
-	rows, err := lorm.Query[*UserWithRole](engine).
+	rows, err := engine.Select[*UserWithRole]().
 		Select(
 			u.ID()+" AS user_id",
 			u.Name()+" AS user_name",

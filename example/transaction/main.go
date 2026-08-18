@@ -23,12 +23,12 @@ func main() {
 	defer cleanup()
 
 	alice := &Account{Owner: "Alice", Balance: 100}
-	if _, err := lorm.Insert[*Account](engine).AddModel(alice).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Account]().AddModel(alice).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
 	bob := &Account{Owner: "Bob", Balance: 20}
-	if _, err := lorm.Insert[*Account](engine).AddModel(bob).Exec(ctx); err != nil {
+	if _, err := engine.Insert[*Account]().AddModel(bob).Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
@@ -51,7 +51,7 @@ func main() {
 }
 
 func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int64) error {
-	repo := lorm.NewRepository[*Account](engine)
+	repo := engine.Repository[*Account]()
 	var a Account
 
 	return engine.TX(ctx, func(txCtx context.Context) error {
@@ -75,7 +75,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 			return errors.New("insufficient balance")
 		}
 
-		if _, err := lorm.Update[*Account](engine).
+		if _, err := engine.Update[*Account]().
 			ID(from.ID).
 			SetMap(map[string]any{
 				a.Fields().Balance(): from.Balance - amount,
@@ -84,7 +84,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 			return err
 		}
 
-		if _, err := lorm.Update[*Account](engine).
+		if _, err := engine.Update[*Account]().
 			ID(to.ID).
 			SetMap(map[string]any{
 				a.Fields().Balance(): to.Balance + amount,
@@ -99,7 +99,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 
 func printAccounts(ctx context.Context, engine *lorm.Engine) {
 	var a Account
-	accounts, err := lorm.Query[*Account](engine).
+	accounts, err := engine.Select[*Account]().
 		OrderBy(a.Fields().ID() + " ASC").
 		Find(ctx)
 	if err != nil {

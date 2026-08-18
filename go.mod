@@ -1,6 +1,8 @@
 module github.com/yvvlee/lorm
 
-go 1.25.0
+go 1.27
+
+toolchain go1.27rc2
 
 require (
 	github.com/bytedance/sonic v1.15.0

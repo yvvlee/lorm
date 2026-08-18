@@ -16,10 +16,10 @@ func newInsertBuilder[T Table](engine *Engine) *builder.InsertBuilder {
 }
 
 // Insert builds an INSERT statement for table T.
-func Insert[T Table](engine *Engine) *InsertStmt[T] {
+func (e *Engine) Insert[T Table]() *InsertStmt[T] {
 	return &InsertStmt[T]{
-		engine:  engine,
-		builder: newInsertBuilder[T](engine),
+		engine:  e,
+		builder: newInsertBuilder[T](e),
 	}
 }
 

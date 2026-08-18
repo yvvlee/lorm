@@ -13,10 +13,10 @@ func newDeleteBuilder[T Table](engine *Engine) *builder.DeleteBuilder {
 }
 
 // Delete builds a DELETE statement for table T.
-func Delete[T Table](engine *Engine) *DeleteStmt[T] {
+func (e *Engine) Delete[T Table]() *DeleteStmt[T] {
 	return &DeleteStmt[T]{
-		engine:  engine,
-		builder: newDeleteBuilder[T](engine),
+		engine:  e,
+		builder: newDeleteBuilder[T](e),
 	}
 }
 

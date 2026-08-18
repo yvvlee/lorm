@@ -11,14 +11,14 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
-func TestQueryModelPageCoverage(t *testing.T) {
+func TestSelectModelPageCoverage(t *testing.T) {
 	t.Run("normalizesZeroPageAndReturnsRows", func(t *testing.T) {
 		recorder := newScriptedQueryRecorder()
 		recorder.QueueQueryRows([]string{"count"}, []driver.Value{int64(2)})
 		recorder.QueueQueryRows([]string{"id", "group"}, []driver.Value{int64(1), "staff"})
 		engine := newScriptedEngine(t, recorder)
 
-		list, total, err := Query[*reservedWordModel](engine).
+		list, total, err := engine.Select[*reservedWordModel]().
 			Where(builder.Eq{"group": "staff"}).
 			Page(context.Background(), 0, 1)
 		require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestQueryModelPageCoverage(t *testing.T) {
 		recorder.QueueQueryRows([]string{"count"}, []driver.Value{int64(1)})
 		engine := newScriptedEngine(t, recorder)
 
-		list, total, err := Query[*reservedWordModel](engine).Page(context.Background(), 2, 1)
+		list, total, err := engine.Select[*reservedWordModel]().Page(context.Background(), 2, 1)
 		require.NoError(t, err)
 		assert.Nil(t, list)
 		assert.EqualValues(t, 1, total)
@@ -45,7 +45,7 @@ func TestQueryModelPageCoverage(t *testing.T) {
 		engine := newScriptedEngine(t, recorder)
 
 		page := uint64(1)<<63 + 1
-		list, total, err := Query[*reservedWordModel](engine).Page(context.Background(), page, 2)
+		list, total, err := engine.Select[*reservedWordModel]().Page(context.Background(), page, 2)
 		require.NoError(t, err)
 		assert.Nil(t, list)
 		assert.EqualValues(t, 5, total)

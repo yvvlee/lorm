@@ -61,6 +61,8 @@ import (
 
 ## 安装
 
+LORM 需要 Go 1.27。Go 1.27 正式发布前，请使用 `go1.27rc2` 工具链。
+
 ```bash
 go get github.com/yvvlee/lorm
 go install github.com/yvvlee/lorm/cmd/lormgen@latest
@@ -114,22 +116,22 @@ user := &User{
 	Email: "john@example.com",
 }
 
-_, err = lorm.Insert[*User](engine).
+_, err = engine.Insert[*User]().
 	AddModel(user).
 	Exec(ctx)
 
-savedUser, err := lorm.Query[*User](engine).
+savedUser, ok, err := engine.Select[*User]().
 	Where(builder.Eq{u.Fields().ID(): user.ID}).
 	Get(ctx)
 
-_, err = lorm.Update[*User](engine).
+_, err = engine.Update[*User]().
 	ID(user.ID).
 	SetMap(map[string]any{
 		u.Fields().Name(): "Jane Doe",
 	}).
 	Exec(ctx)
 
-_, err = lorm.Delete[*User](engine).
+_, err = engine.Delete[*User]().
 	ID(user.ID).
 	Exec(ctx)
 ```
@@ -149,12 +151,11 @@ _, err = lorm.Delete[*User](engine).
 > **Insert 说明**：批量插入只有在驱动能逐行返回生成主键时才会回填 ID。只支持
 > `LastInsertId` 的方言不会为多行插入推算每条记录的主键。
 
-> **Get 说明**：`Query.Get` 和 Repository 的 `Get` 类方法查不到行时，会返回
-> `T` 的零值和 `nil` 错误。对 `*User` 这类指针模型来说，返回值就是
-> `nil, nil`。
+> **Get 说明**：`Select.Get` 返回 `(T, bool, error)`。第二个返回值表示是否找到
+> 记录。Repository 的 `Get` 类方法保持 `(T, error)`，查不到时返回 `T` 的零值。
 
 Statement builder 是轻量级对象。每次数据库操作都应重新创建一条新的
-`Query` / `Insert` / `Update` / `Delete` 调用链，不要在多个 goroutine
+`Select` / `Insert` / `Update` / `Delete` 调用链，不要在多个 goroutine
 之间共享同一个 statement。
 需要基于已有条件派生查询时，使用 `Clone()`。
 终态方法仍然只会重置被调用的那个 statement。
@@ -182,14 +183,14 @@ Statement builder 是轻量级对象。每次数据库操作都应重新创建�
 
 ```go
 err := engine.TX(context.Background(), func(ctx context.Context) error {
-	_, err := lorm.Insert[*User](engine).
+	_, err := engine.Insert[*User]().
 		AddModel(&User{Name: "User 1", Email: "user1@example.com"}).
 		Exec(ctx)
 	if err != nil {
 		return err
 	}
 
-	_, err = lorm.Insert[*User](engine).
+	_, err = engine.Insert[*User]().
 		AddModel(&User{Name: "User 2", Email: "user2@example.com"}).
 		Exec(ctx)
 	return err
@@ -246,13 +247,13 @@ type UserRepositoryImpl struct {
 
 func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 	return &UserRepositoryImpl{
-		Repository: lorm.NewRepository[*User](engine),
+		Repository: engine.Repository[*User](),
 	}
 }
 
 func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
-	return lorm.Query[*User](r.Engine).
+	return r.Engine.Select[*User]().
 		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
 		OrderBy(u.Fields().ID() + " DESC").
 		Page(ctx, page, size)
@@ -276,7 +277,7 @@ type UserRole struct {
 	RoleName string
 }
 
-roles, err := lorm.Query[*UserRole](engine).
+roles, err := engine.Select[*UserRole]().
 	Select(
 		"u.id AS user_id",
 		"u.name AS user_name",
