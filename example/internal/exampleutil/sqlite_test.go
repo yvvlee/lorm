@@ -2,18 +2,18 @@ package exampleutil
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSQLiteEngine(t *testing.T) {
 	engine, cleanup, err := NewSQLiteEngine("CREATE TABLE demo (id INTEGER PRIMARY KEY, name TEXT);")
-	if err != nil {
+	if IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example helper unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	_, err = engine.Exec(context.Background(), "INSERT INTO demo(name) VALUES (?)", "ok")
@@ -22,11 +22,9 @@ func TestNewSQLiteEngine(t *testing.T) {
 
 func TestNewSQLiteEngineInitSchemaError(t *testing.T) {
 	engine, cleanup, err := NewSQLiteEngine("CREATE TABLE demo (id INTEGER PRIMARY KEY); BROKEN SQL")
-	if err != nil && !strings.Contains(err.Error(), "init schema:") {
+	if IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example helper unavailable: %v", err)
-		return
 	}
-
 	assert.Nil(t, engine)
 	assert.Nil(t, cleanup)
 	assert.Error(t, err)

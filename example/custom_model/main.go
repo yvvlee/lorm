@@ -44,7 +44,7 @@ func main() {
 		r    = role.Fields().WithAlias("r")
 	)
 
-	rows, err := engine.Select[*UserWithRole]().
+	rows, err := engine.Query[*UserWithRole]().
 		Select(
 			u.ID()+" AS user_id",
 			u.Name()+" AS user_name",

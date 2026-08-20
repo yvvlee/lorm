@@ -33,6 +33,16 @@ func (m *User) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *User) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Name,
+		&m.Email,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+	)
+}
+
 func (m *User) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -50,8 +60,87 @@ func (m *User) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_model_5b017786_User_insert_columns = []string{
+	"id",
+	"name",
+	"email",
+	"created_at",
+	"updated_at",
+}
+
+var _lorm_file_model_5b017786_User_insert_columns_without_auto_increment = []string{
+	"name",
+	"email",
+	"created_at",
+	"updated_at",
+}
+
+func (m *User) LormBeforeInsert(now lorm.HookTime) lorm.InsertPlan {
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = now
+	}
+	if m.UpdatedAt.IsZero() {
+		m.UpdatedAt = now
+	}
+
+	plan := lorm.InsertPlan{}
+	plan.AutoIncrementColumn = "id"
+	plan.AutoIncrementZero = m.ID == 0
+	if plan.AutoIncrementZero {
+		plan.Columns = _lorm_file_model_5b017786_User_insert_columns_without_auto_increment
+	} else {
+		plan.Columns = _lorm_file_model_5b017786_User_insert_columns
+	}
+	plan.Values = make([]any, 0, len(plan.Columns))
+	if !plan.AutoIncrementZero {
+		plan.Values = append(plan.Values, m.ID)
+	}
+	plan.Values = append(plan.Values, m.Name)
+	plan.Values = append(plan.Values, m.Email)
+	plan.Values = append(plan.Values, m.CreatedAt)
+	plan.Values = append(plan.Values, m.UpdatedAt)
+	return plan
+}
+
+func (m *User) LormAfterInsert(result lorm.InsertResult) error {
+	if !result.HasGeneratedID {
+		return nil
+	}
+	value, err := lorm.ConvertGeneratedSignedID[int64](result.GeneratedID, 64, "User.ID")
+	if err != nil {
+		return err
+	}
+	m.ID = value
+	return nil
+}
+
+func (m *User) LormBeforeUpdate(now lorm.HookTime) (lorm.UpdatePlan, error) {
+	plan := lorm.UpdatePlan{
+		Set:       make([]lorm.ColumnValue, 0, 5),
+		Where:     make([]lorm.ColumnValue, 0),
+		Increment: make([]string, 0, 1),
+	}
+	plan.PrimaryKeyCount++
+	plan.Where = append(plan.Where, lorm.ColumnValue{Column: "id", Value: m.ID})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "name", Value: m.Name})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "email", Value: m.Email})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "updated_at", Value: now})
+	return plan, nil
+}
+
+func (m *User) LormAfterUpdate(now lorm.HookTime, rowsAffected int64) {
+	if rowsAffected <= 0 {
+		return
+	}
+	{
+		m.UpdatedAt = now
+	}
+}
+
+var _lorm_file_model_5b017786_User_model_descriptor = _lorm_file_model_5b017786_model_descriptor_map["User"]
+
 func (m *User) LormModelDescriptor() *lorm.ModelDescriptor {
-	return _lorm_file_model_model_descriptor_map["User"]
+	return _lorm_file_model_5b017786_User_model_descriptor
 }
 
 func (m *User) Fields() *User_Fields {
@@ -110,11 +199,11 @@ func (f *User_Fields) All() []string {
 	}
 }
 
-const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"User","TableName":"users","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Name","FullName":"Name","DBField":"name","Type":"string","Flag":0},{"Name":"Email","FullName":"Email","DBField":"email","Type":"string","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}]}]}`
+const _lorm_file_model_5b017786_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"User","TableName":"users","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Name","FullName":"Name","DBField":"name","Type":"string","Flag":0},{"Name":"Email","FullName":"Email","DBField":"email","Type":"string","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}],"PrimaryKeys":["id"]}]}`
 
-var _lorm_file_model_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
+var _lorm_file_model_5b017786_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_model_raw, &file)
+	_ = json.UnmarshalString(_lorm_file_model_5b017786_raw, &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

@@ -26,20 +26,38 @@ func hasOption(options []string, target string) bool {
 
 // SelectBuilder builds SELECT statements clause by clause.
 type SelectBuilder struct {
-	withParts    []Sqlizer
-	prefixes     []Sqlizer
-	options      []string
-	columns      []Sqlizer
-	from         Sqlizer
-	joins        []Sqlizer
-	whereParts   []Sqlizer
-	groupBys     []string
-	havingParts  []Sqlizer
-	orderByParts []Sqlizer
-	limit        string
-	offset       string
-	suffixes     []Sqlizer
-	lockParts    []Sqlizer
+	withParts          []Sqlizer
+	prefixes           []Sqlizer
+	options            []string
+	columns            []Sqlizer
+	preparedProjection *PreparedProjection
+	from               Sqlizer
+	joins              []Sqlizer
+	whereParts         []Sqlizer
+	groupBys           []string
+	havingParts        []Sqlizer
+	orderByParts       []Sqlizer
+	limit              string
+	offset             string
+	suffixes           []Sqlizer
+	lockParts          []Sqlizer
+}
+
+// PreparedProjection is an immutable, argument-free SELECT projection.
+// It is safe to share between builders and goroutines.
+type PreparedProjection struct {
+	sql  string
+	part [1]Sqlizer
+}
+
+// NewPreparedProjection prepares a complete comma-separated SELECT projection.
+func NewPreparedProjection(sql string) *PreparedProjection {
+	if strings.TrimSpace(sql) == "" {
+		return nil
+	}
+	projection := &PreparedProjection{sql: sql}
+	projection.part[0] = expr{sql: sql}
+	return projection
 }
 
 // Clone returns a shallow copy of the builder and its clause slices.
@@ -48,26 +66,27 @@ func (b *SelectBuilder) Clone() *SelectBuilder {
 		return nil
 	}
 	return &SelectBuilder{
-		withParts:    cloneSqlizers(b.withParts),
-		prefixes:     cloneSqlizers(b.prefixes),
-		options:      cloneStrings(b.options),
-		columns:      cloneSqlizers(b.columns),
-		from:         b.from,
-		joins:        cloneSqlizers(b.joins),
-		whereParts:   cloneSqlizers(b.whereParts),
-		groupBys:     cloneStrings(b.groupBys),
-		havingParts:  cloneSqlizers(b.havingParts),
-		orderByParts: cloneSqlizers(b.orderByParts),
-		limit:        b.limit,
-		offset:       b.offset,
-		suffixes:     cloneSqlizers(b.suffixes),
-		lockParts:    cloneSqlizers(b.lockParts),
+		withParts:          cloneSqlizers(b.withParts),
+		prefixes:           cloneSqlizers(b.prefixes),
+		options:            cloneStrings(b.options),
+		columns:            cloneSqlizers(b.columns),
+		preparedProjection: b.preparedProjection,
+		from:               b.from,
+		joins:              cloneSqlizers(b.joins),
+		whereParts:         cloneSqlizers(b.whereParts),
+		groupBys:           cloneStrings(b.groupBys),
+		havingParts:        cloneSqlizers(b.havingParts),
+		orderByParts:       cloneSqlizers(b.orderByParts),
+		limit:              b.limit,
+		offset:             b.offset,
+		suffixes:           cloneSqlizers(b.suffixes),
+		lockParts:          cloneSqlizers(b.lockParts),
 	}
 }
 
 // ToSql renders the SELECT statement and its bound arguments.
 func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
-	if len(b.columns) == 0 {
+	if len(b.columns) == 0 && b.preparedProjection == nil {
 		err = fmt.Errorf("select statements must have at least one result column")
 		return
 	}
@@ -98,7 +117,9 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 		sql.WriteString(" ")
 	}
 
-	if len(b.columns) > 0 {
+	if b.preparedProjection != nil {
+		sql.WriteString(b.preparedProjection.sql)
+	} else if len(b.columns) > 0 {
 		args, err = appendToSql(b.columns, sql, ", ", args)
 		if err != nil {
 			return
@@ -185,7 +206,7 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 	hasDistinct := hasOption(b.options, "DISTINCT")
 
-	if len(b.groupBys) == 0 && !hasDistinct {
+	if len(b.groupBys) == 0 && len(b.havingParts) == 0 && !hasDistinct {
 		// A simple SELECT can count rows directly against the same FROM/WHERE clauses.
 		builder := &SelectBuilder{
 			withParts:  cloneSqlizers(b.withParts),
@@ -201,13 +222,14 @@ func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 
 	// Complex GROUP BY or HAVING queries must be counted from a subquery to preserve semantics.
 	subBuilder := &SelectBuilder{
-		options:     cloneStrings(b.options),
-		columns:     cloneSqlizers(b.columns),
-		from:        b.from,
-		joins:       cloneSqlizers(b.joins),
-		whereParts:  cloneSqlizers(b.whereParts),
-		groupBys:    cloneStrings(b.groupBys),
-		havingParts: cloneSqlizers(b.havingParts),
+		options:            cloneStrings(b.options),
+		columns:            cloneSqlizers(b.columns),
+		preparedProjection: b.preparedProjection,
+		from:               b.from,
+		joins:              cloneSqlizers(b.joins),
+		whereParts:         cloneSqlizers(b.whereParts),
+		groupBys:           cloneStrings(b.groupBys),
+		havingParts:        cloneSqlizers(b.havingParts),
 	}
 
 	builder := new(SelectBuilder).
@@ -262,7 +284,23 @@ func (b *SelectBuilder) Select(columns ...string) *SelectBuilder {
 		parts = append(parts, newPart(str))
 	}
 	b.columns = parts
+	b.preparedProjection = nil
 	return b
+}
+
+// SelectPrepared installs an immutable, argument-free projection.
+func (b *SelectBuilder) SelectPrepared(projection *PreparedProjection) *SelectBuilder {
+	b.columns = nil
+	b.preparedProjection = projection
+	return b
+}
+
+// GetColumns returns the configured result columns.
+func (b *SelectBuilder) GetColumns() []Sqlizer {
+	if b.preparedProjection != nil {
+		return b.preparedProjection.part[:]
+	}
+	return b.columns
 }
 
 // RemoveColumns remove all columns from query.
@@ -270,6 +308,7 @@ func (b *SelectBuilder) Select(columns ...string) *SelectBuilder {
 // return a error.
 func (b *SelectBuilder) RemoveColumns() *SelectBuilder {
 	b.columns = nil
+	b.preparedProjection = nil
 	return b
 }
 
@@ -277,8 +316,12 @@ func (b *SelectBuilder) RemoveColumns() *SelectBuilder {
 // Unlike Select, AddColumn accepts args which will be bound to placeholders in
 // the columns string, for example:
 //
-//	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
+//	AddColumn("IF(col IN ("+lorm.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
 func (b *SelectBuilder) AddColumn(column any, args ...any) *SelectBuilder {
+	if b.preparedProjection != nil {
+		b.columns = append(b.columns, b.preparedProjection.part[0])
+		b.preparedProjection = nil
+	}
 	b.columns = append(b.columns, newPart(column, args...))
 	return b
 }
@@ -457,6 +500,7 @@ func (b *SelectBuilder) Clear() *SelectBuilder {
 	b.prefixes = resetSlice(b.prefixes)
 	b.options = resetSlice(b.options)
 	b.columns = resetSlice(b.columns)
+	b.preparedProjection = nil
 	b.from = nil
 	b.joins = resetSlice(b.joins)
 	b.whereParts = resetSlice(b.whereParts)

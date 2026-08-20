@@ -8,30 +8,51 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+type updateMode uint8
+
+const (
+	updateModeUnset updateMode = iota
+	updateModeManual
+	updateModeModel
+)
+
 func newUpdateBuilder[T Table](engine *Engine) *builder.UpdateBuilder {
 	var t T
 	return builder.Update(engine.Escaper().Escape(t.TableName()))
 }
 
-// Update builds an UPDATE statement for table T.
-func (e *Engine) Update[T Table]() *UpdateStmt[T] {
+func newUpdateStmt[T Table](engine *Engine, isNil func(T) bool) *UpdateStmt[T] {
 	return &UpdateStmt[T]{
-		engine:  e,
-		builder: newUpdateBuilder[T](e),
+		engine:  engine,
+		builder: newUpdateBuilder[T](engine),
+		isNil:   isNil,
 	}
+}
+
+// Update builds an UPDATE statement for pointer table P.
+func (e *Engine) Update[P TablePointer[M], M any]() *UpdateStmt[P] {
+	return newUpdateStmt(e, func(model P) bool { return model == nil })
 }
 
 // UpdateStmt is a fluent UPDATE builder for table T.
 type UpdateStmt[T Table] struct {
-	engine  *Engine
-	builder *builder.UpdateBuilder
-	after   []func(rowsAffected int64)
-	err     error
+	engine           *Engine
+	builder          *builder.UpdateBuilder
+	model            T
+	modelNow         time.Time
+	isNil            func(T) bool
+	mode             updateMode
+	allowGlobalWrite bool
+	err              error
 }
 
 func (s *UpdateStmt[T]) reset() {
 	s.builder = newUpdateBuilder[T](s.engine)
-	s.after = s.after[:0]
+	var zero T
+	s.model = zero
+	s.modelNow = time.Time{}
+	s.mode = updateModeUnset
+	s.allowGlobalWrite = false
 	s.err = nil
 }
 
@@ -39,10 +60,14 @@ func (s *UpdateStmt[T]) reset() {
 // only the statement they are called on.
 func (s *UpdateStmt[T]) Clone() *UpdateStmt[T] {
 	return &UpdateStmt[T]{
-		engine:  s.engine,
-		builder: s.builder.Clone(),
-		after:   append([]func(rowsAffected int64){}, s.after...),
-		err:     s.err,
+		engine:           s.engine,
+		builder:          s.builder.Clone(),
+		model:            s.model,
+		modelNow:         s.modelNow,
+		isNil:            s.isNil,
+		mode:             s.mode,
+		allowGlobalWrite: s.allowGlobalWrite,
+		err:              s.err,
 	}
 }
 
@@ -56,6 +81,9 @@ func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	if err != nil {
 		return 0, err
 	}
+	if !s.allowGlobalWrite && !s.builder.HasWhere() {
+		return 0, errors.New("lorm.Update().Exec() requires a WHERE clause or AllowGlobalWrite()")
+	}
 	result, err := s.engine.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, err
@@ -64,8 +92,10 @@ func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	if err != nil {
 		return 0, err
 	}
-	for _, fn := range s.after {
-		fn(rowsAffected)
+	if s.mode == updateModeModel {
+		if hook, ok := any(s.model).(AfterUpdateHook); ok {
+			hook.LormAfterUpdate(s.modelNow, rowsAffected)
+		}
 	}
 	return rowsAffected, nil
 }
@@ -76,120 +106,124 @@ func (s *UpdateStmt[T]) Table(table string) *UpdateStmt[T] {
 	return s
 }
 
-// Prefix adds an expression to the beginning of the query
+// Prefix adds an expression to the beginning of the query.
 func (s *UpdateStmt[T]) Prefix(sql string, args ...any) *UpdateStmt[T] {
 	s.builder.Prefix(sql, args...)
 	return s
 }
 
-// PrefixExpr adds an expression to the very beginning of the query
+// PrefixExpr adds an expression to the very beginning of the query.
 func (s *UpdateStmt[T]) PrefixExpr(expr builder.Sqlizer) *UpdateStmt[T] {
 	s.builder.PrefixExpr(expr)
 	return s
 }
 
-// Set adds SET clauses to the query.
+func (s *UpdateStmt[T]) enterManualMode() bool {
+	if s.err != nil {
+		return false
+	}
+	switch s.mode {
+	case updateModeUnset:
+		s.mode = updateModeManual
+	case updateModeModel:
+		s.err = errors.New("lorm.Update(): SetModel cannot be mixed with Set or SetMap")
+		return false
+	}
+	return true
+}
+
+// Set adds a SET clause to the query.
 func (s *UpdateStmt[T]) Set(column string, value any) *UpdateStmt[T] {
+	if !s.enterManualMode() {
+		return s
+	}
 	s.builder.Set(s.engine.Escaper().Escape(column), value)
 	return s
 }
 
-// SetModel maps model fields into SET and WHERE clauses using descriptor metadata.
-//
-// SetModel performs a full-field update for regular columns. Zero values are not
-// ignored automatically, so partial updates should prefer SetMap/Set.
-func (s *UpdateStmt[T]) SetModel(t T) *UpdateStmt[T] {
+// SetModel creates a full-field update plan for one model.
+func (s *UpdateStmt[T]) SetModel(model T) *UpdateStmt[T] {
 	if s.err != nil {
 		return s
 	}
-	escaper := s.engine.Escaper()
-	descriptor := t.LormModelDescriptor()
-	valueAccessor, hasValueAccessor := any(t).(ModelFieldValueAccessor)
-	var (
-		hasPrimaryKey bool
-		now           = time.Now()
-		dataMap       = make(map[string]any, len(descriptor.Fields))
-	)
-
-	for _, field := range descriptor.Fields {
-		valuePtr := t.LormFieldPtr(field.DBField)
-		if valuePtr == nil {
-			continue
-		}
-		value := valuePtr
-		if hasValueAccessor {
-			value = valueAccessor.LormFieldValue(field.DBField)
-		}
-
-		if field.Flag.HasFlag(FlagPrimaryKey) {
-			// Primary keys identify the row to update instead of becoming SET values.
-			hasPrimaryKey = true
-			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
-			continue
-		}
-		if field.Flag.HasFlag(FlagVersion) {
-			// Version fields participate in optimistic locking and auto-increment.
-			s.builder.Where(builder.Eq{escaper.Escape(field.DBField): value})
-			dataMap[escaper.Escape(field.DBField)] = builder.Expr(escaper.Escape(field.DBField) + "+1")
-			s.after = append(s.after, func(rowsAffected int64) {
-				if rowsAffected > 0 {
-					incrementVersionValue(valuePtr)
-				}
-			})
-			continue
-		}
-		if field.Flag.HasFlag(FlagCreated) {
-			continue
-		}
-		if field.Flag.HasFlag(FlagUpdated) {
-			if updatedValue, syncValue, ok := newUpdatedFieldValue(valuePtr, now); ok {
-				dataMap[escaper.Escape(field.DBField)] = updatedValue
-				s.after = append(s.after, func(rowsAffected int64) {
-					if rowsAffected > 0 {
-						syncValue()
-					}
-				})
-				continue
-			}
-		}
-		dataMap[escaper.Escape(field.DBField)] = value
+	switch s.mode {
+	case updateModeManual:
+		s.err = errors.New("lorm.Update(): SetModel cannot be mixed with Set or SetMap")
+		return s
+	case updateModeModel:
+		s.err = errors.New("lorm.Update().SetModel() can only be called once")
+		return s
+	}
+	s.mode = updateModeModel
+	s.model = model
+	if s.isNil(model) {
+		s.err = errors.New("lorm.Update().SetModel() model is nil")
+		return s
 	}
 
-	if !hasPrimaryKey {
+	s.modelNow = time.Now()
+	plan, err := prepareUpdatePlan(model, s.modelNow)
+	if err != nil {
+		s.err = err
+		return s
+	}
+	if plan.PrimaryKeyCount == 0 {
 		s.err = errors.New("lorm.Update().SetModel() requires tables with at least one primary key")
 		return s
 	}
-	s.builder.SetMap(dataMap)
+
+	escaper := s.engine.Escaper()
+	for _, item := range plan.Set {
+		s.builder.Set(escaper.Escape(item.Column), item.Value)
+	}
+	for _, column := range plan.Increment {
+		escaped := escaper.Escape(column)
+		s.builder.Set(escaped, builder.Expr(escaped+"+1"))
+	}
+	for _, item := range plan.Where {
+		s.builder.Where(builder.Eq{escaper.Escape(item.Column): item.Value})
+	}
 	return s
 }
 
-// SetMap is a convenience method which calls .Set for each key/value pair in clauses.
+// AllowGlobalWrite explicitly permits an UPDATE without a restrictive WHERE clause.
+func (s *UpdateStmt[T]) AllowGlobalWrite() *UpdateStmt[T] {
+	s.allowGlobalWrite = true
+	return s
+}
+
+// SetMap appends sorted SET clauses from clauses.
 func (s *UpdateStmt[T]) SetMap(clauses map[string]any) *UpdateStmt[T] {
+	if !s.enterManualMode() {
+		return s
+	}
 	s.builder.SetMap(escapeMap(s.engine.Escaper(), clauses))
 	return s
 }
 
 // Where adds WHERE expressions to the query.
-//
-// See SelectBuilder.Where for more information.
 func (s *UpdateStmt[T]) Where(pred any, args ...any) *UpdateStmt[T] {
 	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
 	return s
 }
 
-// ID adds a single-column primary key predicate derived from the model metadata.
+// ID adds a single-column primary key predicate derived from model metadata.
 func (s *UpdateStmt[T]) ID(id any) *UpdateStmt[T] {
 	if s.err != nil {
 		return s
 	}
 	var t T
-	primaryKeys := t.LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	descriptor := t.LormModelDescriptor()
+	if descriptor == nil {
+		s.err = errors.New("lorm.Update().ID() model descriptor is nil")
+		return s
+	}
 	escaper := s.engine.Escaper()
-	if len(primaryKeys) != 1 {
+	if len(descriptor.PrimaryKeys) != 1 {
 		s.err = errors.New("lorm.Update().ID() only supports tables with single-column primary keys")
 		return s
 	}
-	s.builder.Where(builder.Eq{escaper.Escape(primaryKeys[0]): id})
+	s.builder.Where(builder.Eq{escaper.Escape(descriptor.PrimaryKeys[0]): id})
 	return s
 }
 
@@ -205,19 +239,19 @@ func (s *UpdateStmt[T]) Limit(limit uint64) *UpdateStmt[T] {
 	return s
 }
 
-// Offset sets a OFFSET clause on the query.
+// Offset sets an OFFSET clause on the query.
 func (s *UpdateStmt[T]) Offset(offset uint64) *UpdateStmt[T] {
 	s.builder.Offset(offset)
 	return s
 }
 
-// Suffix adds an expression to the end of the query
+// Suffix adds an expression to the end of the query.
 func (s *UpdateStmt[T]) Suffix(sql string, args ...any) *UpdateStmt[T] {
 	s.builder.Suffix(sql, args...)
 	return s
 }
 
-// SuffixExpr adds an expression to the end of the query
+// SuffixExpr adds an expression to the end of the query.
 func (s *UpdateStmt[T]) SuffixExpr(expr builder.Sqlizer) *UpdateStmt[T] {
 	s.builder.SuffixExpr(expr)
 	return s

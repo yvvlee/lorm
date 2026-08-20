@@ -32,7 +32,7 @@ func main() {
 	}
 
 	var p Product
-	filtered, err := engine.Select[*Product]().
+	filtered, err := engine.Query[*Product]().
 		Where(builder.And{
 			builder.In(p.Fields().Category(), []string{"book", "tool"}),
 			builder.Or{
@@ -53,11 +53,10 @@ func main() {
 			item.ID, item.Name, item.Category, item.Price, item.Status)
 	}
 
-	count, ok, err := engine.Select[int64]().
+	count, ok, err := engine.Query[*Product]().
 		Select("COUNT(1)").
-		From(p.TableName()).
 		Where(builder.Eq{p.Fields().Status(): "active"}).
-		Get(ctx)
+		GetCol[int64](ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

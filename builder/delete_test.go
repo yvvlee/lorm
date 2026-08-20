@@ -44,6 +44,13 @@ func TestDeleteBuilderIgnoresNilAndEmptyWhereClauses(t *testing.T) {
 	assert.Empty(t, args)
 }
 
+func TestDeleteBuilderHasEffectiveWhere(t *testing.T) {
+	assert.False(t, Delete("users").Where(nil).HasWhere())
+	assert.False(t, Delete("users").Where(Eq{}).HasWhere())
+	assert.False(t, Delete("users").Where("(1 = 1)").HasWhere())
+	assert.True(t, Delete("users").Where("id = ?", 1).HasWhere())
+}
+
 func TestDeleteBuilderReturningWithSuffix(t *testing.T) {
 	b := Delete("").
 		From("users").

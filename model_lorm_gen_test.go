@@ -59,6 +59,30 @@ func (m *Test) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Test) LormScan(row RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Int,
+		&m.IntP,
+		&m.Bool,
+		&m.BoolP,
+		&m.Str,
+		&m.StrP,
+		&m.Timestamp,
+		&m.TimestampP,
+		&m.Datetime,
+		&m.DatetimeP,
+		&m.Decimal,
+		&m.DecimalP,
+		NewJSONFieldWrapper(&m.IntSlice),
+		NewJSONFieldWrapper(&m.IntSliceP),
+		NewJSONFieldWrapper(&m.Struct),
+		NewJSONFieldWrapper(&m.StructP),
+		&m.CreatedAt,
+		&m.UpdatedAt,
+	)
+}
+
 func (m *Test) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -122,8 +146,14 @@ func (m *Test) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_test_model_Test_model_descriptor = func() *ModelDescriptor {
+	descriptor := _lorm_file_test_model_model_descriptor_map["Test"]
+	descriptor.PrimaryKeys = []string{"id"}
+	return descriptor
+}()
+
 func (m *Test) LormModelDescriptor() *ModelDescriptor {
-	return _lorm_file_test_model_model_descriptor_map["Test"]
+	return _lorm_file_test_model_Test_model_descriptor
 }
 
 func (m *Test) Fields() *Test_Fields {

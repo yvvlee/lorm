@@ -12,6 +12,8 @@ import (
 
 type CSVInts []int
 
+var _ lorm.ScannerValuer = (*CSVInts)(nil)
+
 func (c CSVInts) Value() (driver.Value, error) {
 	if len(c) == 0 {
 		return []byte{}, nil

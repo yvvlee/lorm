@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
@@ -12,10 +13,10 @@ import (
 func TestPaginationFlow(t *testing.T) {
 	ctx := context.Background()
 	engine, cleanup, err := exampleutil.NewSQLiteEngine(schemaSQL)
-	if err != nil {
+	if exampleutil.IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	posts := []*Post{
@@ -29,7 +30,7 @@ func TestPaginationFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	var p Post
-	pageRows, total, err := engine.Select[*Post]().
+	pageRows, total, err := engine.Query[*Post]().
 		OrderBy(p.Fields().ID()+" ASC").
 		Page(ctx, 2, 2)
 	assert.NoError(t, err)

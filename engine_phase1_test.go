@@ -37,7 +37,8 @@ func (m *reservedWordModel) LormFieldPtr(name string) any {
 }
 func (m *reservedWordModel) LormModelDescriptor() *ModelDescriptor {
 	return &ModelDescriptor{
-		TableName: m.TableName(),
+		TableName:   m.TableName(),
+		PrimaryKeys: []string{"id"},
 		Fields: []*FieldDescriptor{
 			{DBField: "id", Flag: FlagPrimaryKey | FlagAutoIncrement},
 			{DBField: "group"},
@@ -65,7 +66,8 @@ func (m *manualPrimaryKeyModel) LormFieldPtr(name string) any {
 }
 func (m *manualPrimaryKeyModel) LormModelDescriptor() *ModelDescriptor {
 	return &ModelDescriptor{
-		TableName: m.TableName(),
+		TableName:   m.TableName(),
+		PrimaryKeys: []string{"id"},
 		Fields: []*FieldDescriptor{
 			{DBField: "id", Flag: FlagPrimaryKey},
 			{DBField: "name"},
@@ -79,17 +81,21 @@ func TestFlagFieldsKeepsNonAutoPrimaryKeysOutOfGeneratedKeyPath(t *testing.T) {
 	autoPrimaryKeys := model.LormModelDescriptor().FlagFields(FlagPrimaryKey | FlagAutoIncrement)
 	require.Empty(t, autoPrimaryKeys)
 
-	fields, _ := ModelToInsertData(model)
-	assert.Equal(t, []string{"id", "name"}, fields)
+	plan := model.LormBeforeInsert(HookTime{})
+	assert.Equal(t, []string{"id", "name"}, plan.Columns)
+	assert.False(t, plan.AutoIncrementZero)
 }
 
 func TestSelectEscapesModelTableAndPrimaryKeyPredicate(t *testing.T) {
-	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 
-	sqlStr, args, err := engine.Select[*reservedWordModel]().ID(7).builder.ToSql()
+	_, err := engine.Query[*reservedWordModel]().ID(7).Find(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ?", sqlStr)
-	assert.Equal(t, []any{7}, args)
+	call := recorder.Last()
+	require.NotNil(t, call)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `id` = ?", call.query)
+	assert.Equal(t, []any{int64(7)}, call.args)
 }
 
 func TestRepositoryMethodsEscapeIdentifiers(t *testing.T) {
@@ -176,7 +182,15 @@ func TestRepositoryWrapperMethodsWithCaptureEngine(t *testing.T) {
 	assert.Equal(t, []any{int64(7)}, call.args)
 
 	recorder.Reset()
-	model, err := repo.Lock(ctx, int64(9))
+	_, err = repo.Lock(ctx, int64(9))
+	assert.ErrorContains(t, err, "requires a transaction session")
+	assert.Empty(t, recorder.Calls())
+
+	var model *reservedWordModel
+	err = engine.TX(ctx, func(txCtx context.Context) error {
+		model, err = repo.Lock(txCtx, int64(9))
+		return err
+	})
 	require.NoError(t, err)
 	assert.Nil(t, model)
 	call = recorder.Last()
@@ -210,16 +224,19 @@ func TestRepositoryAcceptsNonIntegerPrimaryKeyArguments(t *testing.T) {
 }
 
 func TestStmtMethodsEscapeIdentifiersWithoutRepositoryHelp(t *testing.T) {
-	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: names.NewQuoter('`', '`')}}}
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 
-	sqlStr, args, err := engine.Select[*reservedWordModel]().
+	_, err := engine.Query[*reservedWordModel]().
 		Where(builder.Eq{"group": "g1"}).
-		builder.ToSql()
+		Find(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ?", sqlStr)
-	assert.Equal(t, []any{"g1"}, args)
+	call := recorder.Last()
+	require.NotNil(t, call)
+	assert.Equal(t, "SELECT `id`, `group` FROM `order` WHERE `group` = ?", call.query)
+	assert.Equal(t, []any{"g1"}, call.args)
 
-	sqlStr, args, err = engine.Update[*reservedWordModel]().
+	sqlStr, args, err := engine.Update[*reservedWordModel]().
 		ID(1).
 		SetMap(map[string]any{"group": "g2"}).
 		builder.ToSql()
@@ -262,6 +279,26 @@ func TestEngineLogsSQLArgsWhenEnabled(t *testing.T) {
 	assert.Equal(t, []any{"token"}, logValue(entry.args, "args"))
 }
 
+func TestEngineNilLoggerFastPathExecutesSQLAndTransaction(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, nil)
+	ctx := context.Background()
+
+	_, err := engine.Exec(ctx, "UPDATE test SET value = ?", "direct")
+	require.NoError(t, err)
+
+	err = engine.TX(ctx, func(txCtx context.Context) error {
+		_, execErr := engine.Exec(txCtx, "UPDATE test SET value = ?", "transaction")
+		return execErr
+	})
+	require.NoError(t, err)
+
+	calls := recorder.Calls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, []any{"direct"}, calls[0].args)
+	assert.Equal(t, []any{"transaction"}, calls[1].args)
+}
+
 type captureSQLRecorder struct {
 	mu           sync.Mutex
 	calls        []captureSQLCall
@@ -272,6 +309,85 @@ type captureSQLCall struct {
 	kind  string
 	query string
 	args  []any
+}
+
+type countingEscaper struct {
+	calls atomic.Int64
+}
+
+func (e *countingEscaper) Escape(field string) string {
+	e.calls.Add(1)
+	return "[" + field + "]"
+}
+
+func TestEngineCachesDefaultProjectionByDescriptor(t *testing.T) {
+	escaper := new(countingEscaper)
+	engine := &Engine{config: &Config{Dialect: DialectConfig{Escaper: escaper}}}
+	descriptor := &ModelDescriptor{
+		Name: "cachedProjection",
+		Fields: []*FieldDescriptor{
+			{DBField: "id"},
+			{DBField: "name"},
+		},
+	}
+
+	type projectionResult struct {
+		projection *builder.PreparedProjection
+		err        error
+	}
+	const workers = 32
+	results := make(chan projectionResult, workers)
+	var wait sync.WaitGroup
+	wait.Add(workers)
+	for range workers {
+		go func() {
+			defer wait.Done()
+			projection, err := engine.defaultSelectProjection(descriptor)
+			results <- projectionResult{projection: projection, err: err}
+		}()
+	}
+	wait.Wait()
+	close(results)
+
+	var first *builder.PreparedProjection
+	for result := range results {
+		require.NoError(t, result.err)
+		if first == nil {
+			first = result.projection
+			continue
+		}
+		assert.Same(t, first, result.projection)
+	}
+	assert.EqualValues(t, len(descriptor.Fields), escaper.calls.Load())
+
+	sqlText, _, err := new(builder.SelectBuilder).
+		SelectPrepared(first).
+		From("users").
+		ToSql()
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT [id], [name] FROM users", sqlText)
+}
+
+func TestEngineRejectsInvalidDefaultProjectionDescriptors(t *testing.T) {
+	engine := &Engine{config: &Config{}}
+
+	_, err := engine.defaultSelectProjection(nil)
+	assert.ErrorContains(t, err, "descriptor is nil")
+
+	_, err = engine.defaultSelectProjection(&ModelDescriptor{Name: "empty"})
+	assert.ErrorContains(t, err, "has no fields")
+
+	_, err = engine.defaultSelectProjection(&ModelDescriptor{
+		Name:   "nilField",
+		Fields: []*FieldDescriptor{nil},
+	})
+	assert.ErrorContains(t, err, "nil field at index 0")
+
+	_, err = engine.defaultSelectProjection(&ModelDescriptor{
+		Name:   "emptyField",
+		Fields: []*FieldDescriptor{{}},
+	})
+	assert.ErrorContains(t, err, "empty database field at index 0")
 }
 
 func newCaptureSQLRecorder() *captureSQLRecorder {
@@ -295,6 +411,14 @@ func (r *captureSQLRecorder) Last() captureSQLCall {
 		return captureSQLCall{}
 	}
 	return r.calls[len(r.calls)-1]
+}
+
+func (r *captureSQLRecorder) Calls() []captureSQLCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	calls := make([]captureSQLCall, len(r.calls))
+	copy(calls, r.calls)
+	return calls
 }
 
 func (r *captureSQLRecorder) Reset() {

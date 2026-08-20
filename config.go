@@ -49,6 +49,8 @@ type Config struct {
 	logSQLArgs bool
 	// maxIdleConns is the maximum number of idle connections in the connection pool
 	maxIdleConns int
+	// maxIdleConnsSet distinguishes an explicit zero from the database/sql default.
+	maxIdleConnsSet bool
 	// maxOpenConns is the maximum number of open connections to the database
 	maxOpenConns int
 	// connMaxLifetime is the maximum amount of time a connection may be reused
@@ -106,6 +108,7 @@ func WithSupportsForUpdate(enabled bool) Option {
 func WithMaxIdleConns(maxIdleConns int) Option {
 	return func(c *Config) {
 		c.maxIdleConns = maxIdleConns
+		c.maxIdleConnsSet = true
 	}
 }
 
@@ -130,7 +133,8 @@ func WithConnMaxIdleTime(connMaxIdleTime time.Duration) Option {
 	}
 }
 
-// WithLogger sets the logger
+// WithLogger sets the logger. A nil logger disables logging without adding
+// timing or field-construction overhead to SQL execution.
 func WithLogger(logger Logger) Option {
 	return func(c *Config) {
 		c.logger = logger

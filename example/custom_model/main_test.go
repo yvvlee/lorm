@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
@@ -12,10 +13,10 @@ import (
 func TestCustomModelFlow(t *testing.T) {
 	ctx := context.Background()
 	engine, cleanup, err := exampleutil.NewSQLiteEngine(schemaSQL)
-	if err != nil {
+	if exampleutil.IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	admin := &Role{Name: "admin"}
@@ -39,7 +40,7 @@ func TestCustomModelFlow(t *testing.T) {
 		r    = role.Fields().WithAlias("r")
 	)
 
-	rows, err := engine.Select[*UserWithRole]().
+	rows, err := engine.Query[*UserWithRole]().
 		Select(
 			u.ID()+" AS user_id",
 			u.Name()+" AS user_name",

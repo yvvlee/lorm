@@ -94,6 +94,7 @@ func TestEngineInitAppliesConfigAndFallbacks(t *testing.T) {
 	engine := &Engine{
 		config: &Config{
 			maxIdleConns:    2,
+			maxIdleConnsSet: true,
 			maxOpenConns:    3,
 			connMaxLifetime: time.Second,
 			connMaxIdleTime: time.Second,
@@ -105,6 +106,14 @@ func TestEngineInitAppliesConfigAndFallbacks(t *testing.T) {
 	assert.Equal(t, 3, db.Stats().MaxOpenConnections)
 	assert.Equal(t, builder.Question, (&Engine{config: &Config{}}).Placeholder())
 	assert.Equal(t, "field", (&Engine{config: &Config{}}).Escaper().Escape("field"))
+}
+
+func TestWithMaxIdleConnsTracksExplicitZero(t *testing.T) {
+	config := new(Config)
+	WithMaxIdleConns(0)(config)
+
+	assert.True(t, config.maxIdleConnsSet)
+	assert.Zero(t, config.maxIdleConns)
 }
 
 func TestNewEngineAndContextCoverage(t *testing.T) {
@@ -124,7 +133,7 @@ func TestNewEngineAndContextCoverage(t *testing.T) {
 	if err != nil {
 		return
 	}
-	assert.IsType(t, noopLogger{}, engine.logger)
+	assert.Nil(t, engine.logger)
 	assert.Equal(t, 3, engine.db.Stats().MaxOpenConnections)
 	assert.NoError(t, engine.Close())
 
@@ -133,14 +142,6 @@ func TestNewEngineAndContextCoverage(t *testing.T) {
 	engine, err = NewEngineContext(ctx, driverName, filepath.Join(t.TempDir(), "cancelled.db"))
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, engine)
-}
-
-func TestNoopLoggerMethods(t *testing.T) {
-	logger := noopLogger{}
-	logger.DebugContext(context.Background(), "debug")
-	logger.InfoContext(context.Background(), "info")
-	logger.WarnContext(context.Background(), "warn")
-	logger.ErrorContext(context.Background(), "error")
 }
 
 func newDialectTestEngine(driverName string) *Engine {

@@ -37,8 +37,9 @@ func (m *testCompositePrimaryKeyModel) LormFieldPtr(name string) any {
 
 func (m *testCompositePrimaryKeyModel) LormModelDescriptor() *ModelDescriptor {
 	return &ModelDescriptor{
-		Name:      "testCompositePrimaryKeyModel",
-		TableName: m.TableName(),
+		Name:        "testCompositePrimaryKeyModel",
+		TableName:   m.TableName(),
+		PrimaryKeys: []string{"account_id", "tenant_id"},
 		Fields: []*FieldDescriptor{
 			{
 				Name:     "AccountID",
@@ -64,18 +65,11 @@ func (m *testCompositePrimaryKeyModel) LormModelDescriptor() *ModelDescriptor {
 func TestSelectIDRequiresSingleColumnPrimaryKey(t *testing.T) {
 	e := &Engine{config: &Config{}}
 
-	_, _, err := e.Select[*testNoPrimaryKeyModel]().ID(1).Get(context.TODO())
+	_, _, err := e.Query[*testNoPrimaryKeyModel]().ID(1).Get(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
 
-	_, err = e.Select[*testCompositePrimaryKeyModel]().ID(1).Exist(context.TODO())
+	_, err = e.Query[*testCompositePrimaryKeyModel]().ID(1).Exist(context.TODO())
 	assert.ErrorContains(t, err, "single-column primary keys")
-}
-
-func TestSelectIDRequiresModelResult(t *testing.T) {
-	e := &Engine{config: &Config{}}
-
-	_, _, err := e.Select[int64]().ID(1).Get(context.TODO())
-	assert.ErrorContains(t, err, "requires a Model result type")
 }
 
 func TestUpdateIDRequiresSingleColumnPrimaryKey(t *testing.T) {

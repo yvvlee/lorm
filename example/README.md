@@ -36,7 +36,7 @@ go generate ./...
 - `json_field`: how to store and update JSON fields with regular Go structs and slices
 - `pagination`: how to use `Page(ctx, page, size)` and work with total counts
 - `optimistic_lock`: how `version` fields participate in safe concurrent updates
-- `query_builder`: how to combine `builder.And`, `builder.Or`, `In`, `Like`, and scalar `Select` queries
+- `query_builder`: how to combine `builder.And`, `builder.Or`, `In`, `Like`, and single-column `Query` methods
 
 ## Notes
 

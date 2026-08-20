@@ -3,7 +3,9 @@ package lorm
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,9 +18,10 @@ import (
 // An Engine should be created once per database and used as a global singleton.
 // Do not copy an Engine value; transaction isolation relies on pointer identity.
 type Engine struct {
-	config *Config
-	db     *sql.DB
-	logger Logger
+	config                   *Config
+	db                       *sql.DB
+	logger                   Logger
+	defaultSelectProjections sync.Map
 }
 
 // NewEngine opens a database connection and applies the provided options.
@@ -44,9 +47,6 @@ func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Opt
 	for _, o := range option {
 		o(config)
 	}
-	if config.logger == nil {
-		config.logger = noopLogger{}
-	}
 	engine := &Engine{
 		config: config,
 		db:     db,
@@ -62,7 +62,7 @@ func (e *Engine) Close() error {
 }
 
 func (e *Engine) init() {
-	if e.config.maxIdleConns > 0 {
+	if e.config.maxIdleConnsSet {
 		e.db.SetMaxIdleConns(e.config.maxIdleConns)
 	}
 	if e.config.maxOpenConns > 0 {
@@ -124,6 +124,11 @@ func (e *Engine) session(ctx context.Context) *session {
 	return &session{engine: e}
 }
 
+func (e *Engine) isTransactionSession(ctx context.Context) bool {
+	s, ok := ctx.Value(e).(*session)
+	return ok && s != nil && s.engine == e && s.tx != nil
+}
+
 type sessionIDKey struct{}
 
 // TX runs fn in a transaction and reuses the current session for nested calls.
@@ -142,6 +147,9 @@ func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Co
 	// If a transaction is currently open, reuse the existing session
 	if _, ok := ctx.Value(e).(*session); ok {
 		return fn(ctx)
+	}
+	if e.logger == nil {
+		return e.txWithoutLogging(ctx, opts, fn)
 	}
 	tx, err := e.db.BeginTx(ctx, opts)
 	if err != nil {
@@ -180,8 +188,35 @@ func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Co
 	return err
 }
 
+func (e *Engine) txWithoutLogging(ctx context.Context, opts *sql.TxOptions, fn func(context.Context) error) (err error) {
+	tx, err := e.db.BeginTx(ctx, opts)
+	if err != nil {
+		return err
+	}
+	s := &session{engine: e, tx: tx}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+
+	innerCtx := context.WithValue(ctx, e, s)
+	if err = fn(innerCtx); err != nil {
+		rbErr := tx.Rollback()
+		if rbErr != nil {
+			return errors.Join(err, rbErr)
+		}
+		return err
+	}
+	return tx.Commit()
+}
+
 // Exec executes a statement against the current session or transaction.
 func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
+	if e.logger == nil {
+		return e.session(ctx).Exec(ctx, query, args...)
+	}
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
@@ -194,8 +229,11 @@ func (e *Engine) Exec(ctx context.Context, query string, args ...any) (result sq
 	return
 }
 
-// Query executes a query against the current session or transaction.
-func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
+// SQL executes a raw query against the current session or transaction.
+func (e *Engine) SQL(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
+	if e.logger == nil {
+		return e.session(ctx).Query(ctx, query, args...)
+	}
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
@@ -210,6 +248,9 @@ func (e *Engine) Query(ctx context.Context, query string, args ...any) (rows *sq
 
 // Exist reports whether the query returns at least one row.
 func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bool, err error) {
+	if e.logger == nil {
+		return e.session(ctx).Exist(ctx, query, args...)
+	}
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
@@ -319,4 +360,10 @@ type Querier interface {
 type DBProxy interface {
 	Execer
 	Querier
+}
+
+// ScannerValuer combines the standard database read and write conversion interfaces.
+type ScannerValuer interface {
+	sql.Scanner
+	driver.Valuer
 }

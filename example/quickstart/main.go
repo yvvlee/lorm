@@ -33,7 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	loadedAlice, ok, err := engine.Select[*User]().
+	loadedAlice, ok, err := engine.Query[*User]().
 		Where(builder.Eq{u.Fields().Email(): "alice@example.com"}).
 		Get(ctx)
 	if err != nil {
@@ -53,7 +53,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	users, err := engine.Select[*User]().
+	users, err := engine.Query[*User]().
 		OrderBy(u.Fields().ID() + " ASC").
 		Find(ctx)
 	if err != nil {
@@ -69,7 +69,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	remaining, err := engine.Select[*User]().
+	remaining, err := engine.Query[*User]().
 		OrderBy(u.Fields().ID() + " ASC").
 		Find(ctx)
 	if err != nil {

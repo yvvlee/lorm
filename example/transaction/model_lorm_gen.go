@@ -29,6 +29,14 @@ func (m *Account) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Account) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Owner,
+		&m.Balance,
+	)
+}
+
 func (m *Account) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -42,8 +50,65 @@ func (m *Account) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_model_5b017786_Account_insert_columns = []string{
+	"id",
+	"owner",
+	"balance",
+}
+
+var _lorm_file_model_5b017786_Account_insert_columns_without_auto_increment = []string{
+	"owner",
+	"balance",
+}
+
+func (m *Account) LormBeforeInsert(now lorm.HookTime) lorm.InsertPlan {
+
+	plan := lorm.InsertPlan{}
+	plan.AutoIncrementColumn = "id"
+	plan.AutoIncrementZero = m.ID == 0
+	if plan.AutoIncrementZero {
+		plan.Columns = _lorm_file_model_5b017786_Account_insert_columns_without_auto_increment
+	} else {
+		plan.Columns = _lorm_file_model_5b017786_Account_insert_columns
+	}
+	plan.Values = make([]any, 0, len(plan.Columns))
+	if !plan.AutoIncrementZero {
+		plan.Values = append(plan.Values, m.ID)
+	}
+	plan.Values = append(plan.Values, m.Owner)
+	plan.Values = append(plan.Values, m.Balance)
+	return plan
+}
+
+func (m *Account) LormAfterInsert(result lorm.InsertResult) error {
+	if !result.HasGeneratedID {
+		return nil
+	}
+	value, err := lorm.ConvertGeneratedSignedID[int64](result.GeneratedID, 64, "Account.ID")
+	if err != nil {
+		return err
+	}
+	m.ID = value
+	return nil
+}
+
+func (m *Account) LormBeforeUpdate(now lorm.HookTime) (lorm.UpdatePlan, error) {
+	plan := lorm.UpdatePlan{
+		Set:       make([]lorm.ColumnValue, 0, 3),
+		Where:     make([]lorm.ColumnValue, 0),
+		Increment: make([]string, 0, 1),
+	}
+	plan.PrimaryKeyCount++
+	plan.Where = append(plan.Where, lorm.ColumnValue{Column: "id", Value: m.ID})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "owner", Value: m.Owner})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "balance", Value: m.Balance})
+	return plan, nil
+}
+
+var _lorm_file_model_5b017786_Account_model_descriptor = _lorm_file_model_5b017786_model_descriptor_map["Account"]
+
 func (m *Account) LormModelDescriptor() *lorm.ModelDescriptor {
-	return _lorm_file_model_model_descriptor_map["Account"]
+	return _lorm_file_model_5b017786_Account_model_descriptor
 }
 
 func (m *Account) Fields() *Account_Fields {
@@ -88,11 +153,11 @@ func (f *Account_Fields) All() []string {
 	}
 }
 
-const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Account","TableName":"accounts","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Owner","FullName":"Owner","DBField":"owner","Type":"string","Flag":0},{"Name":"Balance","FullName":"Balance","DBField":"balance","Type":"int64","Flag":0}]}]}`
+const _lorm_file_model_5b017786_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Account","TableName":"accounts","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Owner","FullName":"Owner","DBField":"owner","Type":"string","Flag":0},{"Name":"Balance","FullName":"Balance","DBField":"balance","Type":"int64","Flag":0}],"PrimaryKeys":["id"]}]}`
 
-var _lorm_file_model_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
+var _lorm_file_model_5b017786_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_model_raw, &file)
+	_ = json.UnmarshalString(_lorm_file_model_5b017786_raw, &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

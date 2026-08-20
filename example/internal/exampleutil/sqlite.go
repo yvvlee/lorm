@@ -2,6 +2,7 @@ package exampleutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,13 @@ import (
 
 	"github.com/yvvlee/lorm"
 )
+
+var ErrSQLiteDriverUnavailable = errors.New("sqlite3 driver unavailable")
+
+// IsSQLiteDriverUnavailable reports the known go-sqlite3 CGO-disabled failure.
+func IsSQLiteDriverUnavailable(err error) bool {
+	return errors.Is(err, ErrSQLiteDriverUnavailable)
+}
 
 // NewSQLiteEngine creates a temporary SQLite database, initializes schema, and
 // returns an Engine plus a cleanup function.
@@ -24,6 +32,9 @@ func NewSQLiteEngine(schema string) (*lorm.Engine, func(), error) {
 	engine, err := lorm.NewEngine("sqlite3", dbPath)
 	if err != nil {
 		_ = os.RemoveAll(tempDir)
+		if strings.Contains(err.Error(), "go-sqlite3 requires cgo") {
+			return nil, nil, fmt.Errorf("%w: %v", ErrSQLiteDriverUnavailable, err)
+		}
 		return nil, nil, err
 	}
 

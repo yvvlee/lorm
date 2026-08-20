@@ -125,6 +125,11 @@ func (b *DeleteBuilder) Where(pred any, args ...any) *DeleteBuilder {
 	return b
 }
 
+// HasWhere reports whether the statement contains a restrictive WHERE clause.
+func (b *DeleteBuilder) HasWhere() bool {
+	return hasEffectiveWhere(b.whereParts)
+}
+
 // OrderBy adds ORDER BY expressions to the query.
 func (b *DeleteBuilder) OrderBy(orderBys ...string) *DeleteBuilder {
 	b.orderBys = append(b.orderBys, orderBys...)

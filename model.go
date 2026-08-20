@@ -3,8 +3,8 @@ package lorm
 import (
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
-	"time"
 
 	json "github.com/bytedance/sonic"
 )
@@ -29,15 +29,30 @@ type Model interface {
 	// LormFieldPtr returns a field pointer by db field name. JSON fields should
 	// return a JSONFieldWrapper around the underlying field pointer.
 	LormFieldPtr(name string) any
-	// LormModelDescriptor return db fields of this Model
+	// LormModelDescriptor returns immutable metadata for this model. Repeated
+	// calls must return the same descriptor pointer.
 	LormModelDescriptor() *ModelDescriptor
 }
 
-// ModelFieldValueAccessor is implemented by generated models to expose values
-// for database writes without reflection. LormFieldPtr remains the scan and
-// in-memory mutation path.
+// ModelPointer constrains a model to a pointer to its concrete struct type.
+type ModelPointer[M any] interface {
+	Model
+	*M
+}
+
+// ModelFieldValueAccessor is implemented by generated models to expose field
+// values to write execution and extension code without reflection.
 type ModelFieldValueAccessor interface {
 	LormFieldValue(name string) any
+}
+
+// RowScanner is the minimal row-scanning operation used by generated models.
+type RowScanner interface {
+	Scan(dest ...any) error
+}
+
+type orderedModelScanner interface {
+	LormScan(row RowScanner) error
 }
 
 // UnimplementedModel can be embedded to satisfy the Model marker method.
@@ -51,107 +66,71 @@ type UnimplementedTable struct{}
 func (u UnimplementedTable) mustEmbedUnimplementedModel() {}
 func (u UnimplementedTable) mustEmbedUnimplementedTable() {}
 
-// ModelToInsertData builds insert columns and values for a single model.
-func ModelToInsertData[T Model](model T, ignoreFields ...string) (columns []string, values []any) {
-	fields, v := ModelsToInsertData([]T{model}, ignoreFields...)
-	return fields, v[0]
+// JSONFieldWrapper adapts a field target to database/sql and JSON interfaces.
+type JSONFieldWrapper[T any] struct {
+	target *T
 }
 
-// ModelsToInsertData builds shared insert columns and per-row values for models.
-func ModelsToInsertData[T Model](models []T, ignoreFields ...string) (columns []string, values [][]any) {
-	if len(models) == 0 {
-		return
-	}
-	descriptor := models[0].LormModelDescriptor()
-	ignoreSet := make(map[string]struct{}, len(ignoreFields))
-	for _, field := range ignoreFields {
-		ignoreSet[field] = struct{}{}
-	}
-
-	columns = make([]string, 0, len(descriptor.Fields))
-	// Track timestamp-managed columns once so every row can reuse the same now value.
-	columnNeedsCurrentTime := make([]bool, 0, len(descriptor.Fields))
-	for _, field := range descriptor.Fields {
-		if _, ok := ignoreSet[field.DBField]; ok {
-			continue
-		}
-		columns = append(columns, field.DBField)
-		columnNeedsCurrentTime = append(columnNeedsCurrentTime, field.Flag.HasFlag(FlagCreated) || field.Flag.HasFlag(FlagUpdated))
-	}
-
-	now := time.Now()
-	values = make([][]any, 0, len(models))
-	for _, model := range models {
-		valueAccessor, hasValueAccessor := any(model).(ModelFieldValueAccessor)
-		rowValues := make([]any, len(columns))
-		for i, field := range columns {
-			value := model.LormFieldPtr(field)
-			if columnNeedsCurrentTime[i] {
-				fillCurrentTime(value, now)
-			}
-			if hasValueAccessor {
-				value = valueAccessor.LormFieldValue(field)
-			}
-			rowValues[i] = value
-		}
-		values = append(values, rowValues)
-	}
-	return
-}
-
-// JSONFieldWrapper adapts a field value to database/sql and JSON interfaces.
-type JSONFieldWrapper struct {
-	v any
-}
-
-// NewJSONFieldWrapper wraps v so lorm can scan and write it as JSON.
-func NewJSONFieldWrapper(v any) *JSONFieldWrapper {
-	return &JSONFieldWrapper{v: v}
+// NewJSONFieldWrapper wraps target so lorm can scan and write it as JSON.
+func NewJSONFieldWrapper[T any](target *T) *JSONFieldWrapper[T] {
+	return &JSONFieldWrapper[T]{target: target}
 }
 
 // Value implements driver.Valuer.
-func (s *JSONFieldWrapper) Value() (driver.Value, error) {
-	if s.v == nil {
+func (s *JSONFieldWrapper[T]) Value() (driver.Value, error) {
+	if s.target == nil {
 		return nil, nil
 	}
-	if v, ok := s.v.(driver.Valuer); ok {
+	if v, ok := any(s.target).(driver.Valuer); ok {
 		return v.Value()
 	}
-	return json.Marshal(s.v)
+	return json.Marshal(s.target)
 }
 
 // String returns the JSON encoding of the wrapped value.
-func (s *JSONFieldWrapper) String() string {
-	if s.v == nil {
+func (s *JSONFieldWrapper[T]) String() string {
+	if s.target == nil {
 		return ""
 	}
-	str, _ := json.MarshalString(s.v)
+	str, _ := json.MarshalString(s.target)
 	return str
 }
 
 // MarshalJSON returns the wrapped value encoded as JSON.
-func (s *JSONFieldWrapper) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.v)
+func (s *JSONFieldWrapper[T]) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.target)
 }
 
 // UnmarshalJSON decodes JSON into the wrapped value.
-func (s *JSONFieldWrapper) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, s.v)
+func (s *JSONFieldWrapper[T]) UnmarshalJSON(data []byte) error {
+	if s.target == nil {
+		return errors.New("lorm: JSON scan target is nil")
+	}
+	return json.Unmarshal(data, s.target)
 }
 
 // Scan implements sql.Scanner for JSON-encoded columns.
-func (s *JSONFieldWrapper) Scan(src any) error {
-	if v, ok := s.v.(sql.Scanner); ok {
+func (s *JSONFieldWrapper[T]) Scan(src any) error {
+	if s.target == nil {
+		if src == nil {
+			return nil
+		}
+		return errors.New("lorm: JSON scan target is nil")
+	}
+	if v, ok := any(s.target).(sql.Scanner); ok {
 		return v.Scan(src)
+	}
+	if src == nil {
+		var zero T
+		*s.target = zero
+		return nil
 	}
 	// Fall back to JSON decoding for drivers that return raw strings or bytes.
 	switch v := src.(type) {
 	case []byte:
-		return json.Unmarshal(v, s.v)
+		return json.Unmarshal(v, s.target)
 	case string:
-		return json.Unmarshal([]byte(v), s.v)
-	case nil:
-		return nil
+		return json.Unmarshal([]byte(v), s.target)
 	}
-	return fmt.Errorf("cannot unmarshal %v into %T", src, s.v)
+	return fmt.Errorf("cannot unmarshal %v into %T", src, s.target)
 }

@@ -1,3 +1,3 @@
 package main
 
-//go:generate go run ../../cmd/lormgen model.go
+//go:generate go tool lormgen model.go

@@ -4,54 +4,84 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-
-	"github.com/samber/lo"
+	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/yvvlee/lorm/builder"
 )
 
-func newSelectBuilder[T any](engine *Engine) (*builder.SelectBuilder, bool) {
-	var t T
-	model, isModel := any(t).(Model)
+type defaultSelectProjectionCacheEntry struct {
+	once       sync.Once
+	projection *builder.PreparedProjection
+	err        error
+}
+
+func newSelectBuilder[T Model](engine *Engine) *builder.SelectBuilder {
+	var model T
 	selectBuilder := new(builder.SelectBuilder)
-	if !isModel {
-		return selectBuilder, false
-	}
-	fields := model.LormModelDescriptor().AllFields()
-	if escaper := engine.Escaper(); escaper != nil {
-		fields = lo.Map(fields, func(field string, _ int) string {
-			return escaper.Escape(field)
-		})
-	}
-	selectBuilder.Select(fields...)
-	if table, ok := any(t).(Table); ok {
+	if table, ok := any(model).(Table); ok {
 		selectBuilder.From(engine.Escaper().Escape(table.TableName()))
 	}
-	return selectBuilder, true
+	return selectBuilder
 }
 
-// Select builds a SELECT statement that scans rows into values of T.
-// Model result types receive their generated columns and table automatically.
-// Other result types are scanned from exactly one explicitly selected column.
-func (e *Engine) Select[T any]() *SelectStmt[T] {
-	selectBuilder, modelResult := newSelectBuilder[T](e)
+func (e *Engine) defaultSelectProjection(descriptor *ModelDescriptor) (*builder.PreparedProjection, error) {
+	if descriptor == nil {
+		return nil, errors.New("lorm: model descriptor is nil")
+	}
+	value, ok := e.defaultSelectProjections.Load(descriptor)
+	if !ok {
+		candidate := new(defaultSelectProjectionCacheEntry)
+		value, _ = e.defaultSelectProjections.LoadOrStore(descriptor, candidate)
+	}
+	entry := value.(*defaultSelectProjectionCacheEntry)
+	entry.once.Do(func() {
+		entry.projection, entry.err = e.buildDefaultSelectProjection(descriptor)
+	})
+	return entry.projection, entry.err
+}
+
+func (e *Engine) buildDefaultSelectProjection(descriptor *ModelDescriptor) (*builder.PreparedProjection, error) {
+	if len(descriptor.Fields) == 0 {
+		return nil, fmt.Errorf("lorm: model descriptor %q has no fields", descriptor.Name)
+	}
+
+	escaper := e.Escaper()
+	columns := make([]string, len(descriptor.Fields))
+	for i, field := range descriptor.Fields {
+		if field == nil {
+			return nil, fmt.Errorf("lorm: model descriptor %q has a nil field at index %d", descriptor.Name, i)
+		}
+		if field.DBField == "" {
+			return nil, fmt.Errorf("lorm: model descriptor %q has an empty database field at index %d", descriptor.Name, i)
+		}
+		columns[i] = escaper.Escape(field.DBField)
+	}
+	return builder.NewPreparedProjection(strings.Join(columns, ", ")), nil
+}
+
+func newSelectStmt[T Model](engine *Engine) *SelectStmt[T] {
 	return &SelectStmt[T]{
-		engine:      e,
-		builder:     selectBuilder,
-		modelResult: modelResult,
+		engine:  engine,
+		builder: newSelectBuilder[T](engine),
 	}
 }
 
-// SelectStmt is a fluent SELECT builder that scans rows into values of T.
-type SelectStmt[T any] struct {
-	engine      *Engine
-	builder     *builder.SelectBuilder
-	modelResult bool
-	err         error
+// Query builds a SELECT statement that scans rows into model pointer P.
+func (e *Engine) Query[P ModelPointer[M], M any]() *SelectStmt[P] {
+	return newSelectStmt[P](e)
+}
+
+// SelectStmt is a fluent SELECT builder that scans rows into model values.
+type SelectStmt[T Model] struct {
+	engine  *Engine
+	builder *builder.SelectBuilder
+	err     error
 }
 
 func (s *SelectStmt[T]) reset() {
-	s.builder, s.modelResult = newSelectBuilder[T](s.engine)
+	s.builder = newSelectBuilder[T](s.engine)
 	s.err = nil
 }
 
@@ -59,11 +89,23 @@ func (s *SelectStmt[T]) reset() {
 // only the statement they are called on.
 func (s *SelectStmt[T]) Clone() *SelectStmt[T] {
 	return &SelectStmt[T]{
-		engine:      s.engine,
-		builder:     s.builder.Clone(),
-		modelResult: s.modelResult,
-		err:         s.err,
+		engine:  s.engine,
+		builder: s.builder.Clone(),
+		err:     s.err,
 	}
+}
+
+func (s *SelectStmt[T]) ensureSelectColumns() (bool, error) {
+	if len(s.builder.GetColumns()) > 0 {
+		return false, nil
+	}
+	var model T
+	projection, err := s.engine.defaultSelectProjection(model.LormModelDescriptor())
+	if err != nil {
+		return false, err
+	}
+	s.builder.SelectPrepared(projection)
+	return true, nil
 }
 
 // Get returns the first matching value and whether a row was found.
@@ -73,16 +115,25 @@ func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	if s.err != nil {
 		return t, false, s.err
 	}
+	orderedScan, err := s.ensureSelectColumns()
+	if err != nil {
+		return t, false, err
+	}
 	query, args, err := s.builder.Clone().Limit(1).ToSql()
 	if err != nil {
 		return t, false, err
 	}
-	rows, err := s.engine.Query(ctx, query, args...)
+	rows, err := s.engine.SQL(ctx, query, args...)
 	if err != nil {
 		return t, false, err
 	}
 	defer rows.Close()
-	res, err := scanSelectValue[T](rows, s.modelResult)
+	var res T
+	if orderedScan {
+		res, err = scanOrderedModelValue[T](rows)
+	} else {
+		res, err = scanModelValue[T](rows)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, false, nil
@@ -90,6 +141,34 @@ func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 		return t, false, err
 	}
 	return res, true, nil
+}
+
+// GetCol returns the first selected column and whether a row was found.
+func (s *SelectStmt[M]) GetCol[T any](ctx context.Context) (T, bool, error) {
+	var value T
+	defer s.reset()
+	if s.err != nil {
+		return value, false, s.err
+	}
+	if _, err := s.ensureSelectColumns(); err != nil {
+		return value, false, err
+	}
+	query, args, err := s.builder.Clone().Limit(1).ToSql()
+	if err != nil {
+		return value, false, err
+	}
+	rows, err := s.engine.SQL(ctx, query, args...)
+	if err != nil {
+		return value, false, err
+	}
+	defer rows.Close()
+	if err = ScanCol(rows, &value); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return value, false, nil
+		}
+		return value, false, err
+	}
+	return value, true, nil
 }
 
 // Exist reports whether the query returns at least one row.
@@ -111,11 +190,15 @@ func (s *SelectStmt[T]) Find(ctx context.Context) ([]T, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
+	orderedScan, err := s.ensureSelectColumns()
+	if err != nil {
+		return nil, err
+	}
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.engine.Query(ctx, query, args...)
+	rows, err := s.engine.SQL(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -123,11 +206,40 @@ func (s *SelectStmt[T]) Find(ctx context.Context) ([]T, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	values, err := scanSelectValues[T](rows, s.modelResult)
+	var values []T
+	if orderedScan {
+		values, err = scanOrderedModelValues[T](rows)
+	} else {
+		values, err = scanModelValues[T](rows)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return values, nil
+}
+
+// FindCols returns the selected column from all matching rows.
+func (s *SelectStmt[M]) FindCols[T any](ctx context.Context) ([]T, error) {
+	defer s.reset()
+	if s.err != nil {
+		return nil, s.err
+	}
+	if _, err := s.ensureSelectColumns(); err != nil {
+		return nil, err
+	}
+	query, args, err := s.builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.engine.SQL(ctx, query, args...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	return scanColumnValues[T](rows)
 }
 
 // Page returns the requested page of results together with the total row count.
@@ -136,6 +248,36 @@ func (s *SelectStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint6
 	if s.err != nil {
 		return nil, 0, s.err
 	}
+	orderedScan, err := s.ensureSelectColumns()
+	if err != nil {
+		return nil, 0, err
+	}
+	scan := scanModelValues[T]
+	if orderedScan {
+		scan = scanOrderedModelValues[T]
+	}
+	return pageSelectValues(ctx, s.engine, s.builder, page, size, scan)
+}
+
+// PageCols returns one selected column for the requested page and the total row count.
+func (s *SelectStmt[M]) PageCols[T any](ctx context.Context, page, size uint64) ([]T, uint64, error) {
+	defer s.reset()
+	if s.err != nil {
+		return nil, 0, s.err
+	}
+	if _, err := s.ensureSelectColumns(); err != nil {
+		return nil, 0, err
+	}
+	return pageSelectValues(ctx, s.engine, s.builder, page, size, scanColumnValues[T])
+}
+
+func pageSelectValues[T any](
+	ctx context.Context,
+	engine *Engine,
+	selectBuilder *builder.SelectBuilder,
+	page, size uint64,
+	scan func(*sql.Rows) ([]T, error),
+) ([]T, uint64, error) {
 	if size == 0 {
 		return nil, 0, errors.New("size can not be zero")
 	}
@@ -148,25 +290,22 @@ func (s *SelectStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint6
 	if !offsetOverflow {
 		offset = pageIndex * size
 	}
-	countStmt := s.engine.Select[uint64]()
-	// Count with a derived builder so filters stay in sync with the data query.
-	countStmt.builder = s.builder.ToCountBuilder()
-	count, ok, err := countStmt.Get(ctx)
+	count, err := querySelectCount(ctx, engine, selectBuilder)
 	if err != nil {
 		return nil, 0, err
 	}
-	if !ok || count == 0 {
+	if count == 0 {
 		return nil, 0, nil
 	}
 	if offsetOverflow || offset >= count {
 		return nil, count, nil
 	}
-	s.builder.Limit(size).Offset(offset)
-	query, args, err := s.builder.ToSql()
+	selectBuilder.Limit(size).Offset(offset)
+	query, args, err := selectBuilder.ToSql()
 	if err != nil {
 		return nil, count, err
 	}
-	rows, err := s.engine.Query(ctx, query, args...)
+	rows, err := engine.SQL(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, count, nil
@@ -174,11 +313,31 @@ func (s *SelectStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint6
 		return nil, count, err
 	}
 	defer rows.Close()
-	list, err := scanSelectValues[T](rows, s.modelResult)
+	list, err := scan(rows)
 	if err != nil {
 		return nil, count, err
 	}
 	return list, count, nil
+}
+
+func querySelectCount(ctx context.Context, engine *Engine, selectBuilder *builder.SelectBuilder) (uint64, error) {
+	query, args, err := selectBuilder.ToCountBuilder().ToSql()
+	if err != nil {
+		return 0, err
+	}
+	rows, err := engine.SQL(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var count uint64
+	if err = ScanCol(rows, &count); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
 }
 
 // Prefix adds an expression to the beginning of the query
@@ -215,15 +374,14 @@ func (s *SelectStmt[T]) Select(columns ...string) *SelectStmt[T] {
 // Unlike Select, AddColumn accepts args which will be bound to placeholders in
 // the columns string, for example:
 //
-//	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
+//	AddColumn("IF(col IN ("+lorm.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
 func (s *SelectStmt[T]) AddColumn(column any, args ...any) *SelectStmt[T] {
 	s.builder.AddColumn(column, args...)
 	return s
 }
 
-// RemoveColumns remove all columns from query.
-// Must add a new column with Column or Select methods, otherwise
-// return a error.
+// RemoveColumns removes all configured columns. Model columns are restored at
+// execution time if no new column is added.
 func (s *SelectStmt[T]) RemoveColumns() *SelectStmt[T] {
 	s.builder.RemoveColumns()
 	return s
@@ -233,7 +391,7 @@ func (s *SelectStmt[T]) RemoveColumns() *SelectStmt[T] {
 // Unlike Select, Column accepts args which will be bound to placeholders in
 // the columns string, for example:
 //
-//	AddColumn("IF(col IN ("+squirrel.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
+//	AddColumn("IF(col IN ("+lorm.Placeholders(3)+"), 1, 0) as col", 1, 2, 3)
 func (s *SelectStmt[T]) Column(column any, args ...any) *SelectStmt[T] {
 	s.builder.AddColumn(column, args...)
 	return s
@@ -316,18 +474,17 @@ func (s *SelectStmt[T]) ID(id any) *SelectStmt[T] {
 	if s.err != nil {
 		return s
 	}
-	var t T
-	model, ok := any(t).(Model)
-	if !ok {
-		s.err = errors.New("lorm.Engine.Select().ID() requires a Model result type")
+	var model T
+	descriptor := model.LormModelDescriptor()
+	if descriptor == nil {
+		s.err = errors.New("lorm.Engine.Query().ID() model descriptor is nil")
 		return s
 	}
-	primaryKeys := model.LormModelDescriptor().FlagFields(FlagPrimaryKey)
-	if len(primaryKeys) != 1 {
-		s.err = errors.New("lorm.Engine.Select().ID() only supports models with single-column primary keys")
+	if len(descriptor.PrimaryKeys) != 1 {
+		s.err = errors.New("lorm.Engine.Query().ID() only supports models with single-column primary keys")
 		return s
 	}
-	s.builder.Where(builder.Eq{s.engine.Escaper().Escape(primaryKeys[0]): id})
+	s.builder.Where(builder.Eq{s.engine.Escaper().Escape(descriptor.PrimaryKeys[0]): id})
 	return s
 }
 

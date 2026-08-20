@@ -9,6 +9,10 @@ import (
 {{end}}
 )
 
+{{if .Requires64BitInt}}
+const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
+{{end}}
+
 {{range $index, $struct := .Structs}}
 
     {{if ne $struct.TableName ""}}
@@ -41,6 +45,23 @@ import (
         }
     }
 
+    func (m *{{$struct.Name}}) LormScan(row {{$.LormImportAlias}}.RowScanner) error {
+        {{- range $struct.EnsureFields }}
+        if m.{{.EnsureFullName}} == nil {
+            m.{{.EnsureFullName}} = new({{.EnsureType}})
+        }
+        {{- end }}
+        return row.Scan(
+            {{- range $struct.Fields}}
+                {{- if .Flag.HasFlag 4 }}
+            {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}}),
+                {{- else }}
+            &m.{{.FullName}},
+                {{- end }}
+            {{- end}}
+        )
+    }
+
     func (m *{{$struct.Name}}) LormFieldValue(name string) any {
         switch name {
             {{- range $struct.Fields}}
@@ -66,8 +87,302 @@ import (
         }
     }
 
+    {{if ne $struct.TableName ""}}
+    {{if $struct.NeedsBeforeInsertHook}}
+    var {{$.RawVarPrefix}}_{{$struct.Name}}_insert_columns = []string{
+        {{- range $struct.Fields }}
+        "{{.DBField}}",
+        {{- end }}
+    }
+
+    {{if $struct.NeedsAfterInsertHook}}
+    var {{$.RawVarPrefix}}_{{$struct.Name}}_insert_columns_without_auto_increment = []string{
+        {{- range $struct.Fields }}
+            {{- if not (.Flag.HasFlag 2) }}
+        "{{.DBField}}",
+            {{- end }}
+        {{- end }}
+    }
+    {{end}}
+
+    func (m *{{$struct.Name}}) LormBeforeInsert(now {{$.LormImportAlias}}.HookTime) {{$.LormImportAlias}}.InsertPlan {
+        {{- range $struct.EnsureFields }}
+        if m.{{.EnsureFullName}} == nil {
+            m.{{.EnsureFullName}} = new({{.EnsureType}})
+        }
+        {{- end }}
+
+        {{- range $struct.Fields }}
+            {{- if or (.Flag.HasFlag 8) (.Flag.HasFlag 16) }}
+                {{- if eq .ManagedTimeKind "time" }}
+                    {{- if .Pointer }}
+        if m.{{.FullName}} == nil {
+            value := now
+            m.{{.FullName}} = &value
+        } else if m.{{.FullName}}.IsZero() {
+            *m.{{.FullName}} = now
+        }
+                    {{- else }}
+        if m.{{.FullName}}.IsZero() {
+            m.{{.FullName}} = now
+        }
+                    {{- end }}
+                {{- else if eq .ManagedTimeKind "null_time" }}
+                    {{- if .Pointer }}
+        if m.{{.FullName}} == nil {
+            value := {{$.LormImportAlias}}.ManagedNullTime(now)
+            m.{{.FullName}} = &value
+        } else if !m.{{.FullName}}.Valid || m.{{.FullName}}.Time.IsZero() {
+            *m.{{.FullName}} = {{$.LormImportAlias}}.ManagedNullTime(now)
+        }
+                    {{- else }}
+        if !m.{{.FullName}}.Valid || m.{{.FullName}}.Time.IsZero() {
+            m.{{.FullName}} = {{$.LormImportAlias}}.ManagedNullTime(now)
+        }
+                    {{- end }}
+                {{- else }}
+        {
+                    {{- if eq .ManagedTimeKind "string" }}
+            value := {{$.LormImportAlias}}.ManagedTimeString(now)
+                    {{- else }}
+            value := {{.ManagedTimeKind}}(now.Unix())
+                    {{- end }}
+                    {{- if .Pointer }}
+            if m.{{.FullName}} == nil {
+                m.{{.FullName}} = &value
+            } else if *m.{{.FullName}} == {{if eq .ManagedTimeKind "string"}}""{{else}}0{{end}} {
+                *m.{{.FullName}} = value
+            }
+                    {{- else }}
+            if m.{{.FullName}} == {{if eq .ManagedTimeKind "string"}}""{{else}}0{{end}} {
+                m.{{.FullName}} = value
+            }
+                    {{- end }}
+        }
+                {{- end }}
+            {{- end }}
+        {{- end }}
+
+        plan := {{$.LormImportAlias}}.InsertPlan{}
+        {{- if $struct.NeedsAfterInsertHook }}
+            {{- range $struct.Fields }}
+                {{- if .Flag.HasFlag 2 }}
+        plan.AutoIncrementColumn = "{{.DBField}}"
+                    {{- if .Pointer }}
+        plan.AutoIncrementZero = m.{{.FullName}} == nil || *m.{{.FullName}} == 0
+                    {{- else }}
+        plan.AutoIncrementZero = m.{{.FullName}} == 0
+                    {{- end }}
+                {{- end }}
+            {{- end }}
+        if plan.AutoIncrementZero {
+            plan.Columns = {{$.RawVarPrefix}}_{{$struct.Name}}_insert_columns_without_auto_increment
+        } else {
+            plan.Columns = {{$.RawVarPrefix}}_{{$struct.Name}}_insert_columns
+        }
+        {{- else }}
+        plan.Columns = {{$.RawVarPrefix}}_{{$struct.Name}}_insert_columns
+        {{- end }}
+        plan.Values = make([]any, 0, len(plan.Columns))
+        {{- range $struct.Fields }}
+            {{- if .Flag.HasFlag 2 }}
+        if !plan.AutoIncrementZero {
+                {{- if .Flag.HasFlag 4 }}
+            plan.Values = append(plan.Values, {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}}))
+                {{- else }}
+            plan.Values = append(plan.Values, m.{{.FullName}})
+                {{- end }}
+        }
+            {{- else }}
+                {{- if .Flag.HasFlag 4 }}
+        plan.Values = append(plan.Values, {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}}))
+                {{- else }}
+        plan.Values = append(plan.Values, m.{{.FullName}})
+                {{- end }}
+            {{- end }}
+        {{- end }}
+        return plan
+    }
+    {{end}}
+
+    {{if $struct.NeedsAfterInsertHook}}
+    func (m *{{$struct.Name}}) LormAfterInsert(result {{$.LormImportAlias}}.InsertResult) error {
+        if !result.HasGeneratedID {
+            return nil
+        }
+        {{- range $struct.Fields }}
+            {{- if .Flag.HasFlag 2 }}
+                {{- if or (eq .IntegerKind "int") (eq .IntegerKind "int8") (eq .IntegerKind "int16") (eq .IntegerKind "int32") (eq .IntegerKind "int64") }}
+        value, err := {{$.LormImportAlias}}.ConvertGeneratedSignedID[{{.IntegerKind}}](result.GeneratedID, {{.IntegerBits}}, "{{$struct.Name}}.{{.FullName}}")
+                {{- else }}
+        value, err := {{$.LormImportAlias}}.ConvertGeneratedUnsignedID[{{.IntegerKind}}](result.GeneratedID, {{.IntegerBits}}, "{{$struct.Name}}.{{.FullName}}")
+                {{- end }}
+        if err != nil {
+            return err
+        }
+                {{- if .EnsureFullName }}
+        if m.{{.EnsureFullName}} == nil {
+            m.{{.EnsureFullName}} = new({{.EnsureType}})
+        }
+                {{- end }}
+                {{- if .Pointer }}
+        if m.{{.FullName}} == nil {
+            m.{{.FullName}} = &value
+        } else {
+            *m.{{.FullName}} = value
+        }
+                {{- else }}
+        m.{{.FullName}} = value
+                {{- end }}
+            {{- end }}
+        {{- end }}
+        return nil
+    }
+    {{end}}
+
+    {{if $struct.NeedsBeforeUpdateHook}}
+    func (m *{{$struct.Name}}) LormBeforeUpdate(now {{$.LormImportAlias}}.HookTime) ({{$.LormImportAlias}}.UpdatePlan, error) {
+        plan := {{$.LormImportAlias}}.UpdatePlan{
+            Set: make([]{{$.LormImportAlias}}.ColumnValue, 0, {{len $struct.Fields}}),
+            Where: make([]{{$.LormImportAlias}}.ColumnValue, 0),
+            Increment: make([]string, 0, 1),
+        }
+        {{- range $struct.Fields }}
+            {{- if .Flag.HasFlag 1 }}
+        plan.PrimaryKeyCount++
+                {{- if .EnsureFullName }}
+        if m.{{.EnsureFullName}} == nil {
+            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: nil})
+        } else {
+                    {{- if .Flag.HasFlag 4 }}
+            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
+                    {{- else }}
+            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
+                    {{- end }}
+        }
+                {{- else }}
+                    {{- if .Flag.HasFlag 4 }}
+        plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
+                    {{- else }}
+        plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
+                    {{- end }}
+                {{- end }}
+            {{- else if .Flag.HasFlag 32 }}
+                {{- if .EnsureFullName }}
+        if m.{{.EnsureFullName}} == nil {
+            return plan, {{$.LormImportAlias}}.NilVersionError("{{$struct.Name}}", "{{.FullName}}")
+        }
+                {{- end }}
+                {{- if .Pointer }}
+        if m.{{.FullName}} == nil {
+            return plan, {{$.LormImportAlias}}.NilVersionError("{{$struct.Name}}", "{{.FullName}}")
+        }
+                {{- end }}
+        plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
+        plan.Increment = append(plan.Increment, "{{.DBField}}")
+            {{- else if .Flag.HasFlag 8 }}
+            {{- else if .Flag.HasFlag 16 }}
+                {{- if eq .ManagedTimeKind "time" }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: now})
+                {{- else if eq .ManagedTimeKind "null_time" }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.ManagedNullTime(now)})
+                {{- else if eq .ManagedTimeKind "string" }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.ManagedTimeString(now)})
+                {{- else }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{.ManagedTimeKind}}(now.Unix())})
+                {{- end }}
+            {{- else }}
+                {{- if .EnsureFullName }}
+        if m.{{.EnsureFullName}} == nil {
+            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: nil})
+        } else {
+                    {{- if .Flag.HasFlag 4 }}
+            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
+                    {{- else }}
+            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
+                    {{- end }}
+        }
+                {{- else }}
+                    {{- if .Flag.HasFlag 4 }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
+                    {{- else }}
+        plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
+                    {{- end }}
+                {{- end }}
+            {{- end }}
+        {{- end }}
+        return plan, nil
+    }
+    {{end}}
+
+    {{if $struct.NeedsAfterUpdateHook}}
+    func (m *{{$struct.Name}}) LormAfterUpdate(now {{$.LormImportAlias}}.HookTime, rowsAffected int64) {
+        if rowsAffected <= 0 {
+            return
+        }
+        {{- range $struct.Fields }}
+            {{- if .Flag.HasFlag 16 }}
+        {
+                {{- if .EnsureFullName }}
+            if m.{{.EnsureFullName}} == nil {
+                m.{{.EnsureFullName}} = new({{.EnsureType}})
+            }
+                {{- end }}
+                {{- if eq .ManagedTimeKind "time" }}
+                    {{- if .Pointer }}
+            if m.{{.FullName}} == nil {
+                value := now
+                m.{{.FullName}} = &value
+            } else {
+                *m.{{.FullName}} = now
+            }
+                    {{- else }}
+            m.{{.FullName}} = now
+                    {{- end }}
+                {{- else if eq .ManagedTimeKind "null_time" }}
+                    {{- if .Pointer }}
+            if m.{{.FullName}} == nil {
+                value := {{$.LormImportAlias}}.ManagedNullTime(now)
+                m.{{.FullName}} = &value
+            } else {
+                *m.{{.FullName}} = {{$.LormImportAlias}}.ManagedNullTime(now)
+            }
+                    {{- else }}
+            m.{{.FullName}} = {{$.LormImportAlias}}.ManagedNullTime(now)
+                    {{- end }}
+                {{- else }}
+                    {{- if eq .ManagedTimeKind "string" }}
+            value := {{$.LormImportAlias}}.ManagedTimeString(now)
+                    {{- else }}
+            value := {{.ManagedTimeKind}}(now.Unix())
+                    {{- end }}
+                    {{- if .Pointer }}
+            if m.{{.FullName}} == nil {
+                m.{{.FullName}} = &value
+            } else {
+                *m.{{.FullName}} = value
+            }
+                    {{- else }}
+            m.{{.FullName}} = value
+                    {{- end }}
+                {{- end }}
+        }
+            {{- else if .Flag.HasFlag 32 }}
+                {{- if .Pointer }}
+        (*m.{{.FullName}})++
+                {{- else }}
+        m.{{.FullName}}++
+                {{- end }}
+            {{- end }}
+        {{- end }}
+    }
+    {{end}}
+    {{end}}
+
+    var {{$.RawVarPrefix}}_{{$struct.Name}}_model_descriptor = {{$.RawVarPrefix}}_model_descriptor_map["{{$struct.Name}}"]
+
     func (m *{{$struct.Name}}) LormModelDescriptor() *{{$.LormImportAlias}}.ModelDescriptor {
-        return {{$.RawVarPrefix}}_model_descriptor_map["{{$struct.Name}}"]
+        return {{$.RawVarPrefix}}_{{$struct.Name}}_model_descriptor
     }
 
     func (m *{{$struct.Name}}) Fields() *{{$struct.Name}}_Fields {

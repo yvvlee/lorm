@@ -31,6 +31,15 @@ func (m *Document) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Document) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Title,
+		&m.Version,
+		&m.UpdatedAt,
+	)
+}
+
 func (m *Document) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -46,8 +55,83 @@ func (m *Document) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_model_5b017786_Document_insert_columns = []string{
+	"id",
+	"title",
+	"version",
+	"updated_at",
+}
+
+var _lorm_file_model_5b017786_Document_insert_columns_without_auto_increment = []string{
+	"title",
+	"version",
+	"updated_at",
+}
+
+func (m *Document) LormBeforeInsert(now lorm.HookTime) lorm.InsertPlan {
+	if m.UpdatedAt.IsZero() {
+		m.UpdatedAt = now
+	}
+
+	plan := lorm.InsertPlan{}
+	plan.AutoIncrementColumn = "id"
+	plan.AutoIncrementZero = m.ID == 0
+	if plan.AutoIncrementZero {
+		plan.Columns = _lorm_file_model_5b017786_Document_insert_columns_without_auto_increment
+	} else {
+		plan.Columns = _lorm_file_model_5b017786_Document_insert_columns
+	}
+	plan.Values = make([]any, 0, len(plan.Columns))
+	if !plan.AutoIncrementZero {
+		plan.Values = append(plan.Values, m.ID)
+	}
+	plan.Values = append(plan.Values, m.Title)
+	plan.Values = append(plan.Values, m.Version)
+	plan.Values = append(plan.Values, m.UpdatedAt)
+	return plan
+}
+
+func (m *Document) LormAfterInsert(result lorm.InsertResult) error {
+	if !result.HasGeneratedID {
+		return nil
+	}
+	value, err := lorm.ConvertGeneratedSignedID[int64](result.GeneratedID, 64, "Document.ID")
+	if err != nil {
+		return err
+	}
+	m.ID = value
+	return nil
+}
+
+func (m *Document) LormBeforeUpdate(now lorm.HookTime) (lorm.UpdatePlan, error) {
+	plan := lorm.UpdatePlan{
+		Set:       make([]lorm.ColumnValue, 0, 4),
+		Where:     make([]lorm.ColumnValue, 0),
+		Increment: make([]string, 0, 1),
+	}
+	plan.PrimaryKeyCount++
+	plan.Where = append(plan.Where, lorm.ColumnValue{Column: "id", Value: m.ID})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "title", Value: m.Title})
+	plan.Where = append(plan.Where, lorm.ColumnValue{Column: "version", Value: m.Version})
+	plan.Increment = append(plan.Increment, "version")
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "updated_at", Value: now})
+	return plan, nil
+}
+
+func (m *Document) LormAfterUpdate(now lorm.HookTime, rowsAffected int64) {
+	if rowsAffected <= 0 {
+		return
+	}
+	m.Version++
+	{
+		m.UpdatedAt = now
+	}
+}
+
+var _lorm_file_model_5b017786_Document_model_descriptor = _lorm_file_model_5b017786_model_descriptor_map["Document"]
+
 func (m *Document) LormModelDescriptor() *lorm.ModelDescriptor {
-	return _lorm_file_model_model_descriptor_map["Document"]
+	return _lorm_file_model_5b017786_Document_model_descriptor
 }
 
 func (m *Document) Fields() *Document_Fields {
@@ -99,11 +183,11 @@ func (f *Document_Fields) All() []string {
 	}
 }
 
-const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Document","TableName":"documents","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Title","FullName":"Title","DBField":"title","Type":"string","Flag":0},{"Name":"Version","FullName":"Version","DBField":"version","Type":"int","Flag":32},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}]}]}`
+const _lorm_file_model_5b017786_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Document","TableName":"documents","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Title","FullName":"Title","DBField":"title","Type":"string","Flag":0},{"Name":"Version","FullName":"Version","DBField":"version","Type":"int","Flag":32},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}],"PrimaryKeys":["id"]}]}`
 
-var _lorm_file_model_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
+var _lorm_file_model_5b017786_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_model_raw, &file)
+	_ = json.UnmarshalString(_lorm_file_model_5b017786_raw, &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

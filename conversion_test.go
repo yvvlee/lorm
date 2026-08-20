@@ -20,6 +20,8 @@ import (
 // custom type conversion without lorm-specific interfaces.
 type csvInts []int
 
+var _ ScannerValuer = (*csvInts)(nil)
+
 func (c csvInts) Value() (driver.Value, error) {
 	if len(c) == 0 {
 		return []byte{}, nil
@@ -89,8 +91,9 @@ func (m *conversionModel) LormFieldPtr(name string) any {
 
 func (*conversionModel) LormModelDescriptor() *ModelDescriptor {
 	return &ModelDescriptor{
-		Name:      "conversionModel",
-		TableName: "conversion_models",
+		Name:        "conversionModel",
+		TableName:   "conversion_models",
+		PrimaryKeys: []string{"id"},
 		Fields: []*FieldDescriptor{
 			{Name: "ID", FullName: "ID", DBField: "id", Flag: FlagPrimaryKey | FlagAutoIncrement},
 			{Name: "Name", FullName: "Name", DBField: "name"},
@@ -137,7 +140,7 @@ func TestCustomConversionIsUsedForQueryArgsAndScan(t *testing.T) {
 	recorder.SetQueryRows([]string{"id", "name", "codes"}, []driver.Value{int64(9), "alpha", []byte("7,8,9")})
 	engine := newConversionTestEngine(t, recorder)
 
-	model, ok, err := engine.Select[*conversionModel]().
+	model, ok, err := engine.Query[*conversionModel]().
 		Where("codes = ?", csvInts{1, 2, 3}).
 		Get(context.Background())
 	require.NoError(t, err)
@@ -214,6 +217,12 @@ func (r *conversionRecorder) LastQuery() *conversionCall {
 	}
 	call := r.queryCalls[len(r.queryCalls)-1]
 	return &call
+}
+
+func (r *conversionRecorder) QueryCallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.queryCalls)
 }
 
 func (r *conversionRecorder) Reset() {

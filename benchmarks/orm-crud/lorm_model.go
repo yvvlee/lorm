@@ -1,19 +1,11 @@
 package ormcrud
 
 import (
-	"context"
 	"time"
 
 	"github.com/yvvlee/lorm"
 	benchmodel "github.com/yvvlee/lorm/benchmarks/orm-crud/benchmodel"
 )
-
-type noopLogger struct{}
-
-func (noopLogger) DebugContext(context.Context, string, ...any) {}
-func (noopLogger) InfoContext(context.Context, string, ...any)  {}
-func (noopLogger) WarnContext(context.Context, string, ...any)  {}
-func (noopLogger) ErrorContext(context.Context, string, ...any) {}
 
 type LormUser struct {
 	lorm.UnimplementedTable
@@ -72,13 +64,33 @@ func (u *LormUser) LormFieldPtr(name string) any {
 	}
 }
 
+func (u *LormUser) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&u.ID,
+		&u.Name,
+		&u.Alias,
+		&u.Age,
+		&u.AgeP,
+		&u.Active,
+		&u.ActiveP,
+		&u.Email,
+		&u.Tags,
+		&u.Meta,
+		&u.Profile,
+		&u.Contacts,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+}
+
 func (*LormUser) LormModelDescriptor() *lorm.ModelDescriptor {
 	return lormUserDescriptor
 }
 
 var lormUserDescriptor = &lorm.ModelDescriptor{
-	Name:      "LormUser",
-	TableName: "bench_users",
+	Name:        "LormUser",
+	TableName:   "bench_users",
+	PrimaryKeys: []string{"id"},
 	Fields: []*lorm.FieldDescriptor{
 		{Name: "ID", FullName: "ID", DBField: "id", Flag: lorm.FlagPrimaryKey | lorm.FlagAutoIncrement},
 		{Name: "Name", FullName: "Name", DBField: "name"},
@@ -95,4 +107,72 @@ var lormUserDescriptor = &lorm.ModelDescriptor{
 		{Name: "CreatedAt", FullName: "CreatedAt", DBField: "created_at", Flag: lorm.FlagCreated},
 		{Name: "UpdatedAt", FullName: "UpdatedAt", DBField: "updated_at", Flag: lorm.FlagUpdated},
 	},
+}
+
+var lormUserInsertColumns = []string{
+	"id", "name", "alias", "age", "age_p", "active", "active_p", "email",
+	"tags", "meta", "profile", "contacts", "created_at", "updated_at",
+}
+
+var lormUserInsertColumnsWithoutAutoIncrement = lormUserInsertColumns[1:]
+
+func (u *LormUser) LormBeforeInsert(now lorm.HookTime) lorm.InsertPlan {
+	if u.CreatedAt.IsZero() {
+		u.CreatedAt = now
+	}
+	if u.UpdatedAt.IsZero() {
+		u.UpdatedAt = now
+	}
+	plan := lorm.InsertPlan{
+		AutoIncrementColumn: "id",
+		AutoIncrementZero:   u.ID == 0,
+	}
+	if plan.AutoIncrementZero {
+		plan.Columns = lormUserInsertColumnsWithoutAutoIncrement
+	} else {
+		plan.Columns = lormUserInsertColumns
+	}
+	plan.Values = make([]any, 0, len(plan.Columns))
+	if !plan.AutoIncrementZero {
+		plan.Values = append(plan.Values, u.ID)
+	}
+	plan.Values = append(plan.Values,
+		u.Name, u.Alias, u.Age, u.AgeP, u.Active, u.ActiveP, u.Email,
+		u.Tags, u.Meta, u.Profile, u.Contacts, u.CreatedAt, u.UpdatedAt,
+	)
+	return plan
+}
+
+func (u *LormUser) LormAfterInsert(result lorm.InsertResult) error {
+	if result.HasGeneratedID {
+		u.ID = result.GeneratedID
+	}
+	return nil
+}
+
+func (u *LormUser) LormBeforeUpdate(now lorm.HookTime) (lorm.UpdatePlan, error) {
+	return lorm.UpdatePlan{
+		PrimaryKeyCount: 1,
+		Where:           []lorm.ColumnValue{{Column: "id", Value: u.ID}},
+		Set: []lorm.ColumnValue{
+			{Column: "name", Value: u.Name},
+			{Column: "alias", Value: u.Alias},
+			{Column: "age", Value: u.Age},
+			{Column: "age_p", Value: u.AgeP},
+			{Column: "active", Value: u.Active},
+			{Column: "active_p", Value: u.ActiveP},
+			{Column: "email", Value: u.Email},
+			{Column: "tags", Value: u.Tags},
+			{Column: "meta", Value: u.Meta},
+			{Column: "profile", Value: u.Profile},
+			{Column: "contacts", Value: u.Contacts},
+			{Column: "updated_at", Value: now},
+		},
+	}, nil
+}
+
+func (u *LormUser) LormAfterUpdate(now lorm.HookTime, rowsAffected int64) {
+	if rowsAffected > 0 {
+		u.UpdatedAt = now
+	}
 }

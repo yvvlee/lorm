@@ -15,17 +15,13 @@ func ScanModels[T Model](rows *sql.Rows, models *[]T) error {
 	return nil
 }
 
-func scanModelValues[T any](rows *sql.Rows) ([]T, error) {
+func scanModelValues[T Model](rows *sql.Rows) ([]T, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
 	}
 	var res []T
-	var zero T
-	model, ok := any(zero).(Model)
-	if !ok {
-		return nil, fmt.Errorf("lorm: %T does not implement Model", zero)
-	}
+	var model T
 	for rows.Next() {
 		item := model.New()
 		values := make([]any, len(columns))
@@ -43,7 +39,7 @@ func scanModelValues[T any](rows *sql.Rows) ([]T, error) {
 		}
 		typed, ok := item.(T)
 		if !ok {
-			return nil, fmt.Errorf("lorm: Model.New returned %T, want %T", item, zero)
+			return nil, fmt.Errorf("lorm: Model.New returned %T, want %T", item, model)
 		}
 		res = append(res, typed)
 	}
@@ -53,16 +49,9 @@ func scanModelValues[T any](rows *sql.Rows) ([]T, error) {
 	return res, nil
 }
 
-func scanSelectValue[T any](rows *sql.Rows, modelResult bool) (T, error) {
+func scanModelValue[T Model](rows *sql.Rows) (T, error) {
 	var value T
-	if !modelResult {
-		return value, ScanCol(rows, &value)
-	}
-	prototype, ok := any(value).(Model)
-	if !ok {
-		return value, fmt.Errorf("lorm: %T does not implement Model", value)
-	}
-	item := prototype.New()
+	item := value.New()
 	if err := ScanModel(rows, item); err != nil {
 		return value, err
 	}
@@ -73,10 +62,57 @@ func scanSelectValue[T any](rows *sql.Rows, modelResult bool) (T, error) {
 	return typed, nil
 }
 
-func scanSelectValues[T any](rows *sql.Rows, modelResult bool) ([]T, error) {
-	if modelResult {
+func scanOrderedModelValues[T Model](rows *sql.Rows) ([]T, error) {
+	var model T
+	if _, ok := any(model).(orderedModelScanner); !ok {
 		return scanModelValues[T](rows)
 	}
+	var res []T
+	for rows.Next() {
+		item := model.New()
+		scanner, ok := item.(orderedModelScanner)
+		if !ok {
+			return nil, fmt.Errorf("lorm: Model.New returned %T without generated ordered scanner", item)
+		}
+		if err := scanner.LormScan(rows); err != nil {
+			return nil, err
+		}
+		typed, ok := item.(T)
+		if !ok {
+			return nil, fmt.Errorf("lorm: Model.New returned %T, want %T", item, model)
+		}
+		res = append(res, typed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func scanOrderedModelValue[T Model](rows *sql.Rows) (T, error) {
+	var value T
+	item := value.New()
+	scanner, ok := item.(orderedModelScanner)
+	if !ok {
+		return scanModelValue[T](rows)
+	}
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return value, err
+		}
+		return value, sql.ErrNoRows
+	}
+	if err := scanner.LormScan(rows); err != nil {
+		return value, err
+	}
+	typed, ok := item.(T)
+	if !ok {
+		return value, fmt.Errorf("lorm: Model.New returned %T, want %T", item, value)
+	}
+	return typed, nil
+}
+
+func scanColumnValues[T any](rows *sql.Rows) ([]T, error) {
 	var values []T
 	if err := ScanCols(rows, &values); err != nil {
 		return nil, err
@@ -84,7 +120,7 @@ func scanSelectValues[T any](rows *sql.Rows, modelResult bool) ([]T, error) {
 	return values, nil
 }
 
-// ScanCols scans the first column of each row into v.
+// ScanCols scans the only column of each row into v.
 func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	columns, err := rows.Columns()
 	if err != nil {
@@ -127,7 +163,7 @@ func ScanModel[T Model](row *sql.Rows, m T) error {
 	return scanRow(row, values...)
 }
 
-// ScanCol scans the first column of the first row into t.
+// ScanCol scans the only column of the first row into t.
 // t must be a pointer (e.g. *int, *string) so the scanned value
 // can be written back to the caller.
 func ScanCol[T any](row *sql.Rows, t T) error {

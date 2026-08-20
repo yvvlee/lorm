@@ -89,7 +89,7 @@ import (
 
 ## Installation
 
-LORM requires Go 1.27. Use the `go1.27rc2` toolchain until Go 1.27 is released.
+LORM requires Go 1.27 or later.
 
 ```bash
 go get github.com/yvvlee/lorm
@@ -119,7 +119,7 @@ lormgen ./...
 
 This generates `_lorm_gen.go` files with methods such as `TableName()`,
 `Fields()`, `New()`, `LormFieldPtr()`, `LormFieldValue()`, and
-`LormModelDescriptor()`.
+`LormModelDescriptor()`, plus the write hooks for table models.
 
 ### 3. Open an engine
 
@@ -150,8 +150,8 @@ _, err = engine.Insert[*User]().
 	AddModel(user).
 	Exec(ctx)
 
-// Select
-savedUser, ok, err := engine.Select[*User]().
+// Query
+savedUser, ok, err := engine.Query[*User]().
 	Where(builder.Eq{u.Fields().ID(): user.ID}).
 	Get(ctx)
 
@@ -173,6 +173,11 @@ _, err = engine.Delete[*User]().
 
 > **Update note**: `Update.SetModel(model)` performs a full-field update. Zero
 > values are written as well, so prefer `SetMap` / `Set` for partial updates.
+> `SetModel` cannot be mixed with `Set` or `SetMap`.
+
+> **Write safety note**: `Update.Exec` and `Delete.Exec` reject statements
+> without a restrictive `WHERE` clause. Call `AllowGlobalWrite()` explicitly
+> when an operation is intentionally meant to affect the whole table.
 
 > **Where note**: `builder.Eq{field: value}` always renders `field = ?` and
 > binds `value` as a single argument. It does not special-case `nil` into
@@ -180,15 +185,39 @@ _, err = engine.Delete[*User]().
 > `IN (...)`. Use `builder.IsNull(field)` / `builder.IsNotNull(field)` for null
 > checks, and `builder.In` / `builder.NotIn` for membership predicates.
 
-> **Insert note**: batch inserts only backfill generated IDs when the driver
-> returns one generated value per inserted row. `LastInsertId`-only dialects do
-> not infer per-row IDs for multi-row inserts.
+> **Insert note**: single-row inserts backfill generated IDs when the driver
+> supports `RETURNING` or `LastInsertId`. Batch inserts do not backfill IDs by
+> default. Call `RequireIDBackfill()` to execute the batch one row at a time in
+> a transaction and backfill each inserted model. A zero auto-increment primary
+> key is omitted so the database can generate it. A non-zero value is inserted
+> explicitly. Mixed batches are split into consecutive groups in one transaction.
 
-> **Get note**: `Select.Get` returns `(T, bool, error)`. The boolean reports
+> **Get note**: `Query.Get` returns `(T, bool, error)`. The boolean reports
 > whether a row was found. Repository `Get` helpers retain `(T, error)` and
 > return the zero value of `T` when no row matches.
 
-Statement builders are cheap to create. Build a fresh `Select` / `Insert` /
+The type argument of `Query` must be a model pointer. Declare the result value
+type on the terminal method when selecting one column:
+
+```go
+ids, err := engine.Query[*User]().
+	Select(u.Fields().ID()).
+	FindCols[int64](ctx)
+
+count, ok, err := engine.Query[*User]().
+	Select("COUNT(1)").
+	GetCol[uint64](ctx)
+
+ids, total, err := engine.Query[*User]().
+	Select(u.Fields().ID()).
+	OrderBy(u.Fields().ID()).
+	PageCols[int64](ctx, page, size)
+```
+
+Single-column terminal methods require exactly one result column and return an
+error for multi-column results.
+
+Statement builders are cheap to create. Build a fresh `Query` / `Insert` /
 `Update` / `Delete` chain for each operation, and do not share the same
 statement across goroutines.
 Use `Clone()` when one operation needs to branch from an existing statement.
@@ -290,17 +319,16 @@ func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 
 func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
-	return r.Engine.Select[*User]().
+	return r.Engine.Query[*User]().
 		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
 		OrderBy(u.Fields().ID() + " DESC").
 		Page(ctx, page, size)
 }
 ```
 
-> **Note**: `Lock` and `LockByField` append `FOR UPDATE`. They only have
-> practical locking effect inside `Engine.TX(...)` or
-> `Engine.TXWithOptions(...)`. Outside a transaction the database will not keep
-> the row lock beyond the statement itself.
+> **Note**: `Lock` and `LockByField` append `FOR UPDATE` and require the context
+> passed to `Engine.TX(...)` or `Engine.TXWithOptions(...)`. Calls outside a
+> transaction return an error.
 
 ## Custom Projection Models
 
@@ -315,7 +343,7 @@ type UserRole struct {
 	RoleName string
 }
 
-roles, err := engine.Select[*UserRole]().
+roles, err := engine.Query[*UserRole]().
 	Select(
 		"u.id AS user_id",
 		"u.name AS user_name",
@@ -342,6 +370,8 @@ import "database/sql/driver"
 
 type CSVInts []int
 
+var _ lorm.ScannerValuer = (*CSVInts)(nil)
+
 func (c CSVInts) Value() (driver.Value, error) {
 	return []byte("1,2,3"), nil
 }
@@ -361,6 +391,10 @@ type Report struct {
 
 LORM passes query arguments through `driver.Valuer`, and `database/sql` uses
 `sql.Scanner` when scanning result columns back into the field.
+
+`ScannerValuer` combines these two standard interfaces. The compile-time
+assertion above is optional, but it catches an incomplete implementation before
+the program runs. LORM does not require a separate conversion protocol.
 
 See [example/custom_conversion/main.go](example/custom_conversion/main.go) for a
 runnable example.
@@ -394,60 +428,104 @@ override one field.
 
 The benchmark suite lives in [benchmarks/orm-crud](benchmarks/orm-crud).
 
-Results below were captured on May 15, 2026 with:
+Results below were captured on August 20, 2026 with Go 1.27.0. Each ORM
+was run once in a separate `go test` process.
+
+SQLite was run once per ORM:
 
 ```bash
-cd benchmarks/orm-crud
-ORMCRUD_DB=mysql go test -run '^$' -bench . -benchmem -count=1
-ORMCRUD_DB=postgres go test -run '^$' -bench . -benchmem -count=1
+for orm in lorm gorm xorm ent; do
+  CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -count=1
+done
 ```
+
+Before every MySQL run, the MySQL container was restarted. The benchmark
+waited for `mysqladmin ping` to succeed, then waited another 10 seconds:
+
+```bash
+docker restart mysql
+# Wait for mysqladmin ping to succeed.
+sleep 10
+ORMCRUD_DB=mysql go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+```
+
+Before every PostgreSQL run, its container was restarted and the benchmark
+waited for `pg_isready` to succeed:
+
+```bash
+docker restart postgres
+ORMCRUD_DB=postgres go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+```
+
+Replace `<orm>` with `lorm`, `gorm`, `xorm`, or `ent`. Each ORM uses
+separate benchmark databases. The complete bounded readiness command is in the
+benchmark suite README.
 
 Environment:
 
 - OS/arch: `darwin/arm64`
 - CPU: `Apple M1 Pro`
-- MySQL: `8.4.6`
-- PostgreSQL: `18.1`
+- Go: `go1.27.0`
+- MySQL: `9.7.0`
+- PostgreSQL: `18.6`
+- `sonic/ast` fell back to `encoding/json` under Go 1.27.
+
+Ranks compare all four ORMs; lower is better. `Gap to best` is calculated as
+`(lorm / best - 1) * 100%`.
+
+SQLite, `ns/op` (lower is better):
+
+| Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Create | 320,185 | 279,823 | 291,430 | **270,549** | 4 | 18.35% |
+| ReadByID | **21,189** | 24,540 | 30,467 | 26,395 | 1 | 0.00% |
+| ReadByIDComplex | **22,487** | 26,886 | 32,928 | 29,012 | 1 | 0.00% |
+| UpdateByID | 342,819 | 346,223 | 324,730 | **288,283** | 3 | 18.92% |
+| DeleteByID | 344,690 | 310,801 | 336,944 | **273,470** | 4 | 26.04% |
+| BatchCreate100 | **1,198,248** | 1,326,222 | 3,226,068 | 1,510,362 | 1 | 0.00% |
+| BatchRead100 | **521,933** | 759,109 | 894,268 | 583,942 | 1 | 0.00% |
+| BatchRead100Complex | **761,215** | 992,272 | 1,140,149 | 841,553 | 1 | 0.00% |
+| BatchUpdate100 | 398,032 | 450,038 | **374,384** | 401,475 | 2 | 6.32% |
+| BatchDelete100 | 690,346 | 765,703 | **591,269** | 595,752 | 3 | 16.76% |
 
 MySQL, `ns/op` (lower is better):
 
-| Benchmark | lorm | gorm | xorm | ent |
-| --- | ---: | ---: | ---: | ---: |
-| Create | **1,131,710** | 1,637,111 | 1,135,509 | 1,175,650 |
-| ReadByID | 915,563 | 944,430 | **860,244** | 891,313 |
-| ReadByIDComplex | 864,774 | **844,448** | 877,075 | 893,103 |
-| UpdateByID | 1,129,918 | 1,550,989 | **1,129,751** | 2,246,057 |
-| DeleteByID | 1,031,749 | 1,519,377 | 1,040,008 | **1,002,177** |
-| BatchCreate100 | **8,568,069** | 9,221,738 | 9,517,663 | 9,264,969 |
-| BatchRead100 | **2,214,064** | 2,357,154 | 2,673,822 | 2,458,871 |
-| BatchRead100Complex | **2,828,336** | 3,037,882 | 3,343,130 | 2,979,974 |
-| BatchUpdate100 | 6,963,767 | 7,179,490 | 6,770,990 | **6,630,287** |
-| BatchDelete100 | 5,415,382 | 5,366,887 | **5,024,017** | 5,089,361 |
+| Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Create | **906,321** | 1,361,265 | 973,385 | 928,810 | 1 | 0.00% |
+| ReadByID | **240,317** | 302,950 | 284,257 | 249,565 | 1 | 0.00% |
+| ReadByIDComplex | **245,672** | 298,108 | 305,488 | 248,823 | 1 | 0.00% |
+| UpdateByID | **879,429** | 1,410,948 | 879,682 | 1,440,935 | 1 | 0.00% |
+| DeleteByID | 822,350 | 1,031,374 | 871,111 | **751,133** | 2 | 9.48% |
+| BatchCreate100 | 7,846,680 | 8,017,562 | **7,364,879** | 8,164,799 | 2 | 6.54% |
+| BatchRead100 | 2,297,721 | 3,442,311 | 1,955,529 | **1,543,769** | 3 | 48.84% |
+| BatchRead100Complex | 3,716,681 | 5,032,195 | **2,309,288** | 3,182,881 | 3 | 60.94% |
+| BatchUpdate100 | 5,398,099 | 5,773,743 | **4,933,102** | 6,097,586 | 2 | 9.43% |
+| BatchDelete100 | **4,047,424** | 4,165,851 | 4,114,345 | 4,097,822 | 1 | 0.00% |
 
 PostgreSQL, `ns/op` (lower is better):
 
-| Benchmark | lorm | gorm | xorm | ent |
-| --- | ---: | ---: | ---: | ---: |
-| Create | 336,537 | 656,602 | 348,557 | **324,479** |
-| ReadByID | 219,798 | **213,939** | 225,971 | 219,507 |
-| ReadByIDComplex | **218,168** | 220,517 | 227,949 | 219,516 |
-| UpdateByID | **321,847** | 669,114 | 654,825 | 880,432 |
-| DeleteByID | 303,406 | 627,643 | 297,395 | **296,478** |
-| BatchCreate100 | 2,908,882 | 2,980,674 | 4,608,589 | **2,782,881** |
-| BatchRead100 | **987,042** | 1,237,686 | 1,407,165 | 1,073,514 |
-| BatchRead100Complex | **1,519,387** | 1,882,029 | 2,038,405 | 1,636,961 |
-| BatchUpdate100 | **721,963** | 1,034,409 | 940,146 | 723,326 |
-| BatchDelete100 | 562,371 | 833,474 | 540,432 | **521,771** |
+| Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Create | **882,606** | 1,245,377 | 902,820 | 916,939 | 1 | 0.00% |
+| ReadByID | 135,480 | **134,977** | 143,964 | 141,048 | 2 | 0.37% |
+| ReadByIDComplex | **136,348** | 138,018 | 141,529 | 140,041 | 1 | 0.00% |
+| UpdateByID | **959,347** | 1,063,873 | 1,250,379 | 1,339,732 | 1 | 0.00% |
+| DeleteByID | 945,561 | 1,167,307 | 859,569 | **856,562** | 3 | 10.39% |
+| BatchCreate100 | **7,620,672** | 7,793,676 | 8,074,182 | 8,180,815 | 1 | 0.00% |
+| BatchRead100 | **648,760** | 907,110 | 1,115,124 | 759,521 | 1 | 0.00% |
+| BatchRead100Complex | **937,986** | 1,268,048 | 1,491,468 | 1,065,715 | 1 | 0.00% |
+| BatchUpdate100 | 1,325,303 | 1,463,390 | 1,505,688 | **1,323,338** | 2 | 0.15% |
+| BatchDelete100 | 1,288,657 | 1,467,285 | 1,238,411 | **1,216,635** | 3 | 5.92% |
 
 Notes from this run:
 
-- On MySQL, `lorm` is fastest in 4 of the 10 `ns/op` cases: single-row create,
-  batch create, batch read, and complex batch read.
-- On PostgreSQL, `lorm` is fastest in 5 of the 10 `ns/op` cases, including
-  complex single-row read, single-row update, batch read, complex batch read,
-  and batch update.
-- `lorm` has the lowest `B/op` in 6 of the 10 MySQL cases and 7 of the 10
-  PostgreSQL cases in this run.
+- On SQLite, `lorm` is fastest in 5 of the 10 `ns/op` cases.
+- On MySQL, `lorm` is fastest in 5 of the 10 `ns/op` cases.
+- On PostgreSQL, `lorm` is fastest in 6 of the 10 `ns/op` cases.
+- `lorm` has the lowest `B/op` in 9 of the 10 SQLite cases, 9 of the 10
+  MySQL cases, and 9 of the 10 PostgreSQL cases. The `allocs/op`
+  distribution is also 9, 9, and 9 out of 10, respectively.
 
 Treat these numbers as directional rather than universal. Re-run the suite on
 your target database, schema, driver, and hardware before making a decision.
@@ -493,7 +571,7 @@ Built-in tags:
 - `auto_increment`: marks an auto-increment field
 - `json`: stores the field as JSON
 - `created`: fills the field on insert when it is zero-valued
-- `updated`: fills the field on insert/update when it is zero-valued
+- `updated`: fills a zero value on insert and always refreshes on model update
 - `version`: enables optimistic-lock style version increments on update
 
 Generator behavior worth knowing:
@@ -505,6 +583,16 @@ Generator behavior worth knowing:
   declarations such as `A, B int`.
 - Embedded structs are flattened into the generated field accessors.
 - Tags on embedded structs can prepend a prefix to the flattened field names.
+- The generator rejects unknown tag items and duplicate database column names,
+  including conflicts introduced by flattening embedded structs.
+- An `auto_increment` field must also be marked as `primary_key`.
+- Each model may have at most one `version` field.
+- `created` and `updated` support only `time.Time`, `sql.NullTime`, `int64`,
+  `uint64`, `uint32`, `uint`, `int` on 64-bit targets, `string`, and one pointer
+  level to those types. Integers store Unix seconds and strings use
+  `time.DateTime`.
+- `int8`, `uint8`, `int16`, `uint16`, and `int32` are rejected for managed time
+  fields. Generated files with an `int` managed time field reject 32-bit builds.
 
 ## Contributing
 

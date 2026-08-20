@@ -37,6 +37,18 @@ func (m *Product) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *Product) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Name,
+		&m.Category,
+		&m.Price,
+		&m.Status,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+	)
+}
+
 func (m *Product) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -58,8 +70,95 @@ func (m *Product) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_model_5b017786_Product_insert_columns = []string{
+	"id",
+	"name",
+	"category",
+	"price",
+	"status",
+	"created_at",
+	"updated_at",
+}
+
+var _lorm_file_model_5b017786_Product_insert_columns_without_auto_increment = []string{
+	"name",
+	"category",
+	"price",
+	"status",
+	"created_at",
+	"updated_at",
+}
+
+func (m *Product) LormBeforeInsert(now lorm.HookTime) lorm.InsertPlan {
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = now
+	}
+	if m.UpdatedAt.IsZero() {
+		m.UpdatedAt = now
+	}
+
+	plan := lorm.InsertPlan{}
+	plan.AutoIncrementColumn = "id"
+	plan.AutoIncrementZero = m.ID == 0
+	if plan.AutoIncrementZero {
+		plan.Columns = _lorm_file_model_5b017786_Product_insert_columns_without_auto_increment
+	} else {
+		plan.Columns = _lorm_file_model_5b017786_Product_insert_columns
+	}
+	plan.Values = make([]any, 0, len(plan.Columns))
+	if !plan.AutoIncrementZero {
+		plan.Values = append(plan.Values, m.ID)
+	}
+	plan.Values = append(plan.Values, m.Name)
+	plan.Values = append(plan.Values, m.Category)
+	plan.Values = append(plan.Values, m.Price)
+	plan.Values = append(plan.Values, m.Status)
+	plan.Values = append(plan.Values, m.CreatedAt)
+	plan.Values = append(plan.Values, m.UpdatedAt)
+	return plan
+}
+
+func (m *Product) LormAfterInsert(result lorm.InsertResult) error {
+	if !result.HasGeneratedID {
+		return nil
+	}
+	value, err := lorm.ConvertGeneratedSignedID[int64](result.GeneratedID, 64, "Product.ID")
+	if err != nil {
+		return err
+	}
+	m.ID = value
+	return nil
+}
+
+func (m *Product) LormBeforeUpdate(now lorm.HookTime) (lorm.UpdatePlan, error) {
+	plan := lorm.UpdatePlan{
+		Set:       make([]lorm.ColumnValue, 0, 7),
+		Where:     make([]lorm.ColumnValue, 0),
+		Increment: make([]string, 0, 1),
+	}
+	plan.PrimaryKeyCount++
+	plan.Where = append(plan.Where, lorm.ColumnValue{Column: "id", Value: m.ID})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "name", Value: m.Name})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "category", Value: m.Category})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "price", Value: m.Price})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "status", Value: m.Status})
+	plan.Set = append(plan.Set, lorm.ColumnValue{Column: "updated_at", Value: now})
+	return plan, nil
+}
+
+func (m *Product) LormAfterUpdate(now lorm.HookTime, rowsAffected int64) {
+	if rowsAffected <= 0 {
+		return
+	}
+	{
+		m.UpdatedAt = now
+	}
+}
+
+var _lorm_file_model_5b017786_Product_model_descriptor = _lorm_file_model_5b017786_model_descriptor_map["Product"]
+
 func (m *Product) LormModelDescriptor() *lorm.ModelDescriptor {
-	return _lorm_file_model_model_descriptor_map["Product"]
+	return _lorm_file_model_5b017786_Product_model_descriptor
 }
 
 func (m *Product) Fields() *Product_Fields {
@@ -132,11 +231,11 @@ func (f *Product_Fields) All() []string {
 	}
 }
 
-const _lorm_file_model_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Product","TableName":"products","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Name","FullName":"Name","DBField":"name","Type":"string","Flag":0},{"Name":"Category","FullName":"Category","DBField":"category","Type":"string","Flag":0},{"Name":"Price","FullName":"Price","DBField":"price","Type":"int64","Flag":0},{"Name":"Status","FullName":"Status","DBField":"status","Type":"string","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}]}]}`
+const _lorm_file_model_5b017786_raw = `{"Path":"model.go","LormImportAlias":"lorm","Package":"main","Imports":[{"Path":"\"time\"","Alias":""},{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"Product","TableName":"products","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int64","Flag":3},{"Name":"Name","FullName":"Name","DBField":"name","Type":"string","Flag":0},{"Name":"Category","FullName":"Category","DBField":"category","Type":"string","Flag":0},{"Name":"Price","FullName":"Price","DBField":"price","Type":"int64","Flag":0},{"Name":"Status","FullName":"Status","DBField":"status","Type":"string","Flag":0},{"Name":"CreatedAt","FullName":"CreatedAt","DBField":"created_at","Type":"time.Time","Flag":8},{"Name":"UpdatedAt","FullName":"UpdatedAt","DBField":"updated_at","Type":"time.Time","Flag":16}],"PrimaryKeys":["id"]}]}`
 
-var _lorm_file_model_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
+var _lorm_file_model_5b017786_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_model_raw, &file)
+	_ = json.UnmarshalString(_lorm_file_model_5b017786_raw, &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

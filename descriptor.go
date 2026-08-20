@@ -1,7 +1,10 @@
 package lorm
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"strings"
+	"unicode"
 
 	json "github.com/bytedance/sonic"
 	"github.com/samber/lo"
@@ -37,16 +40,27 @@ var FlagTagMap = map[FieldFlag]string{
 
 // FileDescriptor describes a source file used by lorm metadata/code generation.
 type FileDescriptor struct {
-	Path            string
-	LormImportAlias string
-	Package         string
-	Imports         []*Import
-	Structs         []*ModelDescriptor
+	Path             string
+	LormImportAlias  string
+	Package          string
+	Imports          []*Import
+	Structs          []*ModelDescriptor
+	Requires64BitInt bool `json:"-"`
 }
 
 // RawVarPrefix returns the stable generated variable prefix for the file.
 func (d *FileDescriptor) RawVarPrefix() string {
-	return "_lorm_file_" + strings.ReplaceAll(strings.TrimSuffix(d.Path, ".go"), "/", "_")
+	path := strings.TrimSuffix(d.Path, ".go")
+	var normalized strings.Builder
+	for _, r := range path {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			normalized.WriteRune(r)
+			continue
+		}
+		normalized.WriteByte('_')
+	}
+	digest := sha256.Sum256([]byte(d.Path))
+	return fmt.Sprintf("_lorm_file_%s_%x", normalized.String(), digest[:4])
 }
 
 // JsonMarshal returns d encoded as JSON.
@@ -63,9 +77,27 @@ type Import struct {
 
 // ModelDescriptor stores struct information
 type ModelDescriptor struct {
-	Name      string
-	TableName string
-	Fields    []*FieldDescriptor
+	Name        string
+	TableName   string
+	Fields      []*FieldDescriptor
+	PrimaryKeys []string
+}
+
+// EnsureFields returns embedded pointer fields that generated code must allocate.
+func (m *ModelDescriptor) EnsureFields() []*FieldDescriptor {
+	seen := make(map[string]struct{})
+	fields := make([]*FieldDescriptor, 0)
+	for _, field := range m.Fields {
+		if field.EnsureFullName == "" {
+			continue
+		}
+		if _, ok := seen[field.EnsureFullName]; ok {
+			continue
+		}
+		seen[field.EnsureFullName] = struct{}{}
+		fields = append(fields, field)
+	}
+	return fields
 }
 
 // FlagFields returns database column names whose flags include flag.
@@ -82,14 +114,49 @@ func (m *ModelDescriptor) AllFields() []string {
 	})
 }
 
+// NeedsBeforeInsertHook reports whether generated code must initialize managed
+// insert-time fields or handle an auto-increment field.
+func (m *ModelDescriptor) NeedsBeforeInsertHook() bool {
+	return m.hasAnyFieldFlag(FlagAutoIncrement | FlagCreated | FlagUpdated)
+}
+
+// NeedsAfterInsertHook reports whether generated code must backfill an ID.
+func (m *ModelDescriptor) NeedsAfterInsertHook() bool {
+	return m.hasAnyFieldFlag(FlagAutoIncrement)
+}
+
+// NeedsBeforeUpdateHook reports whether generated code must prepare managed
+// fields, primary-key predicates, or optimistic-lock values.
+func (m *ModelDescriptor) NeedsBeforeUpdateHook() bool {
+	return m.hasAnyFieldFlag(FlagPrimaryKey | FlagCreated | FlagUpdated | FlagVersion)
+}
+
+// NeedsAfterUpdateHook reports whether generated code must apply managed
+// update-time or optimistic-lock values.
+func (m *ModelDescriptor) NeedsAfterUpdateHook() bool {
+	return m.hasAnyFieldFlag(FlagUpdated | FlagVersion)
+}
+
+func (m *ModelDescriptor) hasAnyFieldFlag(flags FieldFlag) bool {
+	for _, field := range m.Fields {
+		if field != nil && field.Flag&flags != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // FieldDescriptor stores field information
 type FieldDescriptor struct {
-	Name           string
-	FullName       string
-	DBField        string
-	Type           string
-	Flag           FieldFlag
-	Pointer        bool   `json:"-"`
-	EnsureFullName string `json:",omitempty"`
-	EnsureType     string `json:",omitempty"`
+	Name            string
+	FullName        string
+	DBField         string
+	Type            string
+	Flag            FieldFlag
+	Pointer         bool   `json:"-"`
+	EnsureFullName  string `json:",omitempty"`
+	EnsureType      string `json:",omitempty"`
+	ManagedTimeKind string `json:"-"`
+	IntegerKind     string `json:"-"`
+	IntegerBits     int    `json:"-"`
 }

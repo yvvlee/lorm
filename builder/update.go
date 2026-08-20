@@ -205,6 +205,11 @@ func (b *UpdateBuilder) Where(pred any, args ...any) *UpdateBuilder {
 	return b
 }
 
+// HasWhere reports whether the statement contains a restrictive WHERE clause.
+func (b *UpdateBuilder) HasWhere() bool {
+	return hasEffectiveWhere(b.whereParts)
+}
+
 // OrderBy adds ORDER BY expressions to the query.
 func (b *UpdateBuilder) OrderBy(orderBys ...string) *UpdateBuilder {
 	b.orderBys = append(b.orderBys, orderBys...)

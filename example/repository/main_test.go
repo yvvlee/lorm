@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
 )
@@ -12,10 +13,10 @@ import (
 func TestRepositoryFlow(t *testing.T) {
 	ctx := context.Background()
 	engine, cleanup, err := exampleutil.NewSQLiteEngine(schemaSQL)
-	if err != nil {
+	if exampleutil.IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	repo := NewUserRepository(engine)

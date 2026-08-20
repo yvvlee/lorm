@@ -15,7 +15,7 @@ func TestSelectStmtModelResetsAfterTerminalMethod(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := engine.Select[*reservedWordModel]().Where(builder.Eq{"group": "first"})
+	stmt := engine.Query[*reservedWordModel]().Where(builder.Eq{"group": "first"})
 	_, err := stmt.Find(ctx)
 	require.NoError(t, err)
 
@@ -29,29 +29,27 @@ func TestSelectStmtModelResetsAfterTerminalMethod(t *testing.T) {
 	assert.Equal(t, []any{int64(2)}, call.args)
 }
 
-func TestSelectStmtScalarResetsAfterTerminalMethod(t *testing.T) {
+func TestSelectStmtColumnResetsAfterTerminalMethod(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := engine.Select[string]().
+	stmt := engine.Query[*manualPrimaryKeyModel]().
 		Select("id").
-		From("manual_keys").
 		Where("id = ?", "manual-1")
-	_, err := stmt.Find(ctx)
+	_, err := stmt.FindCols[string](ctx)
 	require.NoError(t, err)
 
 	recorder.Reset()
 	_, err = stmt.
 		Select("name").
-		From("manual_keys").
 		Where("name = ?", "alice").
-		Find(ctx)
+		FindCols[string](ctx)
 	require.NoError(t, err)
 
 	call := recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT name FROM manual_keys WHERE name = ?", call.query)
+	assert.Equal(t, "SELECT name FROM `manual_keys` WHERE name = ?", call.query)
 	assert.Equal(t, []any{"alice"}, call.args)
 }
 
@@ -99,6 +97,20 @@ func TestDeleteStmtResetsAfterExec(t *testing.T) {
 	assert.Equal(t, []any{int64(2)}, call.args)
 }
 
+func TestDeleteStmtResetsAllowGlobalWriteAfterExec(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	stmt := engine.Delete[*reservedWordModel]().AllowGlobalWrite()
+
+	_, err := stmt.Exec(context.Background())
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = stmt.Exec(context.Background())
+	assert.ErrorContains(t, err, "requires a WHERE clause")
+	assert.Empty(t, recorder.Calls())
+}
+
 func TestUpdateStmtResetsAfterExec(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
@@ -125,6 +137,20 @@ func TestUpdateStmtResetsAfterExec(t *testing.T) {
 	assert.Equal(t, []any{"second", int64(2)}, call.args)
 }
 
+func TestUpdateStmtResetsAllowGlobalWriteAfterExec(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	stmt := engine.Update[*reservedWordModel]().Set("group", "first").AllowGlobalWrite()
+
+	_, err := stmt.Exec(context.Background())
+	require.NoError(t, err)
+
+	recorder.Reset()
+	_, err = stmt.Set("group", "second").Exec(context.Background())
+	assert.ErrorContains(t, err, "requires a WHERE clause")
+	assert.Empty(t, recorder.Calls())
+}
+
 func TestUpdateStmtResetsAfterCallbacks(t *testing.T) {
 	ctx := context.Background()
 	engine := newConversionTestEngine(t, newConversionRecorder())
@@ -149,7 +175,7 @@ func TestSelectStmtModelCloneExecDoesNotResetSource(t *testing.T) {
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := engine.Select[*reservedWordModel]().Where(builder.Eq{"group": "staff"})
+	stmt := engine.Query[*reservedWordModel]().Where(builder.Eq{"group": "staff"})
 	clone := stmt.Clone().Where(builder.Eq{"id": int64(7)})
 	_, err := clone.Find(ctx)
 	require.NoError(t, err)
@@ -164,26 +190,25 @@ func TestSelectStmtModelCloneExecDoesNotResetSource(t *testing.T) {
 	assert.Equal(t, []any{"staff"}, call.args)
 }
 
-func TestSelectStmtScalarCloneExecDoesNotResetSource(t *testing.T) {
+func TestSelectStmtColumnCloneExecDoesNotResetSource(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 	ctx := context.Background()
 
-	stmt := engine.Select[int64]().
+	stmt := engine.Query[*manualPrimaryKeyModel]().
 		Select("id").
-		From("manual_keys").
 		Where("name = ?", "alice")
 	clone := stmt.Clone().Where("id = ?", "manual-1")
-	_, err := clone.Find(ctx)
+	_, err := clone.FindCols[int64](ctx)
 	require.NoError(t, err)
 
 	recorder.Reset()
-	_, err = stmt.Find(ctx)
+	_, err = stmt.FindCols[int64](ctx)
 	require.NoError(t, err)
 
 	call := recorder.Last()
 	assert.Equal(t, "query", call.kind)
-	assert.Equal(t, "SELECT id FROM manual_keys WHERE name = ?", call.query)
+	assert.Equal(t, "SELECT id FROM `manual_keys` WHERE name = ?", call.query)
 	assert.Equal(t, []any{"alice"}, call.args)
 }
 

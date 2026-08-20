@@ -3,8 +3,10 @@ package lorm
 import (
 	"database/sql/driver"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type jsonWrapperValuer struct {
@@ -26,15 +28,7 @@ func (s *jsonWrapperScanner) Scan(src any) error {
 	return s.err
 }
 
-func TestModelToInsertData(t *testing.T) {
-	m := &Test{}
-	cols, vals := ModelToInsertData(m)
-	assert.NotEmpty(t, cols)
-	assert.Len(t, cols, len(m.Fields().All()))
-	assert.NotEmpty(t, vals)
-}
-
-func TestModelsToInsertDataTransformsFields(t *testing.T) {
+func TestGeneratedInsertHookTransformsFields(t *testing.T) {
 	m := &Test{
 		Int:      7,
 		Str:      "insert-data",
@@ -42,7 +36,8 @@ func TestModelsToInsertDataTransformsFields(t *testing.T) {
 		Struct:   Sub{ID: 1, Name: "json"},
 	}
 
-	cols, vals := ModelToInsertData(m, "id")
+	plan := m.LormBeforeInsert(time.Now())
+	cols, vals := plan.Columns, plan.Values
 	assert.NotContains(t, cols, "id")
 	assert.False(t, m.CreatedAt.IsZero())
 	assert.False(t, m.UpdatedAt.IsZero())
@@ -57,13 +52,13 @@ func TestModelsToInsertDataTransformsFields(t *testing.T) {
 	assert.Equal(t, m.UpdatedAt, vals[indexByColumn["updated_at"]])
 	assert.Nil(t, vals[indexByColumn["decimal_p"]])
 
-	intSliceWrapper, ok := vals[indexByColumn["int_slice"]].(*JSONFieldWrapper)
+	intSliceWrapper, ok := vals[indexByColumn["int_slice"]].(*JSONFieldWrapper[[]int])
 	assert.True(t, ok)
-	assert.Same(t, &m.IntSlice, intSliceWrapper.v)
+	assert.Same(t, &m.IntSlice, intSliceWrapper.target)
 
-	structWrapper, ok := vals[indexByColumn["struct"]].(*JSONFieldWrapper)
+	structWrapper, ok := vals[indexByColumn["struct"]].(*JSONFieldWrapper[Sub])
 	assert.True(t, ok)
-	assert.Same(t, &m.Struct, structWrapper.v)
+	assert.Same(t, &m.Struct, structWrapper.target)
 }
 
 func TestGeneratedModelLormFieldPtr(t *testing.T) {
@@ -72,13 +67,40 @@ func TestGeneratedModelLormFieldPtr(t *testing.T) {
 	assert.Same(t, &m.Str, m.LormFieldPtr("str"))
 	assert.Nil(t, m.LormFieldPtr("missing"))
 
-	intSliceWrapper, ok := m.LormFieldPtr("int_slice").(*JSONFieldWrapper)
+	intSliceWrapper, ok := m.LormFieldPtr("int_slice").(*JSONFieldWrapper[[]int])
 	assert.True(t, ok)
-	assert.Same(t, &m.IntSlice, intSliceWrapper.v)
+	assert.Same(t, &m.IntSlice, intSliceWrapper.target)
 
-	structWrapper, ok := m.LormFieldPtr("struct").(*JSONFieldWrapper)
+	structWrapper, ok := m.LormFieldPtr("struct").(*JSONFieldWrapper[Sub])
 	assert.True(t, ok)
-	assert.Same(t, &m.Struct, structWrapper.v)
+	assert.Same(t, &m.Struct, structWrapper.target)
+}
+
+func TestGeneratedInsertPlansShareReadOnlyColumns(t *testing.T) {
+	firstZero := new(Test).LormBeforeInsert(time.Time{})
+	secondZero := new(Test).LormBeforeInsert(time.Time{})
+	require.NotEmpty(t, firstZero.Columns)
+	require.Same(t, &firstZero.Columns[0], &secondZero.Columns[0])
+
+	firstSet := (&Test{ID: 1}).LormBeforeInsert(time.Time{})
+	secondSet := (&Test{ID: 2}).LormBeforeInsert(time.Time{})
+	require.NotEmpty(t, firstSet.Columns)
+	require.Same(t, &firstSet.Columns[0], &secondSet.Columns[0])
+	require.NotSame(t, &firstZero.Columns[0], &firstSet.Columns[0])
+	require.Len(t, firstZero.Values, len(firstZero.Columns))
+	require.Len(t, firstSet.Values, len(firstSet.Columns))
+}
+
+func TestHooklessInsertPlansShareColumns(t *testing.T) {
+	first := &hooklessWriteModel{ID: "1", Name: "first"}
+	columns := first.LormModelDescriptor().AllFields()
+	firstPlan, err := prepareInsertPlan(first, time.Time{}, columns)
+	require.NoError(t, err)
+	secondPlan, err := prepareInsertPlan(&hooklessWriteModel{ID: "2", Name: "second"}, time.Time{}, columns)
+	require.NoError(t, err)
+	require.Same(t, &firstPlan.Columns[0], &secondPlan.Columns[0])
+	require.Equal(t, []any{"1", "first"}, firstPlan.Values)
+	require.Equal(t, []any{"2", "second"}, secondPlan.Values)
 }
 
 func TestGeneratedFieldsWithAliasDoesNotMutateDefault(t *testing.T) {
@@ -106,7 +128,7 @@ func TestJSONFieldWrapperStringAndUnmarshal(t *testing.T) {
 	s := w.String()
 	assert.Contains(t, s, "1")
 
-	w2 := NewJSONFieldWrapper(nil)
+	w2 := NewJSONFieldWrapper[[]int](nil)
 	assert.Equal(t, "", w2.String())
 }
 
@@ -125,6 +147,7 @@ func TestJSONFieldWrapperScan(t *testing.T) {
 
 	err = w.Scan(nil)
 	assert.NoError(t, err)
+	assert.Zero(t, obj)
 
 	// unsupported type
 	err = w.Scan(123)
@@ -132,7 +155,8 @@ func TestJSONFieldWrapperScan(t *testing.T) {
 }
 
 func TestJSONFieldWrapperDelegatesDatabaseInterfaces(t *testing.T) {
-	wrapped := NewJSONFieldWrapper(jsonWrapperValuer{value: "stored"})
+	valuer := jsonWrapperValuer{value: "stored"}
+	wrapped := NewJSONFieldWrapper(&valuer)
 	value, err := wrapped.Value()
 	assert.NoError(t, err)
 	assert.Equal(t, driver.Value("stored"), value)
@@ -141,6 +165,10 @@ func TestJSONFieldWrapperDelegatesDatabaseInterfaces(t *testing.T) {
 	err = NewJSONFieldWrapper(scanner).Scan([]byte(`{"a":1}`))
 	assert.NoError(t, err)
 	assert.Equal(t, []byte(`{"a":1}`), scanner.value)
+
+	err = NewJSONFieldWrapper(scanner).Scan(nil)
+	assert.NoError(t, err)
+	assert.Nil(t, scanner.value)
 }
 
 func TestUnimplementedMarkers(t *testing.T) {
@@ -151,15 +179,36 @@ func TestUnimplementedMarkers(t *testing.T) {
 
 func TestJSONFieldWrapperValue(t *testing.T) {
 	// nil value
-	w := NewJSONFieldWrapper(nil)
-	v, err := w.Value()
+	nilWrapper := NewJSONFieldWrapper[map[string]int](nil)
+	v, err := nilWrapper.Value()
 	assert.NoError(t, err)
 	assert.Nil(t, v)
+	assert.NoError(t, nilWrapper.Scan(nil))
+	assert.Error(t, nilWrapper.Scan([]byte(`{}`)))
+	assert.Error(t, nilWrapper.UnmarshalJSON([]byte(`{}`)))
 
 	// non-nil value
 	data := map[string]int{"a": 1}
-	w = NewJSONFieldWrapper(data)
+	w := NewJSONFieldWrapper(&data)
 	v, err = w.Value()
 	assert.NoError(t, err)
 	assert.NotNil(t, v)
+}
+
+func TestJSONFieldWrapperScanNullClearsTarget(t *testing.T) {
+	slice := []int{1, 2}
+	assert.NoError(t, NewJSONFieldWrapper(&slice).Scan(nil))
+	assert.Nil(t, slice)
+
+	mapping := map[string]int{"a": 1}
+	assert.NoError(t, NewJSONFieldWrapper(&mapping).Scan(nil))
+	assert.Nil(t, mapping)
+
+	structure := Sub{ID: 1, Name: "old"}
+	assert.NoError(t, NewJSONFieldWrapper(&structure).Scan(nil))
+	assert.Zero(t, structure)
+
+	pointer := &Sub{ID: 1}
+	assert.NoError(t, NewJSONFieldWrapper(&pointer).Scan(nil))
+	assert.Nil(t, pointer)
 }

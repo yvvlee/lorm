@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
@@ -13,10 +14,10 @@ import (
 func TestQueryBuilderFlow(t *testing.T) {
 	ctx := context.Background()
 	engine, cleanup, err := exampleutil.NewSQLiteEngine(schemaSQL)
-	if err != nil {
+	if exampleutil.IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	_, err = engine.Insert[*Product]().AddModels(
@@ -29,7 +30,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	var p Product
-	filtered, err := engine.Select[*Product]().
+	filtered, err := engine.Query[*Product]().
 		Where(builder.And{
 			builder.In(p.Fields().Category(), []string{"book", "tool"}),
 			builder.Or{
@@ -44,11 +45,10 @@ func TestQueryBuilderFlow(t *testing.T) {
 	assert.Len(t, filtered, 2)
 	assert.Equal(t, "Go CLI Cheatsheet", filtered[0].Name)
 
-	count, ok, err := engine.Select[int64]().
+	count, ok, err := engine.Query[*Product]().
 		Select("COUNT(1)").
-		From(p.TableName()).
 		Where(builder.Eq{p.Fields().Status(): "active"}).
-		Get(ctx)
+		GetCol[int64](ctx)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.EqualValues(t, 4, count)

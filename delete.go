@@ -22,13 +22,15 @@ func (e *Engine) Delete[T Table]() *DeleteStmt[T] {
 
 // DeleteStmt is a fluent DELETE builder for table T.
 type DeleteStmt[T Table] struct {
-	engine  *Engine
-	builder *builder.DeleteBuilder
-	err     error
+	engine           *Engine
+	builder          *builder.DeleteBuilder
+	allowGlobalWrite bool
+	err              error
 }
 
 func (s *DeleteStmt[T]) reset() {
 	s.builder = newDeleteBuilder[T](s.engine)
+	s.allowGlobalWrite = false
 	s.err = nil
 }
 
@@ -36,9 +38,10 @@ func (s *DeleteStmt[T]) reset() {
 // only the statement they are called on.
 func (s *DeleteStmt[T]) Clone() *DeleteStmt[T] {
 	return &DeleteStmt[T]{
-		engine:  s.engine,
-		builder: s.builder.Clone(),
-		err:     s.err,
+		engine:           s.engine,
+		builder:          s.builder.Clone(),
+		allowGlobalWrite: s.allowGlobalWrite,
+		err:              s.err,
 	}
 }
 
@@ -51,6 +54,9 @@ func (s *DeleteStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	query, args, err := s.builder.ToSql()
 	if err != nil {
 		return 0, err
+	}
+	if !s.allowGlobalWrite && !s.builder.HasWhere() {
+		return 0, errors.New("lorm.Delete().Exec() requires a WHERE clause or AllowGlobalWrite()")
 	}
 	result, err := s.engine.Exec(ctx, query, args...)
 	if err != nil {
@@ -89,13 +95,23 @@ func (s *DeleteStmt[T]) ID(id any) *DeleteStmt[T] {
 		return s
 	}
 	var t T
-	primaryKeys := t.LormModelDescriptor().FlagFields(FlagPrimaryKey)
+	descriptor := t.LormModelDescriptor()
+	if descriptor == nil {
+		s.err = errors.New("lorm.Delete().ID() model descriptor is nil")
+		return s
+	}
 	escaper := s.engine.Escaper()
-	if len(primaryKeys) != 1 {
+	if len(descriptor.PrimaryKeys) != 1 {
 		s.err = errors.New("lorm.Delete().ID() only supports tables with single-column primary keys")
 		return s
 	}
-	s.builder.Where(builder.Eq{escaper.Escape(primaryKeys[0]): id})
+	s.builder.Where(builder.Eq{escaper.Escape(descriptor.PrimaryKeys[0]): id})
+	return s
+}
+
+// AllowGlobalWrite explicitly permits a DELETE without a restrictive WHERE clause.
+func (s *DeleteStmt[T]) AllowGlobalWrite() *DeleteStmt[T] {
+	s.allowGlobalWrite = true
 	return s
 }
 

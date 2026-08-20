@@ -29,6 +29,16 @@ func (m *UserAddress) LormFieldPtr(name string) any {
 	}
 }
 
+func (m *UserAddress) LormScan(row lorm.RowScanner) error {
+	return row.Scan(
+		&m.ID,
+		&m.Int64Alias,
+		lorm.NewJSONFieldWrapper(&m.Strings),
+		&m.Address.Address,
+		&m.Address.PostCode,
+	)
+}
+
 func (m *UserAddress) LormFieldValue(name string) any {
 	switch name {
 	case "id":
@@ -46,8 +56,10 @@ func (m *UserAddress) LormFieldValue(name string) any {
 	}
 }
 
+var _lorm_file_testdata_user_address_d1098ce2_UserAddress_model_descriptor = _lorm_file_testdata_user_address_d1098ce2_model_descriptor_map["UserAddress"]
+
 func (m *UserAddress) LormModelDescriptor() *lorm.ModelDescriptor {
-	return _lorm_file_testdata_user_address_model_descriptor_map["UserAddress"]
+	return _lorm_file_testdata_user_address_d1098ce2_UserAddress_model_descriptor
 }
 
 func (m *UserAddress) Fields() *UserAddress_Fields {
@@ -106,11 +118,11 @@ func (f *UserAddress_Fields) All() []string {
 	}
 }
 
-const _lorm_file_testdata_user_address_raw = `{"Path":"testdata/user_address.go","LormImportAlias":"lorm","Package":"testdata","Imports":[{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"UserAddress","TableName":"","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int","Flag":3},{"Name":"Int64Alias","FullName":"Int64Alias","DBField":"int64_alias","Type":"Int64Alias","Flag":0},{"Name":"Strings","FullName":"Strings","DBField":"strings","Type":"Strings","Flag":4},{"Name":"Address","FullName":"Address.Address","DBField":"addr_address","Type":"string","Flag":0},{"Name":"PostCode","FullName":"Address.PostCode","DBField":"addr_post_code","Type":"string","Flag":0}]}]}`
+const _lorm_file_testdata_user_address_d1098ce2_raw = `{"Path":"testdata/user_address.go","LormImportAlias":"lorm","Package":"testdata","Imports":[{"Path":"\"github.com/yvvlee/lorm\"","Alias":""}],"Structs":[{"Name":"UserAddress","TableName":"","Fields":[{"Name":"ID","FullName":"ID","DBField":"id","Type":"int","Flag":3},{"Name":"Int64Alias","FullName":"Int64Alias","DBField":"int64_alias","Type":"Int64Alias","Flag":0},{"Name":"Strings","FullName":"Strings","DBField":"strings","Type":"Strings","Flag":4},{"Name":"Address","FullName":"Address.Address","DBField":"addr_address","Type":"string","Flag":0},{"Name":"PostCode","FullName":"Address.PostCode","DBField":"addr_post_code","Type":"string","Flag":0}],"PrimaryKeys":["id"]}]}`
 
-var _lorm_file_testdata_user_address_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
+var _lorm_file_testdata_user_address_d1098ce2_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_testdata_user_address_raw, &file)
+	_ = json.UnmarshalString(_lorm_file_testdata_user_address_d1098ce2_raw, &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

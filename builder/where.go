@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"strings"
 )
 
 type wherePart part
@@ -25,4 +26,22 @@ func (p wherePart) ToSql() (sql string, args []any, err error) {
 		err = fmt.Errorf("expected string-keyed map or string, not %T", pred)
 	}
 	return
+}
+
+func hasEffectiveWhere(parts []Sqlizer) bool {
+	for _, part := range parts {
+		sql, _, err := part.ToSql()
+		if err != nil {
+			return true
+		}
+		condition := strings.ToUpper(strings.TrimSpace(sql))
+		for strings.HasPrefix(condition, "(") && strings.HasSuffix(condition, ")") {
+			condition = strings.TrimSpace(condition[1 : len(condition)-1])
+		}
+		condition = strings.ReplaceAll(condition, " ", "")
+		if condition != "" && condition != "1=1" && condition != "TRUE" {
+			return true
+		}
+	}
+	return false
 }

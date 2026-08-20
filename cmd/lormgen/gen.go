@@ -155,9 +155,19 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 		return nil, fmt.Errorf("failed to load packages: %v", err)
 	}
 
-	// Check for errors, such as syntax errors
-	if packages.PrintErrors(pkgs) > 0 {
-		return nil, errors.New("packages contain errors")
+	// A first generation cannot type-check code that already calls generated
+	// methods. Keep the partial type information, but still fail on loading and
+	// parsing errors.
+	var loadErrors []error
+	for _, pkg := range pkgs {
+		for _, pkgErr := range pkg.Errors {
+			if pkgErr.Kind != packages.TypeError {
+				loadErrors = append(loadErrors, errors.New(pkgErr.Error()))
+			}
+		}
+	}
+	if len(loadErrors) > 0 {
+		return nil, errors.Join(loadErrors...)
 	}
 	return pkgs, nil
 }
@@ -232,7 +242,11 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 						fieldType, err := exprToString(field.Type)
 						if err == nil && fieldType == unimplementedTable {
 							hasModel = true
-							structInfo.TableName, _ = parseTag(field, g.tagKey)
+							structInfo.TableName, err = parseNameTag(field, g.tagKey)
+							if err != nil {
+								extractErr = fmt.Errorf("invalid table tag for %s: %w", structInfo.Name, err)
+								return false
+							}
 							if structInfo.TableName == "" {
 								structInfo.TableName = g.tableMapper.ConvertName(structInfo.Name)
 							}
@@ -252,7 +266,11 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 					for _, field := range fields {
 						if len(field.Names) == 0 {
 							// Flatten named embedded structs so generated field accessors can treat them like direct members.
-							embedFieldPrefix, _ := parseTag(field, g.tagKey)
+							embedFieldPrefix, err := parseNameTag(field, g.tagKey)
+							if err != nil {
+								extractErr = fmt.Errorf("invalid embedded field tag for %s.%s: %w", structInfo.Name, embeddedFieldName(field.Type), err)
+								return false
+							}
 							embedName, ensureType, embeddedPointer, structType := resolveEmbeddedStruct(pkg, field.Type)
 							if structType == nil {
 								extractErr = fmt.Errorf("unsupported embedded field %q in %s", exprSource(field.Type), structInfo.Name)
@@ -285,6 +303,19 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 							}
 							if len(fieldList) > 0 {
 								structInfo.Fields = append(structInfo.Fields, fieldList...)
+							}
+						}
+					}
+					if err := validateModelDescriptor(structInfo); err != nil {
+						extractErr = err
+						return false
+					}
+					populateModelMetadata(structInfo)
+					if structInfo.TableName != "" {
+						for _, field := range structInfo.Fields {
+							if field.ManagedTimeKind == "int" {
+								fileInfo.Requires64BitInt = true
+								break
 							}
 						}
 					}
@@ -323,15 +354,60 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 		return nil, fmt.Errorf("unsupported field type %q for %s.%s", exprSource(field.Type), structName, fieldNames(field))
 	}
 
-	dbField, flag := parseTag(field, g.tagKey)
+	dbField, flag, err := parseFieldTag(field, g.tagKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: %w", structName, fieldNames(field), err)
+	}
+	if flag.HasFlag(lorm.FlagAutoIncrement) && !flag.HasFlag(lorm.FlagPrimaryKey) {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: auto_increment requires primary_key", structName, fieldNames(field))
+	}
+	typ := typeOfExpr(pkg, field.Type)
+	integerKind, integerBits, integerType := runtimeIntegerInfo(typ)
+	managedFlags := 0
+	for _, managedFlag := range []lorm.FieldFlag{lorm.FlagCreated, lorm.FlagUpdated, lorm.FlagVersion} {
+		if flag.HasFlag(managedFlag) {
+			managedFlags++
+		}
+	}
+	if managedFlags > 1 {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: created, updated, and version are mutually exclusive", structName, fieldNames(field))
+	}
+	if flag.HasFlag(lorm.FlagAutoIncrement) && !integerType {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: auto_increment requires a built-in integer type or a pointer to one", structName, fieldNames(field))
+	}
+	if flag.HasFlag(lorm.FlagVersion) && !integerType {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: version requires a built-in integer type or a pointer to one", structName, fieldNames(field))
+	}
+	managedTimeKind := ""
+	if flag.HasFlag(lorm.FlagCreated) || flag.HasFlag(lorm.FlagUpdated) {
+		managedTimeKind = managedTimeTypeKind(typ)
+		if managedTimeKind == "" {
+			typeName := "<unknown>"
+			if typ != nil {
+				typeName = types.TypeString(typ, func(p *types.Package) string { return p.Name() })
+			}
+			return nil, fmt.Errorf(
+				"invalid lorm tag for %s.%s: created and updated require time.Time, sql.NullTime, int64, uint64, uint32, uint, int, string, or a pointer to one of these types; got %s",
+				structName,
+				fieldNames(field),
+				typeName,
+			)
+		}
+		if managedTimeKind == "int" {
+			if pkg == nil || pkg.TypesSizes == nil {
+				return nil, fmt.Errorf("cannot determine target int width for %s.%s", structName, fieldNames(field))
+			}
+			if !supportsManagedIntTime(pkg.TypesSizes) {
+				return nil, fmt.Errorf("invalid lorm tag for %s.%s: int managed time fields require a 64-bit target", structName, fieldNames(field))
+			}
+		}
+	}
 	pointer := false
 	if _, ok := field.Type.(*ast.StarExpr); ok {
 		pointer = true
 	}
-	if pkg != nil && pkg.TypesInfo != nil {
-		if typ := pkg.TypesInfo.TypeOf(field.Type); typ != nil {
-			_, pointer = types.Unalias(typ).Underlying().(*types.Pointer)
-		}
+	if typ != nil {
+		_, pointer = types.Unalias(typ).Underlying().(*types.Pointer)
 	}
 	var fields []*lorm.FieldDescriptor
 	for i, name := range field.Names {
@@ -350,34 +426,214 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 
 		fieldInfo.Type = fieldType
 		fieldInfo.Pointer = pointer
+		fieldInfo.ManagedTimeKind = managedTimeKind
+		fieldInfo.IntegerKind = integerKind
+		fieldInfo.IntegerBits = integerBits
 		fields = append(fields, fieldInfo)
 	}
 	return fields, nil
 }
 
-// parseTag splits the lorm tag into an optional database field name and any flag tokens.
-func parseTag(field *ast.Field, tagKey string) (dbField string, flag lorm.FieldFlag) {
+func supportsManagedIntTime(sizes types.Sizes) bool {
+	return sizes != nil && sizes.Sizeof(types.Typ[types.Int]) >= 8
+}
+
+func validateModelDescriptor(model *lorm.ModelDescriptor) error {
+	columns := make(map[string]string, len(model.Fields))
+	var versionField, autoIncrementField string
+	for _, field := range model.Fields {
+		if previous, exists := columns[field.DBField]; exists {
+			return fmt.Errorf(
+				"model %s has duplicate database column %q for fields %s and %s",
+				model.Name,
+				field.DBField,
+				previous,
+				field.FullName,
+			)
+		}
+		columns[field.DBField] = field.FullName
+
+		if field.Flag.HasFlag(lorm.FlagVersion) {
+			if versionField != "" {
+				return fmt.Errorf(
+					"model %s has multiple version fields: %s and %s",
+					model.Name,
+					versionField,
+					field.FullName,
+				)
+			}
+			versionField = field.FullName
+		}
+		if field.Flag.HasFlag(lorm.FlagAutoIncrement) {
+			if autoIncrementField != "" {
+				return fmt.Errorf(
+					"model %s has multiple auto-increment fields: %s and %s",
+					model.Name,
+					autoIncrementField,
+					field.FullName,
+				)
+			}
+			autoIncrementField = field.FullName
+		}
+	}
+	return nil
+}
+
+func populateModelMetadata(model *lorm.ModelDescriptor) {
+	model.PrimaryKeys = model.FlagFields(lorm.FlagPrimaryKey)
+}
+
+func managedTimeTypeKind(typ types.Type) string {
+	if typ == nil {
+		return ""
+	}
+	typ = types.Unalias(typ)
+	if pointer, ok := typ.(*types.Pointer); ok {
+		typ = types.Unalias(pointer.Elem())
+	}
+
+	switch value := typ.(type) {
+	case *types.Basic:
+		switch value.Kind() {
+		case types.Int64:
+			return "int64"
+		case types.Uint64:
+			return "uint64"
+		case types.Uint32:
+			return "uint32"
+		case types.Uint:
+			return "uint"
+		case types.Int:
+			return "int"
+		case types.String:
+			return "string"
+		}
+	case *types.Named:
+		object := value.Obj()
+		if object == nil || object.Pkg() == nil {
+			return ""
+		}
+		path := object.Pkg().Path()
+		if path == "time" && object.Name() == "Time" {
+			return "time"
+		}
+		if path == "database/sql" && object.Name() == "NullTime" {
+			return "null_time"
+		}
+	}
+	return ""
+}
+
+func runtimeIntegerInfo(typ types.Type) (kind string, bits int, ok bool) {
+	if typ == nil {
+		return "", 0, false
+	}
+	typ = types.Unalias(typ)
+	if pointer, ok := typ.(*types.Pointer); ok {
+		typ = types.Unalias(pointer.Elem())
+	}
+	basic, ok := typ.(*types.Basic)
+	if !ok {
+		return "", 0, false
+	}
+	switch basic.Kind() {
+	case types.Int:
+		return "int", 0, true
+	case types.Int8:
+		return "int8", 8, true
+	case types.Int16:
+		return "int16", 16, true
+	case types.Int32:
+		return "int32", 32, true
+	case types.Int64:
+		return "int64", 64, true
+	case types.Uint:
+		return "uint", 0, true
+	case types.Uint8:
+		return "uint8", 8, true
+	case types.Uint16:
+		return "uint16", 16, true
+	case types.Uint32:
+		return "uint32", 32, true
+	case types.Uint64:
+		return "uint64", 64, true
+	default:
+		return "", 0, false
+	}
+}
+
+func typeOfExpr(pkg *packages.Package, expr ast.Expr) types.Type {
+	return typeOfExprSeen(pkg, expr, make(map[*packages.Package]bool))
+}
+
+func typeOfExprSeen(pkg *packages.Package, expr ast.Expr, seen map[*packages.Package]bool) types.Type {
+	if pkg == nil || expr == nil || seen[pkg] {
+		return nil
+	}
+	seen[pkg] = true
+	if pkg.TypesInfo != nil {
+		if typ := pkg.TypesInfo.TypeOf(expr); typ != nil {
+			return typ
+		}
+	}
+
+	importPaths := lo.Keys(pkg.Imports)
+	sort.Strings(importPaths)
+	for _, importPath := range importPaths {
+		if typ := typeOfExprSeen(pkg.Imports[importPath], expr, seen); typ != nil {
+			return typ
+		}
+	}
+	return nil
+}
+
+// parseFieldTag splits a field tag into known flags and at most one database column.
+func parseFieldTag(field *ast.Field, tagKey string) (dbField string, flag lorm.FieldFlag, err error) {
 	if field == nil || field.Tag == nil {
 		return
 	}
-	tagString := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Get(tagKey)
-	flags := lo.Uniq(strings.Split(tagString, ","))
-	for fieldFlag, key := range lorm.FlagTagMap {
-		if parseFlag(&flags, key) {
-			flag |= fieldFlag
-		}
+	tagString, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(tagKey)
+	if !exists || tagString == "" {
+		return
 	}
-	if len(flags) > 0 {
-		// After flag tokens are removed, the first remaining value is the explicit database field name.
-		dbField = flags[0]
+
+	items := strings.Split(tagString, ",")
+	for _, item := range items {
+		if fieldFlag, ok := fieldFlagByTag(item); ok {
+			flag |= fieldFlag
+			continue
+		}
+		if item != "" && dbField == "" {
+			dbField = item
+			continue
+		}
+		return "", 0, fmt.Errorf("unrecognized tag item %q", item)
 	}
 	return
 }
 
-func parseFlag(flags *[]string, key string) bool {
-	length := len(*flags)
-	*flags = lo.Without(*flags, key)
-	return length != len(*flags)
+// parseNameTag reads table names and embedded-field prefixes, which accept one value and no flags.
+func parseNameTag(field *ast.Field, tagKey string) (string, error) {
+	if field == nil || field.Tag == nil {
+		return "", nil
+	}
+	tagString, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(tagKey)
+	if !exists || tagString == "" {
+		return "", nil
+	}
+	if strings.Contains(tagString, ",") {
+		return "", fmt.Errorf("unrecognized tag item in %q; expected a single name", tagString)
+	}
+	return tagString, nil
+}
+
+func fieldFlagByTag(tag string) (lorm.FieldFlag, bool) {
+	for flag, name := range lorm.FlagTagMap {
+		if tag == name {
+			return flag, true
+		}
+	}
+	return 0, false
 }
 
 // exprToString normalizes the subset of Go field types that descriptors need to serialize.
@@ -416,6 +672,30 @@ func exprToString(expr ast.Expr) (string, error) {
 			return "", err
 		}
 		return "map[" + key + "]" + value, nil
+	case *ast.IndexExpr:
+		base, err := exprToString(x.X)
+		if err != nil {
+			return "", err
+		}
+		index, err := exprToString(x.Index)
+		if err != nil {
+			return "", err
+		}
+		return base + "[" + index + "]", nil
+	case *ast.IndexListExpr:
+		base, err := exprToString(x.X)
+		if err != nil {
+			return "", err
+		}
+		indices := make([]string, 0, len(x.Indices))
+		for _, indexExpr := range x.Indices {
+			index, err := exprToString(indexExpr)
+			if err != nil {
+				return "", err
+			}
+			indices = append(indices, index)
+		}
+		return base + "[" + strings.Join(indices, ", ") + "]", nil
 	default:
 		return "", fmt.Errorf("unsupported field type %q", exprSource(expr))
 	}
@@ -545,6 +825,9 @@ func findTypeSpecByPos(pkg *packages.Package, pos token.Pos) *ast.TypeSpec {
 
 // generateCode renders the template and applies gofmt before the file hits disk.
 func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
+	for _, model := range fileInfo.Structs {
+		populateModelMetadata(model)
+	}
 	var buf bytes.Buffer
 	err := modelTpl.Execute(&buf, fileInfo)
 	if err != nil {

@@ -15,10 +15,3 @@ type Logger interface {
 }
 
 var defaultLogger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-type noopLogger struct{}
-
-func (noopLogger) DebugContext(ctx context.Context, msg string, args ...any) {}
-func (noopLogger) InfoContext(ctx context.Context, msg string, args ...any)  {}
-func (noopLogger) WarnContext(ctx context.Context, msg string, args ...any)  {}
-func (noopLogger) ErrorContext(ctx context.Context, msg string, args ...any) {}

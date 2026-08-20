@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSelectBuilderToSql(t *testing.T) {
@@ -129,6 +130,19 @@ func TestCountBuilder(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT department, COUNT(*) as cnt FROM employees WHERE salary > ? GROUP BY department HAVING COUNT(*) > ?) AS sub", sql)
 		assert.Equal(t, []any{30000, 5}, args)
+	})
+
+	t.Run("HavingWithoutGroupBy", func(t *testing.T) {
+		b := Select("COUNT(*) AS total").
+			From("employees").
+			Having("COUNT(*) > ?", 5)
+
+		countBuilder := b.ToCountBuilder()
+
+		sql, args, err := countBuilder.ToSql()
+		assert.NoError(t, err)
+		assert.Equal(t, "SELECT COUNT(1) FROM (SELECT COUNT(*) AS total FROM employees HAVING COUNT(*) > ?) AS sub", sql)
+		assert.Equal(t, []any{5}, args)
 	})
 
 	// Test GROUP BY with comma expression
@@ -531,8 +545,53 @@ func TestRemoveColumns(t *testing.T) {
 	query := Select("id").
 		From("users").
 		RemoveColumns()
+	assert.Empty(t, query.GetColumns())
 	query = query.Select("name")
+	assert.Len(t, query.GetColumns(), 1)
 	sql, _, err := query.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "SELECT name FROM users", sql)
+}
+
+func TestPreparedProjectionLifecycle(t *testing.T) {
+	projection := NewPreparedProjection("id, name")
+	require.NotNil(t, projection)
+
+	original := new(SelectBuilder).SelectPrepared(projection).From("users")
+	assert.Len(t, original.GetColumns(), 1)
+
+	clone := original.Clone().AddColumn("age")
+	cloneSQL, _, err := clone.ToSql()
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT id, name, age FROM users", cloneSQL)
+
+	originalSQL, _, err := original.ToSql()
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT id, name FROM users", originalSQL)
+
+	clone.Clear()
+	_, _, err = clone.ToSql()
+	assert.ErrorContains(t, err, "at least one result column")
+
+	reusedSQL, _, err := new(SelectBuilder).SelectPrepared(projection).From("accounts").ToSql()
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT id, name FROM accounts", reusedSQL)
+}
+
+func TestPreparedProjectionIsPreservedInComplexCount(t *testing.T) {
+	query := new(SelectBuilder).
+		SelectPrepared(NewPreparedProjection("department, COUNT(*) AS total")).
+		From("employees").
+		GroupBy("department")
+
+	sql, args, err := query.ToCountBuilder().ToSql()
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT COUNT(1) FROM (SELECT department, COUNT(*) AS total FROM employees GROUP BY department) AS sub", sql)
+	assert.Empty(t, args)
+}
+
+func TestPreparedProjectionRejectsEmptySQL(t *testing.T) {
+	query := new(SelectBuilder).SelectPrepared(NewPreparedProjection("  "))
+	_, _, err := query.ToSql()
+	assert.ErrorContains(t, err, "at least one result column")
 }

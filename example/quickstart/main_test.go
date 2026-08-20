@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yvvlee/lorm/builder"
 	"github.com/yvvlee/lorm/example/internal/exampleutil"
@@ -13,10 +14,10 @@ import (
 func TestQuickstartFlow(t *testing.T) {
 	ctx := context.Background()
 	engine, cleanup, err := exampleutil.NewSQLiteEngine(schemaSQL)
-	if err != nil {
+	if exampleutil.IsSQLiteDriverUnavailable(err) {
 		t.Skipf("sqlite example unavailable: %v", err)
-		return
 	}
+	require.NoError(t, err)
 	defer cleanup()
 
 	var u User
@@ -28,7 +29,7 @@ func TestQuickstartFlow(t *testing.T) {
 	_, err = engine.Insert[*User]().AddModel(bob).Exec(ctx)
 	assert.NoError(t, err)
 
-	loadedAlice, ok, err := engine.Select[*User]().
+	loadedAlice, ok, err := engine.Query[*User]().
 		Where(builder.Eq{u.Fields().Email(): "alice@example.com"}).
 		Get(ctx)
 	assert.NoError(t, err)
@@ -41,7 +42,7 @@ func TestQuickstartFlow(t *testing.T) {
 		Exec(ctx)
 	assert.NoError(t, err)
 
-	users, err := engine.Select[*User]().
+	users, err := engine.Query[*User]().
 		OrderBy(u.Fields().ID() + " ASC").
 		Find(ctx)
 	assert.NoError(t, err)
@@ -51,7 +52,7 @@ func TestQuickstartFlow(t *testing.T) {
 	_, err = engine.Delete[*User]().ID(bob.ID).Exec(ctx)
 	assert.NoError(t, err)
 
-	remaining, err := engine.Select[*User]().
+	remaining, err := engine.Query[*User]().
 		OrderBy(u.Fields().ID() + " ASC").
 		Find(ctx)
 	assert.NoError(t, err)

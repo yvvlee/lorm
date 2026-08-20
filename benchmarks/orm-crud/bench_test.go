@@ -107,7 +107,7 @@ func setupLorm(b *testing.B, name string) *lorm.Engine {
 	engine, err := lorm.NewEngine(
 		db.backend.lormDriver,
 		db.dsn,
-		lorm.WithLogger(noopLogger{}),
+		lorm.WithLogger(nil),
 		lorm.WithMaxOpenConns(1),
 	)
 	if err != nil {
@@ -683,7 +683,7 @@ func benchmarkBatchReadLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		out, err := engine.Select[*LormUser]().
+		out, err := engine.Query[*LormUser]().
 			Where(builder.In("email", emails)).
 			Find(benchmarkCtx)
 		if err != nil {
@@ -766,7 +766,7 @@ func benchmarkBatchReadComplexLorm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		out, err := engine.Select[*LormUser]().
+		out, err := engine.Query[*LormUser]().
 			Where(builder.In("email", emails)).
 			Find(benchmarkCtx)
 		if err != nil {
