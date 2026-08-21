@@ -197,6 +197,19 @@ func newTestRepository(engine *Engine) *Repository[*Test] {
 	return engine.Repository[*Test]()
 }
 
+func newInsertTest(intValue int, str string) *Test {
+	testTime := time.Date(2025, 1, 23, 16, 17, 18, 0, time.UTC)
+	return &Test{
+		Int:       intValue,
+		Str:       str,
+		Timestamp: testTime,
+		Datetime:  testTime,
+		Decimal:   decimal.NewFromInt(int64(intValue)),
+		IntSlice:  []int{intValue},
+		Struct:    Sub{ID: intValue, Name: str},
+	}
+}
+
 var (
 	sqlite3TestCheckOnce sync.Once
 	sqlite3TestCheckErr  error
@@ -767,8 +780,8 @@ func TestInsertAllRequireIDBackfill(t *testing.T) {
 	ctx := context.TODO()
 
 	models := []*Test{
-		{Int: 511, Str: "batch_require_backfill_1"},
-		{Int: 512, Str: "batch_require_backfill_2"},
+		newInsertTest(511, "batch_require_backfill_1"),
+		newInsertTest(512, "batch_require_backfill_2"),
 	}
 	rows, err := engine.Insert[*Test]().
 		RequireIDBackfill().
@@ -790,10 +803,10 @@ func TestInsertIgnoreDoesNotBackfillWhenNoRowWasInserted(t *testing.T) {
 
 	_, err := engine.Exec(ctx, "CREATE UNIQUE INDEX idx_test_ignore_backfill ON test(str)")
 	require.NoError(t, err)
-	_, err = engine.Insert[*Test]().AddModel(&Test{Int: 521, Str: "ignore_no_backfill"}).Exec(ctx)
+	_, err = engine.Insert[*Test]().AddModel(newInsertTest(521, "ignore_no_backfill")).Exec(ctx)
 	require.NoError(t, err)
 
-	ignored := &Test{Int: 522, Str: "ignore_no_backfill"}
+	ignored := newInsertTest(522, "ignore_no_backfill")
 	rows, err := engine.Insert[*Test]().Ignore().AddModel(ignored).Exec(ctx)
 	require.NoError(t, err)
 	assert.Zero(t, rows)
@@ -807,12 +820,12 @@ func TestInsertIgnoreRequireIDBackfillOnlyFillsInsertedModels(t *testing.T) {
 
 	_, err := engine.Exec(ctx, "CREATE UNIQUE INDEX idx_test_ignore_required_backfill ON test(str)")
 	require.NoError(t, err)
-	_, err = engine.Insert[*Test]().AddModel(&Test{Int: 531, Str: "ignore_required_conflict"}).Exec(ctx)
+	_, err = engine.Insert[*Test]().AddModel(newInsertTest(531, "ignore_required_conflict")).Exec(ctx)
 	require.NoError(t, err)
 
 	models := []*Test{
-		{Int: 532, Str: "ignore_required_conflict"},
-		{Int: 533, Str: "ignore_required_inserted"},
+		newInsertTest(532, "ignore_required_conflict"),
+		newInsertTest(533, "ignore_required_inserted"),
 	}
 	rows, err := engine.Insert[*Test]().
 		Ignore().
