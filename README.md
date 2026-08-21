@@ -175,9 +175,14 @@ _, err = engine.Delete[*User]().
 > values are written as well, so prefer `SetMap` / `Set` for partial updates.
 > `SetModel` cannot be mixed with `Set` or `SetMap`.
 
-> **Write safety note**: `Update.Exec` and `Delete.Exec` reject statements
-> without a restrictive `WHERE` clause. Call `AllowGlobalWrite()` explicitly
-> when an operation is intentionally meant to affect the whole table.
+> **Write safety note**: `Update.Exec` and `Delete.Exec` make a best-effort
+> attempt to reject statements without a restrictive `WHERE` clause. The check
+> cannot identify every logically tautological condition and does not replace
+> application-level validation. Do not treat it as an absolute guarantee
+> against full-table writes. Raw SQL executed through `Engine.Exec` is outside
+> this check. Call `AllowGlobalWrite()` explicitly for an intentional
+> full-table operation; callers remain responsible for verifying the write
+> scope and protecting their data.
 
 > **Where note**: `builder.Eq{field: value}` always renders `field = ?` and
 > binds `value` as a single argument. It does not special-case `nil` into

@@ -143,8 +143,11 @@ _, err = engine.Delete[*User]().
 > 所以做部分更新时应优先使用 `SetMap` 或 `Set`。`SetModel` 不能和 `Set`、
 > `SetMap` 混用。
 
-> **写入安全说明**：`Update.Exec` 和 `Delete.Exec` 默认拒绝没有有效 `WHERE`
-> 条件的语句。确实需要操作整张表时，必须显式调用 `AllowGlobalWrite()`。
+> **写入安全说明**：`Update.Exec` 和 `Delete.Exec` 会尽量拒绝没有有效 `WHERE`
+> 条件的语句。这个检查不能识别所有逻辑上恒真的条件，也不能替代业务层校验，
+> 不应把它当作防止全表写的绝对保证。直接使用 `Engine.Exec` 执行原始 SQL 时，
+> 不受这项检查保护。确实需要操作整张表时，必须显式调用 `AllowGlobalWrite()`；
+> 调用方必须自行确认写入范围，并对数据安全负责。
 
 > **Where 说明**：`builder.Eq{field: value}` 始终生成 `field = ?`，
 > 并把 `value` 作为一个参数传给驱动。它不会把 `nil` 改写成 `IS NULL`，
