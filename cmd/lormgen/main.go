@@ -43,9 +43,10 @@ var (
 	wd string // cached so generated descriptors can keep source paths relative to the invocation directory
 
 	cmd = &cobra.Command{
-		Use:   "lormgen",
-		Short: "lormgen is a code generator for Lorm",
-		Long:  `lormgen is a code generator for Lorm`,
+		Use:     "lormgen",
+		Short:   "lormgen is a code generator for Lorm",
+		Long:    `lormgen is a code generator for Lorm`,
+		Version: currentVersion(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return run(args)
 		},
