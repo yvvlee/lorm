@@ -62,7 +62,7 @@ func (m *UserAddress) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_testdata_user_address_d1098ce2_UserAddress_model_descriptor
 }
 
-func (m *UserAddress) Fields() *UserAddress_Fields {
+func (m *UserAddress) LormCols() *UserAddress_Fields {
 	return default_UserAddress_Fields
 }
 

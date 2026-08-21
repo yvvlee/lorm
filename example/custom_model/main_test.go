@@ -36,8 +36,8 @@ func TestCustomModelFlow(t *testing.T) {
 	var (
 		user User
 		role Role
-		u    = user.Fields().WithAlias("u")
-		r    = role.Fields().WithAlias("r")
+		u    = user.LormCols().WithAlias("u")
+		r    = role.LormCols().WithAlias("r")
 	)
 
 	rows, err := engine.Query[*UserWithRole]().

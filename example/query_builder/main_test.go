@@ -32,14 +32,14 @@ func TestQueryBuilderFlow(t *testing.T) {
 	var p Product
 	filtered, err := engine.Query[*Product]().
 		Where(builder.And{
-			builder.In(p.Fields().Category(), []string{"book", "tool"}),
+			builder.In(p.LormCols().Category(), []string{"book", "tool"}),
 			builder.Or{
-				builder.Like(p.Fields().Name(), "%Go%"),
-				builder.Lt(p.Fields().Price(), int64(3000)),
+				builder.Like(p.LormCols().Name(), "%Go%"),
+				builder.Lt(p.LormCols().Price(), int64(3000)),
 			},
-			builder.Eq{p.Fields().Status(): "active"},
+			builder.Eq{p.LormCols().Status(): "active"},
 		}).
-		OrderBy(p.Fields().Price() + " ASC").
+		OrderBy(p.LormCols().Price() + " ASC").
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, filtered, 2)
@@ -47,7 +47,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 
 	count, ok, err := engine.Query[*Product]().
 		Select("COUNT(1)").
-		Where(builder.Eq{p.Fields().Status(): "active"}).
+		Where(builder.Eq{p.LormCols().Status(): "active"}).
 		GetCol[int64](ctx)
 	assert.NoError(t, err)
 	assert.True(t, ok)

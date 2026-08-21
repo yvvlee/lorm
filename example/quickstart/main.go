@@ -34,7 +34,7 @@ func main() {
 	}
 
 	loadedAlice, ok, err := engine.Query[*User]().
-		Where(builder.Eq{u.Fields().Email(): "alice@example.com"}).
+		Where(builder.Eq{u.LormCols().Email(): "alice@example.com"}).
 		Get(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -47,14 +47,14 @@ func main() {
 	if _, err := engine.Update[*User]().
 		ID(loadedAlice.ID).
 		SetMap(map[string]any{
-			u.Fields().Name(): "Alice Updated",
+			u.LormCols().Name(): "Alice Updated",
 		}).
 		Exec(ctx); err != nil {
 		log.Fatal(err)
 	}
 
 	users, err := engine.Query[*User]().
-		OrderBy(u.Fields().ID() + " ASC").
+		OrderBy(u.LormCols().ID() + " ASC").
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -70,7 +70,7 @@ func main() {
 	}
 
 	remaining, err := engine.Query[*User]().
-		OrderBy(u.Fields().ID() + " ASC").
+		OrderBy(u.LormCols().ID() + " ASC").
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)

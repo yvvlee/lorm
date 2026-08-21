@@ -42,7 +42,7 @@ func main() {
 	fmt.Printf("repository get: id=%d name=%s age=%d\n", loadedAlice.ID, loadedAlice.Name, loadedAlice.Age)
 
 	if _, err := repo.UpdateMap(ctx, alice.ID, map[string]any{
-		u.Fields().Age(): 31,
+		u.LormCols().Age(): 31,
 	}); err != nil {
 		log.Fatal(err)
 	}

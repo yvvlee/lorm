@@ -33,7 +33,7 @@ func main() {
 
 	var p Post
 	pageRows, total, err := engine.Query[*Post]().
-		OrderBy(p.Fields().ID()+" ASC").
+		OrderBy(p.LormCols().ID()+" ASC").
 		Page(ctx, 2, 2)
 	if err != nil {
 		log.Fatal(err)

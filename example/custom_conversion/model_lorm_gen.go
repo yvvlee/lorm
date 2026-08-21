@@ -143,7 +143,7 @@ func (m *Report) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Report_model_descriptor
 }
 
-func (m *Report) Fields() *Report_Fields {
+func (m *Report) LormCols() *Report_Fields {
 	return default_Report_Fields
 }
 

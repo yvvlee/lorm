@@ -143,7 +143,7 @@ func (m *User) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_testdata_user_42feee12_User_model_descriptor
 }
 
-func (m *User) Fields() *User_Fields {
+func (m *User) LormCols() *User_Fields {
 	return default_User_Fields
 }
 

@@ -35,7 +35,7 @@ func TestCustomConversionFlow(t *testing.T) {
 	var r Report
 	_, err = engine.Update[*Report]().
 		ID(report.ID).
-		SetMap(map[string]any{r.Fields().Scores(): CSVInts{100, 99, 98}}).
+		SetMap(map[string]any{r.LormCols().Scores(): CSVInts{100, 99, 98}}).
 		Exec(ctx)
 	assert.NoError(t, err)
 

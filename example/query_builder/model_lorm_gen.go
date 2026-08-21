@@ -161,7 +161,7 @@ func (m *Product) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Product_model_descriptor
 }
 
-func (m *Product) Fields() *Product_Fields {
+func (m *Product) LormCols() *Product_Fields {
 	return default_Product_Fields
 }
 

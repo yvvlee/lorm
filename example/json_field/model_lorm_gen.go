@@ -152,7 +152,7 @@ func (m *UserProfile) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_UserProfile_model_descriptor
 }
 
-func (m *UserProfile) Fields() *UserProfile_Fields {
+func (m *UserProfile) LormCols() *UserProfile_Fields {
 	return default_UserProfile_Fields
 }
 

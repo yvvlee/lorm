@@ -156,7 +156,7 @@ func (m *Test) LormModelDescriptor() *ModelDescriptor {
 	return _lorm_file_test_model_Test_model_descriptor
 }
 
-func (m *Test) Fields() *Test_Fields {
+func (m *Test) LormCols() *Test_Fields {
 	return default_Test_Fields
 }
 

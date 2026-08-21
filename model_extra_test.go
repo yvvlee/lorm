@@ -106,12 +106,12 @@ func TestHooklessInsertPlansShareColumns(t *testing.T) {
 func TestGeneratedFieldsWithAliasDoesNotMutateDefault(t *testing.T) {
 	m := &Test{}
 
-	a := m.Fields().WithAlias("a")
-	b := m.Fields().WithAlias("b")
+	a := m.LormCols().WithAlias("a")
+	b := m.LormCols().WithAlias("b")
 
 	assert.Equal(t, "a.id", a.ID())
 	assert.Equal(t, "b.id", b.ID())
-	assert.Equal(t, "id", m.Fields().ID())
+	assert.Equal(t, "id", m.LormCols().ID())
 }
 
 func TestJSONFieldWrapperStringAndUnmarshal(t *testing.T) {

@@ -36,7 +36,7 @@ func TestRepositoryFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Alice", loadedAlice.Name)
 
-	_, err = repo.UpdateMap(ctx, alice.ID, map[string]any{u.Fields().Age(): 31})
+	_, err = repo.UpdateMap(ctx, alice.ID, map[string]any{u.LormCols().Age(): 31})
 	assert.NoError(t, err)
 
 	adults, err := repo.ListAdults(ctx, 18)

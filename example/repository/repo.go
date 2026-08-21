@@ -20,7 +20,7 @@ func NewUserRepository(engine *lorm.Engine) *UserRepository {
 func (r *UserRepository) ListAdults(ctx context.Context, minAge int) ([]*User, error) {
 	var u User
 	return r.Engine.Query[*User]().
-		Where(builder.Gte(u.Fields().Age(), minAge)).
-		OrderBy(u.Fields().ID() + " ASC").
+		Where(builder.Gte(u.LormCols().Age(), minAge)).
+		OrderBy(u.LormCols().ID() + " ASC").
 		Find(ctx)
 }

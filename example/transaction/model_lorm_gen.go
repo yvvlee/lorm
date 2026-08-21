@@ -111,7 +111,7 @@ func (m *Account) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Account_model_descriptor
 }
 
-func (m *Account) Fields() *Account_Fields {
+func (m *Account) LormCols() *Account_Fields {
 	return default_Account_Fields
 }
 

@@ -102,7 +102,7 @@ func (m *Role) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Role_model_descriptor
 }
 
-func (m *Role) Fields() *Role_Fields {
+func (m *Role) LormCols() *Role_Fields {
 	return default_Role_Fields
 }
 
@@ -281,7 +281,7 @@ func (m *User) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_User_model_descriptor
 }
 
-func (m *User) Fields() *User_Fields {
+func (m *User) LormCols() *User_Fields {
 	return default_User_Fields
 }
 
@@ -393,7 +393,7 @@ func (m *UserWithRole) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_UserWithRole_model_descriptor
 }
 
-func (m *UserWithRole) Fields() *UserWithRole_Fields {
+func (m *UserWithRole) LormCols() *UserWithRole_Fields {
 	return default_UserWithRole_Fields
 }
 

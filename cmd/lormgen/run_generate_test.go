@@ -156,7 +156,7 @@ func TestGeneratedWriteHooks(t *testing.T) {
 	if user.CreatedAt != now || user.Int64Time != now.Unix() {
 		t.Fatal("created fields changed during update")
 	}
-	_ = user.Fields()
+	_ = user.LormCols()
 }
 `)
 

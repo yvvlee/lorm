@@ -385,7 +385,7 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         return {{$.RawVarPrefix}}_{{$struct.Name}}_model_descriptor
     }
 
-    func (m *{{$struct.Name}}) Fields() *{{$struct.Name}}_Fields {
+    func (m *{{$struct.Name}}) LormCols() *{{$struct.Name}}_Fields {
         return default_{{$struct.Name}}_Fields
     }
 

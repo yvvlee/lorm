@@ -30,7 +30,7 @@ func TestQuickstartFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	loadedAlice, ok, err := engine.Query[*User]().
-		Where(builder.Eq{u.Fields().Email(): "alice@example.com"}).
+		Where(builder.Eq{u.LormCols().Email(): "alice@example.com"}).
 		Get(ctx)
 	assert.NoError(t, err)
 	assert.True(t, ok)
@@ -38,12 +38,12 @@ func TestQuickstartFlow(t *testing.T) {
 
 	_, err = engine.Update[*User]().
 		ID(loadedAlice.ID).
-		SetMap(map[string]any{u.Fields().Name(): "Alice Updated"}).
+		SetMap(map[string]any{u.LormCols().Name(): "Alice Updated"}).
 		Exec(ctx)
 	assert.NoError(t, err)
 
 	users, err := engine.Query[*User]().
-		OrderBy(u.Fields().ID() + " ASC").
+		OrderBy(u.LormCols().ID() + " ASC").
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, users, 2)
@@ -53,7 +53,7 @@ func TestQuickstartFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	remaining, err := engine.Query[*User]().
-		OrderBy(u.Fields().ID() + " ASC").
+		OrderBy(u.LormCols().ID() + " ASC").
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, remaining, 1)

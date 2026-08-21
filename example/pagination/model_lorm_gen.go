@@ -143,7 +143,7 @@ func (m *Post) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Post_model_descriptor
 }
 
-func (m *Post) Fields() *Post_Fields {
+func (m *Post) LormCols() *Post_Fields {
 	return default_Post_Fields
 }
 

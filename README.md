@@ -118,7 +118,7 @@ lormgen ./...
 ```
 
 This generates `_lorm_gen.go` files with methods such as `TableName()`,
-`Fields()`, `New()`, `LormFieldPtr()`, `LormFieldValue()`, and
+`LormCols()`, `New()`, `LormFieldPtr()`, `LormFieldValue()`, and
 `LormModelDescriptor()`, plus the write hooks for table models.
 
 ### 3. Open an engine
@@ -152,14 +152,14 @@ _, err = engine.Insert[*User]().
 
 // Query
 savedUser, ok, err := engine.Query[*User]().
-	Where(builder.Eq{u.Fields().ID(): user.ID}).
+	Where(builder.Eq{u.LormCols().ID(): user.ID}).
 	Get(ctx)
 
 // Update
 _, err = engine.Update[*User]().
 	ID(user.ID).
 	SetMap(map[string]any{
-		u.Fields().Name(): "Jane Doe",
+		u.LormCols().Name(): "Jane Doe",
 	}).
 	Exec(ctx)
 
@@ -190,6 +190,41 @@ _, err = engine.Delete[*User]().
 > `IN (...)`. Use `builder.IsNull(field)` / `builder.IsNotNull(field)` for null
 > checks, and `builder.In` / `builder.NotIn` for membership predicates.
 
+> **Column names**: When filling SQL builder predicates or clauses, prefer the
+> generated `LormCols()` accessors over hand-written database column strings.
+> This reuses the configured field mapping and avoids spelling mistakes. Call
+> `WithAlias()` when the table has an SQL alias.
+
+```go
+var u User
+c := u.LormCols()
+
+users, err := engine.Query[*User]().
+	Where(builder.Eq{c.Email(): "alice@example.com"}).
+	OrderBy(c.CreatedAt() + " DESC").
+	Find(ctx)
+// SQL (MySQL): SELECT `id`, `name`, `email`, `created_at`, `updated_at` FROM `users` WHERE `email` = ? ORDER BY created_at DESC
+
+_, err = engine.Update[*User]().
+	ID(1).
+	SetMap(map[string]any{c.Name(): "Alice Updated"}).
+	Exec(ctx)
+// SQL (MySQL): UPDATE `users` SET `name` = ? WHERE `id` = ?
+```
+
+```go
+var u User
+c := u.LormCols().WithAlias("u")
+
+ids, err := engine.Query[*User]().
+	Select(c.ID()).
+	From("users AS u").
+	Where(builder.Like(c.Email(), "%@example.com")).
+	OrderBy(c.ID() + " DESC").
+	FindCols[int64](ctx)
+// SQL (MySQL): SELECT u.id FROM users AS u WHERE u.email LIKE ? ORDER BY u.id DESC
+```
+
 > **Insert note**: single-row inserts backfill generated IDs when the driver
 > supports `RETURNING` or `LastInsertId`. Batch inserts do not backfill IDs by
 > default. Call `RequireIDBackfill()` to execute the batch one row at a time in
@@ -206,7 +241,7 @@ type on the terminal method when selecting one column:
 
 ```go
 ids, err := engine.Query[*User]().
-	Select(u.Fields().ID()).
+	Select(u.LormCols().ID()).
 	FindCols[int64](ctx)
 
 count, ok, err := engine.Query[*User]().
@@ -214,8 +249,8 @@ count, ok, err := engine.Query[*User]().
 	GetCol[uint64](ctx)
 
 ids, total, err := engine.Query[*User]().
-	Select(u.Fields().ID()).
-	OrderBy(u.Fields().ID()).
+	Select(u.LormCols().ID()).
+	OrderBy(u.LormCols().ID()).
 	PageCols[int64](ctx, page, size)
 ```
 
@@ -325,8 +360,8 @@ func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
 	return r.Engine.Query[*User]().
-		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
-		OrderBy(u.Fields().ID() + " DESC").
+		Where(builder.Like(u.LormCols().Email(), "%@gmail.com")).
+		OrderBy(u.LormCols().ID() + " DESC").
 		Page(ctx, page, size)
 }
 ```

@@ -134,7 +134,7 @@ func (m *Document) LormModelDescriptor() *lorm.ModelDescriptor {
 	return _lorm_file_model_5b017786_Document_model_descriptor
 }
 
-func (m *Document) Fields() *Document_Fields {
+func (m *Document) LormCols() *Document_Fields {
 	return default_Document_Fields
 }
 

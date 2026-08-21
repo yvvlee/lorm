@@ -31,7 +31,7 @@ func TestPaginationFlow(t *testing.T) {
 
 	var p Post
 	pageRows, total, err := engine.Query[*Post]().
-		OrderBy(p.Fields().ID()+" ASC").
+		OrderBy(p.LormCols().ID()+" ASC").
 		Page(ctx, 2, 2)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 5, total)

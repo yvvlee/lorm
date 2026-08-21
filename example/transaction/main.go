@@ -78,7 +78,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 		if _, err := engine.Update[*Account]().
 			ID(from.ID).
 			SetMap(map[string]any{
-				a.Fields().Balance(): from.Balance - amount,
+				a.LormCols().Balance(): from.Balance - amount,
 			}).
 			Exec(txCtx); err != nil {
 			return err
@@ -87,7 +87,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 		if _, err := engine.Update[*Account]().
 			ID(to.ID).
 			SetMap(map[string]any{
-				a.Fields().Balance(): to.Balance + amount,
+				a.LormCols().Balance(): to.Balance + amount,
 			}).
 			Exec(txCtx); err != nil {
 			return err
@@ -100,7 +100,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 func printAccounts(ctx context.Context, engine *lorm.Engine) {
 	var a Account
 	accounts, err := engine.Query[*Account]().
-		OrderBy(a.Fields().ID() + " ASC").
+		OrderBy(a.LormCols().ID() + " ASC").
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)

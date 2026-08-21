@@ -89,7 +89,7 @@ type User struct {
 lormgen ./...
 ```
 
-这会生成 `_lorm_gen.go` 文件，包含 `TableName()`、`Fields()`、`New()`、
+这会生成 `_lorm_gen.go` 文件，包含 `TableName()`、`LormCols()`、`New()`、
 `LormFieldPtr()`、`LormFieldValue()`、`LormModelDescriptor()`，以及表模型的
 写入 Hook。
 
@@ -122,13 +122,13 @@ _, err = engine.Insert[*User]().
 	Exec(ctx)
 
 savedUser, ok, err := engine.Query[*User]().
-	Where(builder.Eq{u.Fields().ID(): user.ID}).
+	Where(builder.Eq{u.LormCols().ID(): user.ID}).
 	Get(ctx)
 
 _, err = engine.Update[*User]().
 	ID(user.ID).
 	SetMap(map[string]any{
-		u.Fields().Name(): "Jane Doe",
+		u.LormCols().Name(): "Jane Doe",
 	}).
 	Exec(ctx)
 
@@ -156,6 +156,40 @@ _, err = engine.Delete[*User]().
 > `builder.IsNotNull(field)`。需要成员判断时，显式使用 `builder.In` 或
 > `builder.NotIn`。
 
+> **列名说明**：在 SQL builder 中填入字段名时，优先使用模型生成的
+> `LormCols()`，不要手写数据库列名字符串。这样可以复用字段映射结果，减少列名
+> 拼写错误。涉及表别名时，先调用 `WithAlias()`。
+
+```go
+var u User
+c := u.LormCols()
+
+users, err := engine.Query[*User]().
+	Where(builder.Eq{c.Email(): "alice@example.com"}).
+	OrderBy(c.CreatedAt() + " DESC").
+	Find(ctx)
+// SQL（MySQL）：SELECT `id`, `name`, `email`, `created_at`, `updated_at` FROM `users` WHERE `email` = ? ORDER BY created_at DESC
+
+_, err = engine.Update[*User]().
+	ID(1).
+	SetMap(map[string]any{c.Name(): "Alice Updated"}).
+	Exec(ctx)
+// SQL（MySQL）：UPDATE `users` SET `name` = ? WHERE `id` = ?
+```
+
+```go
+var u User
+c := u.LormCols().WithAlias("u")
+
+ids, err := engine.Query[*User]().
+	Select(c.ID()).
+	From("users AS u").
+	Where(builder.Like(c.Email(), "%@example.com")).
+	OrderBy(c.ID() + " DESC").
+	FindCols[int64](ctx)
+// SQL（MySQL）：SELECT u.id FROM users AS u WHERE u.email LIKE ? ORDER BY u.id DESC
+```
+
 > **Insert 说明**：单条插入会在驱动支持 `RETURNING` 或 `LastInsertId` 时回填
 > 生成 ID。批量插入默认不回填 ID。调用 `RequireIDBackfill()` 后，批量插入会在
 > 一个事务中退化为逐条执行，并回填每个实际插入模型的 ID。自增主键为零值时，
@@ -169,7 +203,7 @@ _, err = engine.Delete[*User]().
 
 ```go
 ids, err := engine.Query[*User]().
-	Select(u.Fields().ID()).
+	Select(u.LormCols().ID()).
 	FindCols[int64](ctx)
 
 count, ok, err := engine.Query[*User]().
@@ -177,8 +211,8 @@ count, ok, err := engine.Query[*User]().
 	GetCol[uint64](ctx)
 
 ids, total, err := engine.Query[*User]().
-	Select(u.Fields().ID()).
-	OrderBy(u.Fields().ID()).
+	Select(u.LormCols().ID()).
+	OrderBy(u.LormCols().ID()).
 	PageCols[int64](ctx, page, size)
 ```
 
@@ -284,8 +318,8 @@ func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
 func (r *UserRepositoryImpl) PageGmailUsers(ctx context.Context, page, size uint64) ([]*User, uint64, error) {
 	var u User
 	return r.Engine.Query[*User]().
-		Where(builder.Like(u.Fields().Email(), "%@gmail.com")).
-		OrderBy(u.Fields().ID() + " DESC").
+		Where(builder.Like(u.LormCols().Email(), "%@gmail.com")).
+		OrderBy(u.LormCols().ID() + " DESC").
 		Page(ctx, page, size)
 }
 ```
