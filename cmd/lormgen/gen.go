@@ -172,7 +172,8 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 	return pkgs, nil
 }
 
-// extractFile turns one parsed Go file into a descriptor when it imports lorm.
+// extractFile turns one parsed Go file into a descriptor when it declares a
+// model that embeds an lorm marker type.
 func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.FileDescriptor, error) {
 	lormImportSpec, ok := lo.Find(file.Imports, func(item *ast.ImportSpec) bool {
 		return strings.Trim(item.Path.Value, "\"") == lormPackage
@@ -328,6 +329,9 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 	})
 	if extractErr != nil {
 		return nil, extractErr
+	}
+	if len(fileInfo.Structs) == 0 {
+		return nil, nil
 	}
 	return &fileInfo, nil
 }

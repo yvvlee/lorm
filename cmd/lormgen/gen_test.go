@@ -251,6 +251,21 @@ type Result struct {
 	assert.True(t, info.Structs[0].Fields[0].Pointer)
 }
 
+func TestExtractFileSkipsFilesWithoutModelMarkers(t *testing.T) {
+	info, err := extractSource(t, `package validation
+
+import "github.com/yvvlee/lorm"
+
+type Config struct {
+	Name string
+}
+
+var _ = lorm.UnimplementedModel{}
+`)
+	require.NoError(t, err)
+	assert.Nil(t, info)
+}
+
 func Test_Generate_FlattensEmbeddedStructsAcrossFiles(t *testing.T) {
 	generator := NewGenerator(
 		new(names.SnakeMapper),
