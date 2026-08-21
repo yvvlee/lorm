@@ -977,6 +977,7 @@ func TestSelectModelGetIgnoresExtraColumns(t *testing.T) {
 
 	got, found, err := e.Query[*Test]().
 		Where("id = ?", model.ID).
+		Select("*").
 		AddColumn("1 AS extra_value").
 		Get(ctx)
 	require.NoError(t, err)
