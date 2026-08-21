@@ -7,8 +7,9 @@
 
 [中文](README_ZH.md)
 
-LORM is a lightweight ORM for Go that keeps the API small, favors explicit SQL,
-and uses code generation to provide model metadata and typed field accessors.
+LORM is a high-performance, lightweight ORM for Go that keeps the API small,
+favors explicit SQL, and uses code generation to provide model metadata and
+typed field accessors.
 
 ## Table of Contents
 
@@ -30,6 +31,7 @@ and uses code generation to provide model metadata and typed field accessors.
 
 ## Why LORM
 
+- **High performance with low allocation overhead**: the current [benchmarks](#benchmarks) cover SQLite, MySQL, and PostgreSQL. LORM is fastest in 23 of 30 latency cases and remains close to the leader in the other cases. It also ranks first in 27 of 30 `B/op` cases and 27 of 30 `allocs/op` cases.
 - **Repository-first data access** for both simple CRUD and complex queries.
 - **Flexible SQL builder inside repository implementations** for queries that still need explicit control.
 - **Code-generated model metadata** instead of runtime reflection-heavy mapping.
@@ -468,38 +470,80 @@ override one field.
 
 The benchmark suite lives in [benchmarks/orm-crud](benchmarks/orm-crud).
 
-Results below were captured on August 20, 2026 with Go 1.27.0. Each ORM
-was run once in a separate `go test` process.
+The tables below were recaptured on August 21, 2026 with Go 1.27.0. Each backend
+uses three rounds and a separate `go test` process for each ORM. SQLite creates a
+fresh temporary database per benchmark case. MySQL and PostgreSQL containers are
+restarted before every ORM run, checked for readiness, and given a 10-second
+warm-up. All runs use a 1-second benchmark window. See the benchmark suite README
+for the complete methodology and detailed `B/op` and `allocs/op` tables.
 
-SQLite was run once per ORM:
+SQLite:
 
 ```bash
-for orm in lorm gorm xorm ent; do
-  CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -count=1
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
 done
 ```
 
-Before every MySQL run, the MySQL container was restarted. The benchmark
+Before every MySQL ORM run, the MySQL container was restarted. The benchmark
 waited for `mysqladmin ping` to succeed, then waited another 10 seconds:
 
 ```bash
-docker restart mysql
-# Wait for mysqladmin ping to succeed.
-sleep 10
-ORMCRUD_DB=mysql go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+set -e
+
+wait_for_container() {
+  local container=$1
+  shift
+  for attempt in {1..60}; do
+    if docker exec "$container" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    docker restart mysql
+    wait_for_container mysql mysqladmin ping -h 127.0.0.1 -uroot -p123456
+    sleep 10
+    ORMCRUD_DB=mysql CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
+done
 ```
 
-Before every PostgreSQL run, its container was restarted and the benchmark
-waited for `pg_isready` to succeed:
+PostgreSQL used the same loop with `postgres` and `pg_isready`:
 
 ```bash
-docker restart postgres
-ORMCRUD_DB=postgres go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+set -e
+
+wait_for_container() {
+  local container=$1
+  shift
+  for attempt in {1..60}; do
+    if docker exec "$container" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    docker restart postgres
+    wait_for_container postgres pg_isready -U postgres -d postgres
+    sleep 10
+    ORMCRUD_DB=postgres CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
+done
 ```
 
-Replace `<orm>` with `lorm`, `gorm`, `xorm`, or `ent`. Each ORM uses
-separate benchmark databases. The complete bounded readiness command is in the
-benchmark suite README.
+Each ORM uses a separate benchmark database. The bounded readiness commands
+are also included in the benchmark suite README.
 
 Environment:
 
@@ -517,52 +561,52 @@ SQLite, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | 320,185 | 279,823 | 291,430 | **270,549** | 4 | 18.35% |
-| ReadByID | **21,189** | 24,540 | 30,467 | 26,395 | 1 | 0.00% |
-| ReadByIDComplex | **22,487** | 26,886 | 32,928 | 29,012 | 1 | 0.00% |
-| UpdateByID | 342,819 | 346,223 | 324,730 | **288,283** | 3 | 18.92% |
-| DeleteByID | 344,690 | 310,801 | 336,944 | **273,470** | 4 | 26.04% |
-| BatchCreate100 | **1,198,248** | 1,326,222 | 3,226,068 | 1,510,362 | 1 | 0.00% |
-| BatchRead100 | **521,933** | 759,109 | 894,268 | 583,942 | 1 | 0.00% |
-| BatchRead100Complex | **761,215** | 992,272 | 1,140,149 | 841,553 | 1 | 0.00% |
-| BatchUpdate100 | 398,032 | 450,038 | **374,384** | 401,475 | 2 | 6.32% |
-| BatchDelete100 | 690,346 | 765,703 | **591,269** | 595,752 | 3 | 16.76% |
+| Create | **252,015** | 298,490 | 338,170 | 260,103 | 1 | 0.00% |
+| ReadByID | **20,366** | 24,706 | 30,231 | 25,980 | 1 | 0.00% |
+| ReadByIDComplex | **22,883** | 26,901 | 32,652 | 29,272 | 1 | 0.00% |
+| UpdateByID | 278,586 | 328,557 | **277,573** | 330,246 | 2 | 0.36% |
+| DeleteByID | 330,649 | 313,611 | 307,297 | **302,728** | 4 | 9.22% |
+| BatchCreate100 | **1,208,006** | 1,315,249 | 2,894,899 | 1,575,225 | 1 | 0.00% |
+| BatchRead100 | **523,365** | 734,031 | 898,918 | 588,354 | 1 | 0.00% |
+| BatchRead100Complex | **802,839** | 996,810 | 1,141,333 | 847,751 | 1 | 0.00% |
+| BatchUpdate100 | 409,773 | 446,832 | **390,940** | 395,562 | 3 | 4.82% |
+| BatchDelete100 | 603,935 | 673,145 | **579,423** | 627,659 | 2 | 4.23% |
 
 MySQL, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | **906,321** | 1,361,265 | 973,385 | 928,810 | 1 | 0.00% |
-| ReadByID | **240,317** | 302,950 | 284,257 | 249,565 | 1 | 0.00% |
-| ReadByIDComplex | **245,672** | 298,108 | 305,488 | 248,823 | 1 | 0.00% |
-| UpdateByID | **879,429** | 1,410,948 | 879,682 | 1,440,935 | 1 | 0.00% |
-| DeleteByID | 822,350 | 1,031,374 | 871,111 | **751,133** | 2 | 9.48% |
-| BatchCreate100 | 7,846,680 | 8,017,562 | **7,364,879** | 8,164,799 | 2 | 6.54% |
-| BatchRead100 | 2,297,721 | 3,442,311 | 1,955,529 | **1,543,769** | 3 | 48.84% |
-| BatchRead100Complex | 3,716,681 | 5,032,195 | **2,309,288** | 3,182,881 | 3 | 60.94% |
-| BatchUpdate100 | 5,398,099 | 5,773,743 | **4,933,102** | 6,097,586 | 2 | 9.43% |
-| BatchDelete100 | **4,047,424** | 4,165,851 | 4,114,345 | 4,097,822 | 1 | 0.00% |
+| Create | **813,586** | 1,019,484 | 957,907 | 878,117 | 1 | 0.00% |
+| ReadByID | **251,329** | 255,958 | 260,688 | 261,192 | 1 | 0.00% |
+| ReadByIDComplex | **253,863** | 254,349 | 254,338 | 261,335 | 1 | 0.00% |
+| UpdateByID | **848,445** | 1,093,546 | 883,750 | 1,272,905 | 1 | 0.00% |
+| DeleteByID | 765,645 | 888,310 | **751,124** | 770,066 | 2 | 1.93% |
+| BatchCreate100 | **6,929,813** | 7,318,879 | 7,710,617 | 7,705,074 | 1 | 0.00% |
+| BatchRead100 | **1,221,528** | 2,025,584 | 1,839,542 | 1,439,332 | 1 | 0.00% |
+| BatchRead100Complex | **2,104,338** | 2,596,185 | 2,637,094 | 2,296,573 | 1 | 0.00% |
+| BatchUpdate100 | **5,055,485** | 5,752,827 | 5,545,599 | 5,460,566 | 1 | 0.00% |
+| BatchDelete100 | **4,013,751** | 4,530,486 | 4,110,886 | 4,293,134 | 1 | 0.00% |
 
 PostgreSQL, `ns/op` (lower is better):
 
 | Benchmark | lorm | gorm | xorm | ent | lorm rank | Gap to best |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | **882,606** | 1,245,377 | 902,820 | 916,939 | 1 | 0.00% |
-| ReadByID | 135,480 | **134,977** | 143,964 | 141,048 | 2 | 0.37% |
-| ReadByIDComplex | **136,348** | 138,018 | 141,529 | 140,041 | 1 | 0.00% |
-| UpdateByID | **959,347** | 1,063,873 | 1,250,379 | 1,339,732 | 1 | 0.00% |
-| DeleteByID | 945,561 | 1,167,307 | 859,569 | **856,562** | 3 | 10.39% |
-| BatchCreate100 | **7,620,672** | 7,793,676 | 8,074,182 | 8,180,815 | 1 | 0.00% |
-| BatchRead100 | **648,760** | 907,110 | 1,115,124 | 759,521 | 1 | 0.00% |
-| BatchRead100Complex | **937,986** | 1,268,048 | 1,491,468 | 1,065,715 | 1 | 0.00% |
-| BatchUpdate100 | 1,325,303 | 1,463,390 | 1,505,688 | **1,323,338** | 2 | 0.15% |
-| BatchDelete100 | 1,288,657 | 1,467,285 | 1,238,411 | **1,216,635** | 3 | 5.92% |
+| Create | 844,910 | 1,183,252 | 932,022 | **821,597** | 2 | 2.84% |
+| ReadByID | **135,021** | 137,157 | 145,584 | 141,350 | 1 | 0.00% |
+| ReadByIDComplex | **134,513** | 137,986 | 144,760 | 139,264 | 1 | 0.00% |
+| UpdateByID | **864,272** | 1,025,507 | 1,108,039 | 1,162,746 | 1 | 0.00% |
+| DeleteByID | 821,153 | 996,480 | 839,258 | **774,647** | 2 | 6.00% |
+| BatchCreate100 | 6,428,797 | **5,594,340** | 8,263,492 | 7,090,537 | 2 | 14.92% |
+| BatchRead100 | **663,685** | 931,042 | 1,168,889 | 759,619 | 1 | 0.00% |
+| BatchRead100Complex | **943,754** | 1,252,891 | 1,494,433 | 1,097,075 | 1 | 0.00% |
+| BatchUpdate100 | **1,239,973** | 1,373,150 | 1,446,940 | 1,269,617 | 1 | 0.00% |
+| BatchDelete100 | **1,109,514** | 1,381,718 | 1,139,948 | 1,252,851 | 1 | 0.00% |
 
 Notes from this run:
 
-- On SQLite, `lorm` is fastest in 5 of the 10 `ns/op` cases.
-- On MySQL, `lorm` is fastest in 5 of the 10 `ns/op` cases.
-- On PostgreSQL, `lorm` is fastest in 6 of the 10 `ns/op` cases.
+- On SQLite, `lorm` is fastest in 6 of the 10 `ns/op` cases.
+- On MySQL, `lorm` is fastest in 9 of the 10 `ns/op` cases.
+- On PostgreSQL, `lorm` is fastest in 8 of the 10 `ns/op` cases.
 - `lorm` has the lowest `B/op` in 9 of the 10 SQLite cases, 9 of the 10
   MySQL cases, and 9 of the 10 PostgreSQL cases. The `allocs/op`
   distribution is also 9, 9, and 9 out of 10, respectively.

@@ -2,11 +2,12 @@
 
 [English](README.md)
 
-LORM 是一个为 Go 设计的轻量级 ORM。它尽量保持 API 简洁、SQL 显式，并
+LORM 是一个为 Go 设计的高性能轻量级 ORM。它尽量保持 API 简洁、SQL 显式，并
 通过代码生成提供模型元数据和类型化字段访问器。
 
 ## 为什么选择 LORM
 
+- 高性能且分配开销低：当前[基准测试](#benchmark)覆盖 SQLite、MySQL 和 PostgreSQL。LORM 在 30 个耗时场景中有 23 个最快，其他场景与第一名接近。每次操作内存占用（`B/op`）和内存分配次数（`allocs/op`）都各有 27 个场景排名第一
 - 所有数据访问优先通过 `Repository`，覆盖简单 CRUD 和复杂查询
 - SQL builder 用于 Repository 的具体实现，复杂 SQL 仍然保持显式可控
 - 通过代码生成提供模型元数据，减少运行时反射映射开销
@@ -425,14 +426,19 @@ engine, err := lorm.NewEngine(
 
 benchmark 套件位于 [benchmarks/orm-crud](benchmarks/orm-crud)。
 
-下面这组结果采集于 2026 年 8 月 20 日，使用 Go 1.27.0。
-每个 ORM 都在独立的 `go test` 进程中执行一次。
+下面的表格重新采集于 2026 年 8 月 21 日，使用 Go 1.27.0。
+三个数据库都执行三轮。每个 ORM 使用独立的 `go test` 进程。SQLite 每个
+benchmark case 使用新的临时数据库。每次执行 MySQL 和 PostgreSQL ORM 前，
+都会重启对应容器，检查就绪状态，再等待 10 秒。所有测试都使用 1 秒
+benchmark 窗口。完整的方法和 `B/op`、`allocs/op` 结果见 benchmark 套件文档。
 
-SQLite 按 ORM 分别执行：
+SQLite：
 
 ```bash
-for orm in lorm gorm xorm ent; do
-  CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -count=1
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
 done
 ```
 
@@ -440,22 +446,59 @@ done
 成功后，再固定等待 10 秒：
 
 ```bash
-docker restart mysql
-# 等待 mysqladmin ping 成功。
-sleep 10
-ORMCRUD_DB=mysql go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+set -e
+
+wait_for_container() {
+  local container=$1
+  shift
+  for attempt in {1..60}; do
+    if docker exec "$container" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    docker restart mysql
+    wait_for_container mysql mysqladmin ping -h 127.0.0.1 -uroot -p123456
+    sleep 10
+    ORMCRUD_DB=mysql CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
+done
 ```
 
-每次执行 PostgreSQL ORM 前都会重启对应容器，并等待 `pg_isready`
+PostgreSQL 使用相同的循环。每次执行前重启 `postgres`，并等待 `pg_isready`
 成功：
 
 ```bash
-docker restart postgres
-ORMCRUD_DB=postgres go test -run '^$' -bench '/<orm>$' -benchmem -count=1
+set -e
+
+wait_for_container() {
+  local container=$1
+  shift
+  for attempt in {1..60}; do
+    if docker exec "$container" "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+for round in 1 2 3; do
+  for orm in lorm gorm xorm ent; do
+    docker restart postgres
+    wait_for_container postgres pg_isready -U postgres -d postgres
+    sleep 10
+    ORMCRUD_DB=postgres CGO_ENABLED=1 go test -run '^$' -bench "/${orm}$" -benchmem -benchtime=1s -count=1
+  done
+done
 ```
 
-将 `<orm>` 分别替换为 `lorm`、`gorm`、`xorm` 和 `ent`。
-每个 ORM 使用独立的 benchmark 数据库。完整的有限次数就绪检查命令见
+每个 ORM 使用独立的 benchmark 数据库。有限次数的就绪检查命令也见
 benchmark 套件文档。
 
 测试环境：
@@ -474,52 +517,52 @@ SQLite，`ns/op`，数值越小越好：
 
 | Benchmark | lorm | gorm | xorm | ent | lorm 名次 | 距第一名 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | 320,185 | 279,823 | 291,430 | **270,549** | 4 | 18.35% |
-| ReadByID | **21,189** | 24,540 | 30,467 | 26,395 | 1 | 0.00% |
-| ReadByIDComplex | **22,487** | 26,886 | 32,928 | 29,012 | 1 | 0.00% |
-| UpdateByID | 342,819 | 346,223 | 324,730 | **288,283** | 3 | 18.92% |
-| DeleteByID | 344,690 | 310,801 | 336,944 | **273,470** | 4 | 26.04% |
-| BatchCreate100 | **1,198,248** | 1,326,222 | 3,226,068 | 1,510,362 | 1 | 0.00% |
-| BatchRead100 | **521,933** | 759,109 | 894,268 | 583,942 | 1 | 0.00% |
-| BatchRead100Complex | **761,215** | 992,272 | 1,140,149 | 841,553 | 1 | 0.00% |
-| BatchUpdate100 | 398,032 | 450,038 | **374,384** | 401,475 | 2 | 6.32% |
-| BatchDelete100 | 690,346 | 765,703 | **591,269** | 595,752 | 3 | 16.76% |
+| Create | **252,015** | 298,490 | 338,170 | 260,103 | 1 | 0.00% |
+| ReadByID | **20,366** | 24,706 | 30,231 | 25,980 | 1 | 0.00% |
+| ReadByIDComplex | **22,883** | 26,901 | 32,652 | 29,272 | 1 | 0.00% |
+| UpdateByID | 278,586 | 328,557 | **277,573** | 330,246 | 2 | 0.36% |
+| DeleteByID | 330,649 | 313,611 | 307,297 | **302,728** | 4 | 9.22% |
+| BatchCreate100 | **1,208,006** | 1,315,249 | 2,894,899 | 1,575,225 | 1 | 0.00% |
+| BatchRead100 | **523,365** | 734,031 | 898,918 | 588,354 | 1 | 0.00% |
+| BatchRead100Complex | **802,839** | 996,810 | 1,141,333 | 847,751 | 1 | 0.00% |
+| BatchUpdate100 | 409,773 | 446,832 | **390,940** | 395,562 | 3 | 4.82% |
+| BatchDelete100 | 603,935 | 673,145 | **579,423** | 627,659 | 2 | 4.23% |
 
 MySQL，`ns/op`，数值越小越好：
 
 | Benchmark | lorm | gorm | xorm | ent | lorm 名次 | 距第一名 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | **906,321** | 1,361,265 | 973,385 | 928,810 | 1 | 0.00% |
-| ReadByID | **240,317** | 302,950 | 284,257 | 249,565 | 1 | 0.00% |
-| ReadByIDComplex | **245,672** | 298,108 | 305,488 | 248,823 | 1 | 0.00% |
-| UpdateByID | **879,429** | 1,410,948 | 879,682 | 1,440,935 | 1 | 0.00% |
-| DeleteByID | 822,350 | 1,031,374 | 871,111 | **751,133** | 2 | 9.48% |
-| BatchCreate100 | 7,846,680 | 8,017,562 | **7,364,879** | 8,164,799 | 2 | 6.54% |
-| BatchRead100 | 2,297,721 | 3,442,311 | 1,955,529 | **1,543,769** | 3 | 48.84% |
-| BatchRead100Complex | 3,716,681 | 5,032,195 | **2,309,288** | 3,182,881 | 3 | 60.94% |
-| BatchUpdate100 | 5,398,099 | 5,773,743 | **4,933,102** | 6,097,586 | 2 | 9.43% |
-| BatchDelete100 | **4,047,424** | 4,165,851 | 4,114,345 | 4,097,822 | 1 | 0.00% |
+| Create | **813,586** | 1,019,484 | 957,907 | 878,117 | 1 | 0.00% |
+| ReadByID | **251,329** | 255,958 | 260,688 | 261,192 | 1 | 0.00% |
+| ReadByIDComplex | **253,863** | 254,349 | 254,338 | 261,335 | 1 | 0.00% |
+| UpdateByID | **848,445** | 1,093,546 | 883,750 | 1,272,905 | 1 | 0.00% |
+| DeleteByID | 765,645 | 888,310 | **751,124** | 770,066 | 2 | 1.93% |
+| BatchCreate100 | **6,929,813** | 7,318,879 | 7,710,617 | 7,705,074 | 1 | 0.00% |
+| BatchRead100 | **1,221,528** | 2,025,584 | 1,839,542 | 1,439,332 | 1 | 0.00% |
+| BatchRead100Complex | **2,104,338** | 2,596,185 | 2,637,094 | 2,296,573 | 1 | 0.00% |
+| BatchUpdate100 | **5,055,485** | 5,752,827 | 5,545,599 | 5,460,566 | 1 | 0.00% |
+| BatchDelete100 | **4,013,751** | 4,530,486 | 4,110,886 | 4,293,134 | 1 | 0.00% |
 
 PostgreSQL，`ns/op`，数值越小越好：
 
 | Benchmark | lorm | gorm | xorm | ent | lorm 名次 | 距第一名 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create | **882,606** | 1,245,377 | 902,820 | 916,939 | 1 | 0.00% |
-| ReadByID | 135,480 | **134,977** | 143,964 | 141,048 | 2 | 0.37% |
-| ReadByIDComplex | **136,348** | 138,018 | 141,529 | 140,041 | 1 | 0.00% |
-| UpdateByID | **959,347** | 1,063,873 | 1,250,379 | 1,339,732 | 1 | 0.00% |
-| DeleteByID | 945,561 | 1,167,307 | 859,569 | **856,562** | 3 | 10.39% |
-| BatchCreate100 | **7,620,672** | 7,793,676 | 8,074,182 | 8,180,815 | 1 | 0.00% |
-| BatchRead100 | **648,760** | 907,110 | 1,115,124 | 759,521 | 1 | 0.00% |
-| BatchRead100Complex | **937,986** | 1,268,048 | 1,491,468 | 1,065,715 | 1 | 0.00% |
-| BatchUpdate100 | 1,325,303 | 1,463,390 | 1,505,688 | **1,323,338** | 2 | 0.15% |
-| BatchDelete100 | 1,288,657 | 1,467,285 | 1,238,411 | **1,216,635** | 3 | 5.92% |
+| Create | 844,910 | 1,183,252 | 932,022 | **821,597** | 2 | 2.84% |
+| ReadByID | **135,021** | 137,157 | 145,584 | 141,350 | 1 | 0.00% |
+| ReadByIDComplex | **134,513** | 137,986 | 144,760 | 139,264 | 1 | 0.00% |
+| UpdateByID | **864,272** | 1,025,507 | 1,108,039 | 1,162,746 | 1 | 0.00% |
+| DeleteByID | 821,153 | 996,480 | 839,258 | **774,647** | 2 | 6.00% |
+| BatchCreate100 | 6,428,797 | **5,594,340** | 8,263,492 | 7,090,537 | 2 | 14.92% |
+| BatchRead100 | **663,685** | 931,042 | 1,168,889 | 759,619 | 1 | 0.00% |
+| BatchRead100Complex | **943,754** | 1,252,891 | 1,494,433 | 1,097,075 | 1 | 0.00% |
+| BatchUpdate100 | **1,239,973** | 1,373,150 | 1,446,940 | 1,269,617 | 1 | 0.00% |
+| BatchDelete100 | **1,109,514** | 1,381,718 | 1,139,948 | 1,252,851 | 1 | 0.00% |
 
 这次结果可以概括为：
 
-- 在 SQLite 上，`lorm` 在 10 个 `ns/op` 场景里有 5 个最快。
-- 在 MySQL 上，`lorm` 在 10 个 `ns/op` 场景里有 5 个最快。
-- 在 PostgreSQL 上，`lorm` 在 10 个 `ns/op` 场景里有 6 个最快。
+- 在 SQLite 上，`lorm` 在 10 个 `ns/op` 场景里有 6 个最快。
+- 在 MySQL 上，`lorm` 在 10 个 `ns/op` 场景里有 9 个最快。
+- 在 PostgreSQL 上，`lorm` 在 10 个 `ns/op` 场景里有 8 个最快。
 - 这次测试里，`lorm` 在 SQLite、MySQL 和 PostgreSQL 的 10 个场景里
   都有 9 个拿到最低 `B/op`。`allocs/op` 也分别有
   9、9 和 9 个排名第一。
