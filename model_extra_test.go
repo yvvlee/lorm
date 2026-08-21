@@ -165,10 +165,28 @@ func TestJSONFieldWrapperDelegatesDatabaseInterfaces(t *testing.T) {
 	err = NewJSONFieldWrapper(scanner).Scan([]byte(`{"a":1}`))
 	assert.NoError(t, err)
 	assert.Equal(t, []byte(`{"a":1}`), scanner.value)
+}
 
-	err = NewJSONFieldWrapper(scanner).Scan(nil)
-	assert.NoError(t, err)
-	assert.Nil(t, scanner.value)
+func TestJSONFieldWrapperScanNullishDelegatesToDatabaseScanner(t *testing.T) {
+	tests := []struct {
+		name string
+		src  any
+	}{
+		{name: "sql null", src: nil},
+		{name: "string null", src: "null"},
+		{name: "bytes null", src: []byte("null")},
+		{name: "empty string", src: ""},
+		{name: "empty bytes", src: []byte{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scanner := &jsonWrapperScanner{value: "old", err: assert.AnError}
+			err := NewJSONFieldWrapper(scanner).Scan(tt.src)
+			assert.ErrorIs(t, err, assert.AnError)
+			assert.Equal(t, tt.src, scanner.value)
+		})
+	}
 }
 
 func TestUnimplementedMarkers(t *testing.T) {
@@ -183,7 +201,7 @@ func TestJSONFieldWrapperValue(t *testing.T) {
 	v, err := nilWrapper.Value()
 	assert.NoError(t, err)
 	assert.Nil(t, v)
-	assert.NoError(t, nilWrapper.Scan(nil))
+	assert.Error(t, nilWrapper.Scan("{}"))
 	assert.Error(t, nilWrapper.Scan([]byte(`{}`)))
 	assert.Error(t, nilWrapper.UnmarshalJSON([]byte(`{}`)))
 
@@ -195,20 +213,85 @@ func TestJSONFieldWrapperValue(t *testing.T) {
 	assert.NotNil(t, v)
 }
 
-func TestJSONFieldWrapperScanNullClearsTarget(t *testing.T) {
-	slice := []int{1, 2}
-	assert.NoError(t, NewJSONFieldWrapper(&slice).Scan(nil))
-	assert.Nil(t, slice)
+func TestJSONFieldWrapperScanNullishWithNilTarget(t *testing.T) {
+	nilWrapper := NewJSONFieldWrapper[map[string]int](nil)
+	tests := []struct {
+		name string
+		src  any
+	}{
+		{name: "sql null", src: nil},
+		{name: "string null", src: "null"},
+		{name: "bytes null", src: []byte("null")},
+		{name: "empty string", src: ""},
+		{name: "empty bytes", src: []byte{}},
+	}
 
-	mapping := map[string]int{"a": 1}
-	assert.NoError(t, NewJSONFieldWrapper(&mapping).Scan(nil))
-	assert.Nil(t, mapping)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NoError(t, nilWrapper.Scan(tt.src))
+		})
+	}
+}
 
-	structure := Sub{ID: 1, Name: "old"}
-	assert.NoError(t, NewJSONFieldWrapper(&structure).Scan(nil))
-	assert.Zero(t, structure)
+func TestJSONFieldWrapperScanNullishClearsTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		src  any
+	}{
+		{name: "sql null", src: nil},
+		{name: "string null", src: "null"},
+		{name: "bytes null", src: []byte("null")},
+		{name: "empty string", src: ""},
+		{name: "empty bytes", src: []byte{}},
+	}
 
-	pointer := &Sub{ID: 1}
-	assert.NoError(t, NewJSONFieldWrapper(&pointer).Scan(nil))
-	assert.Nil(t, pointer)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			number := 42
+			assert.NoError(t, NewJSONFieldWrapper(&number).Scan(tt.src))
+			assert.Zero(t, number)
+
+			slice := []int{1, 2}
+			assert.NoError(t, NewJSONFieldWrapper(&slice).Scan(tt.src))
+			assert.Nil(t, slice)
+
+			mapping := map[string]int{"a": 1}
+			assert.NoError(t, NewJSONFieldWrapper(&mapping).Scan(tt.src))
+			assert.Nil(t, mapping)
+
+			structure := Sub{ID: 1, Name: "old"}
+			assert.NoError(t, NewJSONFieldWrapper(&structure).Scan(tt.src))
+			assert.Zero(t, structure)
+
+			pointer := &Sub{ID: 1}
+			assert.NoError(t, NewJSONFieldWrapper(&pointer).Scan(tt.src))
+			assert.Nil(t, pointer)
+		})
+	}
+}
+
+func TestJSONFieldWrapperScanRejectsInvalidNullSpellings(t *testing.T) {
+	for _, spelling := range []string{"NULL", "Null", "Nil", "nil"} {
+		t.Run(spelling, func(t *testing.T) {
+			t.Run("string", func(t *testing.T) {
+				assertJSONFieldWrapperScanErrorDoesNotClear(t, spelling)
+			})
+			t.Run("bytes", func(t *testing.T) {
+				assertJSONFieldWrapperScanErrorDoesNotClear(t, []byte(spelling))
+			})
+		})
+	}
+}
+
+func assertJSONFieldWrapperScanErrorDoesNotClear(t *testing.T, src any) {
+	t.Helper()
+	value := Sub{ID: 1, Name: "old"}
+	assert.Error(t, NewJSONFieldWrapper(&value).Scan(src))
+	assert.Equal(t, Sub{ID: 1, Name: "old"}, value)
+}
+
+func TestJSONFieldWrapperScanQuotedNullIsJSONString(t *testing.T) {
+	value := "old"
+	assert.NoError(t, NewJSONFieldWrapper(&value).Scan(`"null"`))
+	assert.Equal(t, "null", value)
 }

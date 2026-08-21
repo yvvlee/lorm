@@ -111,8 +111,15 @@ func (s *JSONFieldWrapper[T]) UnmarshalJSON(data []byte) error {
 
 // Scan implements sql.Scanner for JSON-encoded columns.
 func (s *JSONFieldWrapper[T]) Scan(src any) error {
+	isNull := src == nil
+	switch v := src.(type) {
+	case []byte:
+		isNull = len(v) == 0 || string(v) == "null"
+	case string:
+		isNull = v == "" || v == "null"
+	}
 	if s.target == nil {
-		if src == nil {
+		if isNull {
 			return nil
 		}
 		return errors.New("lorm: JSON scan target is nil")
@@ -120,7 +127,7 @@ func (s *JSONFieldWrapper[T]) Scan(src any) error {
 	if v, ok := any(s.target).(sql.Scanner); ok {
 		return v.Scan(src)
 	}
-	if src == nil {
+	if isNull {
 		var zero T
 		*s.target = zero
 		return nil
