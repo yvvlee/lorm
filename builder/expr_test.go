@@ -145,6 +145,43 @@ func TestNotInEmptyToSql(t *testing.T) {
 	assert.Equal(t, expectedArgs, args)
 }
 
+func TestAnyToSql(t *testing.T) {
+	ids := []int{1, 2, 3}
+	sql, args, err := Any("id", ids).ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id = ANY(?)", sql)
+	assert.Equal(t, []any{ids}, args)
+}
+
+func TestNotAnyToSql(t *testing.T) {
+	ids := []int{1, 2, 3}
+	sql, args, err := NotAny("id", ids).ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id <> ALL(?)", sql)
+	assert.Equal(t, []any{ids}, args)
+}
+
+func TestAnyEmptySliceUsesOnePlaceholder(t *testing.T) {
+	sql, args, err := Any("id", []int{}).ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "id = ANY(?)", sql)
+	assert.Equal(t, []any{[]int{}}, args)
+}
+
+func TestAnyDollarPlaceholders(t *testing.T) {
+	sql, args, err := Select("*").
+		From("users").
+		Where(Any("id", []int{1, 2, 3})).
+		Where(Eq{"active": true}).
+		ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, []any{[]int{1, 2, 3}, true}, args)
+
+	sql, err = Dollar.ReplacePlaceholders(sql)
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM users WHERE id = ANY($1) AND active = $2", sql)
+}
+
 func TestEqBytesToSql(t *testing.T) {
 	b := Eq{"id": []byte("test")}
 	sql, args, err := b.ToSql()

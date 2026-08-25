@@ -269,14 +269,35 @@ func TestEngineLogsSQLArgsWhenEnabled(t *testing.T) {
 	recorder := newCaptureSQLRecorder()
 	logger := &recordingLogger{}
 	engine := newCaptureSQLEngine(t, recorder, true, logger)
+	ctx := context.WithValue(context.Background(), sessionIDKey{}, "session-1")
 
-	_, err := engine.Exec(context.Background(), "UPDATE test SET secret = ?", "token")
+	_, err := engine.Exec(ctx, "UPDATE test SET secret = ?", "token")
 	require.NoError(t, err)
 	entry := logger.Last()
 	require.NotNil(t, entry)
 	assert.Equal(t, "info", entry.level)
 	assert.True(t, hasLogKey(entry.args, "args"))
 	assert.Equal(t, []any{"token"}, logValue(entry.args, "args"))
+	assert.Equal(t, "session-1", logValue(entry.args, "sessionID"))
+}
+
+func TestEngineLogsSQLWithoutSessionID(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	logger := &recordingLogger{}
+	engine := newCaptureSQLEngine(t, recorder, false, logger)
+
+	_, err := engine.Exec(context.Background(), "UPDATE test SET value = ?", "x")
+	require.NoError(t, err)
+	rows, err := engine.SQL(context.Background(), "SELECT value FROM test")
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	_, err = engine.Exist(context.Background(), "SELECT value FROM test")
+	require.NoError(t, err)
+	entries := logger.Entries()
+	require.Len(t, entries, 3)
+	for _, entry := range entries {
+		assert.False(t, hasLogKey(entry.args, "sessionID"))
+	}
 }
 
 func TestEngineNilLoggerFastPathExecutesSQLAndTransaction(t *testing.T) {
@@ -564,6 +585,14 @@ func (l *recordingLogger) Last() *logEntry {
 	}
 	entry := l.entries[len(l.entries)-1]
 	return &entry
+}
+
+func (l *recordingLogger) Entries() []logEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entries := make([]logEntry, len(l.entries))
+	copy(entries, l.entries)
+	return entries
 }
 
 func hasLogKey(args []any, key string) bool {

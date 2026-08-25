@@ -263,10 +263,17 @@ func (e *Engine) Exist(ctx context.Context, query string, args ...any) (exist bo
 	return
 }
 
+func sessionIDFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(sessionIDKey{}).(string)
+	return id, ok && id != ""
+}
+
 func (e *Engine) sqlLogFields(ctx context.Context, query string, args []any, err error, elapsed time.Duration) []any {
 	fields := []any{
-		"sessionID", ctx.Value(sessionIDKey{}),
 		"SQL", query,
+	}
+	if sessionID, ok := sessionIDFromContext(ctx); ok {
+		fields = append([]any{"sessionID", sessionID}, fields...)
 	}
 	if err != nil {
 		fields = append(fields, "err", err)

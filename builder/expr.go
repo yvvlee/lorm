@@ -254,6 +254,23 @@ func NotIn[T any](field string, val []T) Sqlizer {
 	return fieldExpr{field: field, suffix: fmt.Sprintf(" NOT IN (%s)", Placeholders(len(val))), args: s}
 }
 
+// Any builds a PostgreSQL field = ANY(?) predicate.
+//
+// The slice is passed to the driver as one argument. The configured PostgreSQL
+// driver must encode it as a PostgreSQL array. Unlike In, an empty slice remains
+// a bound argument so PostgreSQL can evaluate it as an empty array.
+func Any[T any](field string, val []T) Sqlizer {
+	return fieldExpr{field: field, suffix: " = ANY(?)", args: []any{val}}
+}
+
+// NotAny builds a PostgreSQL field <> ALL(?) predicate.
+//
+// It is the SQL three-valued-logic equivalent of NOT (field = ANY(?)). The
+// slice is passed to the driver as one PostgreSQL array argument.
+func NotAny[T any](field string, val []T) Sqlizer {
+	return fieldExpr{field: field, suffix: " <> ALL(?)", args: []any{val}}
+}
+
 // Like is syntactic sugar for use with LIKE conditions.
 // Ex:
 //
