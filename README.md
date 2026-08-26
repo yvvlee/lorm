@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://goreportcard.com/report/github.com/yvvlee/lorm"><img src="https://goreportcard.com/badge/github.com/yvvlee/lorm" alt="Go Report Card"></a>
   <a href="https://pkg.go.dev/github.com/yvvlee/lorm"><img src="https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg" alt="Go Reference"></a>
   <a href="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml"><img src="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg" alt="Build Status"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
