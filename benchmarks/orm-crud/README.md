@@ -1,5 +1,7 @@
 # ORM CRUD Benchmarks
 
+[English README](../../README.md) | [中文 README](../../README_ZH.md) | [Usage Guide](../../docs/usage.md)
+
 This benchmark suite compares basic CRUD paths across:
 
 - `lorm`

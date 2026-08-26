@@ -1,56 +1,358 @@
-# LORM - Lightweight ORM for Go
+# LORM - Lightweight, Zero-Reflection & Type-Safe ORM for Go
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/yvvlee/lorm)](https://goreportcard.com/report/github.com/yvvlee/lorm)
-[![Go Reference](https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg)](https://pkg.go.dev/github.com/yvvlee/lorm)
-[![Build Status](https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg)](https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://github.com/yvvlee/lorm"><img src="https://img.shields.io/badge/LORM-Go%20ORM-00ADD8?style=for-the-badge&logo=go" alt="LORM"></a>
+</p>
 
-[中文](README_ZH.md)
+<p align="center">
+  <a href="https://goreportcard.com/report/github.com/yvvlee/lorm"><img src="https://goreportcard.com/badge/github.com/yvvlee/lorm" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/yvvlee/lorm"><img src="https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg" alt="Go Reference"></a>
+  <a href="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml"><img src="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg" alt="Build Status"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27-007D9C?logo=go" alt="Go Version">
+</p>
 
-LORM is a lightweight ORM for Go. It keeps SQL explicit, uses code generation
-for model metadata and typed column accessors, and keeps data access behind
-repository interfaces.
+<p align="center">
+  <a href="README_ZH.md">简体中文</a> | <a href="README.md">English</a>
+</p>
 
-## Highlights
+---
 
-- Generated model metadata avoids reflection-heavy mapping at runtime.
-- Typed column accessors reduce hand-written column names in queries.
-- Repository helpers cover common CRUD while keeping complex SQL explicit.
-- Transactions are propagated through `context.Context`.
-- No implicit joins, relation loading, or hidden query fan-out.
+**LORM** is an ultra-fast, zero-reflection, type-safe ORM and query builder for Go.
 
-## Database Support
+Designed for developers who value **performance**, **maintainability**, and **predictable execution**, LORM replaces runtime reflection with compile-time code generation (`lormgen`), embraces explicit SQL rather than magic associations, and offers transparent transaction propagation via standard Go `context.Context`.
 
-| Database | Driver package | Driver name |
-| --- | --- | --- |
-| MySQL/MariaDB | `github.com/go-sql-driver/mysql` | `mysql` |
-| PostgreSQL | `github.com/jackc/pgx/v5/stdlib` | `pgx` |
-| SQLite | `github.com/mattn/go-sqlite3` | `sqlite3` |
+---
 
-MySQL/MariaDB and PostgreSQL are first-class targets. SQLite is supported for
-local development and examples. LORM does not import database drivers; import
-only the driver used by your application.
+## 💡 Why LORM?
 
-## Install
+Traditional Go ORMs often trade performance and control for convenience—introducing heavy reflection, hidden lazy-loading queries, and convoluted transaction management. LORM is built with a different philosophy:
 
-LORM requires Go 1.27 or later.
+- ⚡ **Zero-Reflection Performance**: Generates direct field pointer and value accessors at compile time. Eliminates reflection bottlenecks during query scanning and model mapping, delivering near-raw `database/sql` throughput with minimal memory allocations.
+- 🛡️ **Compile-Time Type Safety**: Generated column accessors (`u.LormCols().Name()`) eliminate hardcoded strings. Schema renames and field typos are caught at compile time.
+- 🔍 **Explicit SQL (No Magic)**: What you write is what executes. No implicit joins, no hidden lazy loading, and no surprising N+1 query fan-out.
+- 🔄 **Context-Propagated Transactions**: Transparent transaction management through standard `context.Context`. Pass transactions cleanly across service and repository layers without polluting method signatures.
+- 🏛️ **Clean Architecture & Repository Ready**: Built-in generic `lorm.Repository[T]` makes it effortless to implement the Repository pattern and mock data access in unit tests.
+- 🔌 **Zero External Driver Coupling**: Built strictly on Go's standard `database/sql`. Import only the database drivers your application actually needs.
+- 🦺 **Production Safety Guards**: Built-in safety checks prevent accidental unconstrained `UPDATE` and `DELETE` queries, alongside first-class support for optimistic locking (`version`), auto-timestamps (`created`, `updated`), and JSON field mapping.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│               Application / Service Layer               │
+└────────────────────────────┬────────────────────────────┘
+                             │ calls domain interfaces
+┌────────────────────────────▼────────────────────────────┐
+│                    Repository Layer                     │
+│        (embeds lorm.Repository[T] or custom methods)     │
+└────────────────────────────┬────────────────────────────┘
+                             │
+       ┌─────────────────────┴─────────────────────┐
+       ▼                                           ▼
+┌─────────────────────────────┐   ┌─────────────────────────────┐
+│  Engine & Context Session   │   │   Type-Safe Query Builder   │
+│ (Transaction via Context)   │   │  (Generated Typed Columns)  │
+└──────────────┬──────────────┘   └──────────────┬──────────────┘
+               │                                 │
+               └─────────────────┬───────────────┘
+                                 │
+┌────────────────────────────────▼─────────────────────────┐
+│         Model Descriptors & Direct Field Access          │
+│            (Generated by `lormgen` - Zero Reflection)     │
+└────────────────────────────────┬─────────────────────────┘
+                                 │
+┌────────────────────────────────▼─────────────────────────┐
+│                  Go standard database/sql               │
+└───────┬────────────────────────┼─────────────────────────┘
+        │                        │                         │
+┌───────▼───────┐        ┌───────▼───────┐         ┌───────▼───────┐
+│     MySQL     │        │  PostgreSQL   │         │    SQLite     │
+└───────────────┘        └───────────────┘         └───────────────┘
+```
+
+---
+
+## 🗄️ Database Support
+
+| Database | Driver Package | Driver Name | Status |
+| :--- | :--- | :--- | :--- |
+| **MySQL / MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | Production-Ready (First-Class) |
+| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | Production-Ready (First-Class) |
+| **SQLite** | `github.com/mattn/go-sqlite3` | `sqlite3` | Local Dev, CI & Embedded |
+
+> LORM does not bundle database drivers. Import only the driver used by your application.
+
+---
+
+## 📦 Installation
+
+LORM requires **Go 1.27** or later.
 
 ```bash
+# Install the core library
 go get github.com/yvvlee/lorm
+
+# Install the code generator CLI tool
 go install github.com/yvvlee/lorm/cmd/lormgen@latest
 ```
 
-## Documentation
+---
 
-- [Usage guide](docs/usage.md): models, code generation, CRUD, transactions, repositories, configuration, and `lormgen`.
-- [Runnable examples](example/README.md): self-contained workflows using SQLite.
-- [API reference](https://pkg.go.dev/github.com/yvvlee/lorm): exported package API.
-- [Benchmarks](benchmarks/orm-crud/README.md): methodology and complete results.
+## 🚀 Quick Start in 60 Seconds
 
-## Contributing
+### 1. Define a Model
 
-Open an issue or submit a pull request.
+Embed `lorm.UnimplementedTable` and annotate fields with `lorm` struct tags:
 
-## License
+```go
+package model
 
-MIT. See [LICENSE](LICENSE).
+import (
+	"time"
+	"github.com/yvvlee/lorm"
+)
+
+type User struct {
+	lorm.UnimplementedTable
+	ID        int64     `lorm:"id,primary_key,auto_increment"`
+	Name      string    `lorm:"name"`
+	Email     string    `lorm:"email"`
+	CreatedAt time.Time `lorm:"created_at,created"`
+	UpdatedAt time.Time `lorm:"updated_at,updated"`
+}
+```
+
+### 2. Generate Model Metadata
+
+Run `lormgen` to generate zero-reflection metadata and typed column accessors:
+
+```bash
+lormgen ./...
+```
+
+This creates `*_lorm_gen.go` containing `LormCols()`, direct pointer scanners, and write hooks.
+
+### 3. Initialize the Engine
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/yvvlee/lorm"
+	"github.com/yvvlee/lorm/builder"
+)
+
+func main() {
+	engine, err := lorm.NewEngine(
+		"mysql",
+		"user:password@tcp(127.0.0.1:3306)/mydb?parseTime=true&charset=utf8mb4",
+		lorm.WithMaxOpenConns(50),
+		lorm.WithMaxIdleConns(10),
+	)
+	if err != nil {
+		log.Fatalf("failed to connect database: %v", err)
+	}
+	defer engine.Close()
+
+	ctx := context.Background()
+	var u User
+
+	// --- 1. Insert ---
+	newUser := &User{Name: "Alice", Email: "alice@example.com"}
+	_, err = engine.Insert[*User]().AddModel(newUser).Exec(ctx)
+	// Auto-increment ID is automatically backfilled into newUser.ID
+
+	// --- 2. Query with Type-Safe Column Accessors ---
+	user, found, err := engine.Query[*User]().
+		Where(builder.Eq{u.LormCols().Email(): "alice@example.com"}).
+		Get(ctx)
+	if err != nil || !found {
+		log.Printf("user not found or error: %v", err)
+	}
+
+	// --- 3. Partial Update ---
+	_, err = engine.Update[*User]().
+		ID(user.ID).
+		SetMap(map[string]any{
+			u.LormCols().Name(): "Alice Smith",
+		}).
+		Exec(ctx)
+
+	// --- 4. Transaction with Context Propagation ---
+	err = engine.TX(ctx, func(txCtx context.Context) error {
+		_, err := engine.Update[*User]().
+			ID(user.ID).
+			Set(u.LormCols().Name(), "Alice Cooper").
+			Exec(txCtx) // Automatically participates in the active transaction
+		return err
+	})
+
+	// --- 5. Delete ---
+	_, err = engine.Delete[*User]().ID(user.ID).Exec(ctx)
+}
+```
+
+---
+
+## ✨ Key Features at a Glance
+
+### 1. Type-Safe Column Accessors
+
+Say goodbye to string typo bugs:
+
+```go
+var u User
+cols := u.LormCols()
+
+// Type-safe WHERE and ORDER BY
+users, err := engine.Query[*User]().
+	Where(builder.Eq{cols.Email(): "alice@example.com"}).
+	OrderBy(cols.CreatedAt() + " DESC").
+	Find(ctx)
+
+// With table aliases (e.g. `users AS u`)
+uCols := u.LormCols().WithAlias("u")
+ids, err := engine.Query[*User]().
+	Select(uCols.ID()).
+	From("users AS u").
+	Where(builder.Like(uCols.Email(), "%@example.com")).
+	FindCols[int64](ctx)
+```
+
+### 2. Context-Driven Seamless Transactions
+
+Transactions attach transparently to `context.Context`. Nested `TX` calls automatically reuse the outer transaction:
+
+```go
+err := engine.TX(ctx, func(txCtx context.Context) error {
+	// Any repository or engine call receiving `txCtx` automatically participates in the transaction
+	if err := userRepo.UpdateBalance(txCtx, fromID, -100); err != nil {
+		return err // Returning an error automatically triggers ROLLBACK
+	}
+	if err := userRepo.UpdateBalance(txCtx, toID, 100); err != nil {
+		return err
+	}
+	return nil // Returning nil automatically triggers COMMIT
+})
+```
+
+### 3. Clean Architecture & Repository Pattern
+
+Encapsulate database logic behind clean interfaces:
+
+```go
+type UserRepository interface {
+	Get(ctx context.Context, id any) (*User, error)
+	Insert(ctx context.Context, user *User) (int64, error)
+	FindActiveUsers(ctx context.Context, minAge int) ([]*User, error)
+}
+
+type UserRepositoryImpl struct {
+	*lorm.Repository[*User]
+}
+
+func NewUserRepository(engine *lorm.Engine) *UserRepositoryImpl {
+	return &UserRepositoryImpl{
+		Repository: engine.Repository[*User](),
+	}
+}
+
+func (r *UserRepositoryImpl) FindActiveUsers(ctx context.Context, minAge int) ([]*User, error) {
+	var u User
+	return r.Engine.Query[*User]().
+		Where(builder.Gte(u.LormCols().Age(), minAge)).
+		Find(ctx)
+}
+```
+
+### 4. Built-in Optimistic Locking & Timestamps
+
+Tag fields with `version`, `created`, or `updated`:
+
+```go
+type Product struct {
+	lorm.UnimplementedTable
+	ID        int64     `lorm:"id,primary_key,auto_increment"`
+	Stock     int       `lorm:"stock"`
+	Version   int64     `lorm:"version"`            // Automatically checked & incremented on update
+	CreatedAt time.Time `lorm:"created_at,created"` // Automatically populated on insert
+	UpdatedAt time.Time `lorm:"updated_at,updated"` // Automatically refreshed on update
+}
+```
+
+### 5. Custom Types & Transparent JSON Serialization
+
+Store complex structs or custom types effortlessly:
+
+```go
+type Profile struct {
+	Avatar string   `json:"avatar"`
+	Tags   []string `json:"tags"`
+}
+
+type Account struct {
+	lorm.UnimplementedTable
+	ID      int64   `lorm:"id,primary_key,auto_increment"`
+	Profile Profile `lorm:"profile,json"` // Automatically marshaled / unmarshaled as JSON
+}
+```
+
+For domain types requiring custom DB representations, simply implement standard `sql.Scanner` and `driver.Valuer` (`lorm.ScannerValuer`).
+
+### 6. Safety Guards Against Accidental Full-Table Writes
+
+To protect against catastrophic accidental table wipes, `Update.Exec` and `Delete.Exec` reject queries lacking a restrictive `WHERE` clause:
+
+```go
+// ❌ Returns an error: update statement missing WHERE condition
+_, err := engine.Update[*User]().Set("status", "inactive").Exec(ctx)
+
+// ✅ Explicitly allow global operation when truly intended
+_, err := engine.Update[*User]().
+	Set("status", "inactive").
+	AllowGlobalWrite().
+	Exec(ctx)
+```
+
+---
+
+## 📊 Benchmark Snapshot
+
+Tested with Go 1.27 on `darwin/arm64` (Apple M1 Pro), comparing **LORM**, **GORM**, **XORM**, and **Ent** on identical schemas across SQLite, MySQL, and PostgreSQL.
+
+| Metric (Single Row & Batch) | LORM vs GORM | LORM vs XORM | LORM vs Ent |
+| :--- | :--- | :--- | :--- |
+| **Execution Latency (`ns/op`)** | Up to **35% faster** | Up to **58% faster** | **Consistently lowest** or top-tier |
+| **Memory Allocation (`B/op`)** | Up to **73% less memory** | Up to **74% less memory** | Up to **50% less memory** |
+| **Allocation Count (`allocs/op`)** | Up to **45% fewer allocs** | Up to **87% fewer allocs** | Up to **50% fewer allocs** |
+
+> 📖 See the [Complete Benchmark Report & Methodology](benchmarks/orm-crud/README.md) for full metrics and reproduction instructions.
+
+---
+
+## 📚 Documentation
+
+- 📖 **[Comprehensive Usage Guide](docs/usage.md)**: Deep dive into model definitions, query builders, transactions, repositories, custom converters, and `lormgen` options.
+- 💡 **[Runnable Examples](example/README.md)**: 9 self-contained, executable examples covering everything from quickstart to pagination and custom projections.
+- 📑 **[Go Reference API](https://pkg.go.dev/github.com/yvvlee/lorm)**: Standard package documentation.
+- 📊 **[Performance Benchmarks](benchmarks/orm-crud/README.md)**: Multi-database benchmarking methodology and detailed comparisons.
+
+---
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are warmly welcome!
+Feel free to check our [issues page](https://github.com/yvvlee/lorm/issues) to submit feedback or open a pull request.
+
+---
+
+## 📄 License
+
+LORM is released under the [MIT License](LICENSE).
