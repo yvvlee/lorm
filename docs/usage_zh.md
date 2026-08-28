@@ -18,6 +18,7 @@
   - [查询数据 (Query)](#查询数据-query)
   - [更新数据 (Update)](#更新数据-update)
   - [删除数据 (Delete)](#删除数据-delete)
+  - [原生 SQL 读写](#原生-sql-读写)
   - [防全表写安全哨兵](#防全表写安全哨兵)
 - [7. 强类型 SQL 构建器](#7-强类型-sql-构建器)
 - [8. 分页与单列查询](#8-分页与单列查询)
@@ -355,6 +356,130 @@ rowsAffected, err := engine.Delete[*User]().
 
 ---
 
+### 原生 SQL 读写
+
+需要执行模型构建器无法表达的 SQL 时，使用 `Engine.SQL` 读取行，使用 `Engine.Exec` 执行写入。两者都会复用 `ctx` 中已有的事务。
+
+#### 读取数据 (`Engine.SQL`)
+
+`Engine.SQL` 返回标准库的 `*sql.Rows`。调用后必须关闭结果集，并检查迭代错误：
+
+```go
+rows, err := engine.SQL(ctx, `
+	SELECT id, name, email
+	FROM users
+	WHERE status = ?
+	ORDER BY id
+`, "active")
+if err != nil {
+	return err
+}
+defer rows.Close()
+
+var users []User
+for rows.Next() {
+	var user User
+	if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+		return err
+	}
+	users = append(users, user)
+}
+if err := rows.Err(); err != nil {
+	return err
+}
+```
+
+#### 使用 LORM 扫描助手
+
+对于已通过 `lormgen` 生成字段映射的模型，可以使用 `ScanModel` 和 `ScanModels` 按列名扫描。单列结果可以使用 `ScanCol` 和 `ScanCols`；这两个方法要求 SQL 结果严格只有一列。
+
+```go
+// ScanModel：读取第一行到模型。
+rows, err := engine.SQL(ctx,
+	"SELECT id, name, email FROM users WHERE id = ?", 42,
+)
+if err != nil {
+	return err
+}
+defer rows.Close()
+
+var user User
+if err := lorm.ScanModel(rows, &user); err != nil {
+	return err
+}
+```
+
+```go
+// ScanModels：读取全部行到模型切片。
+rows, err := engine.SQL(ctx,
+	"SELECT id, name, email FROM users WHERE status = ?", "active",
+)
+if err != nil {
+	return err
+}
+defer rows.Close()
+
+var users []*User
+if err := lorm.ScanModels(rows, &users); err != nil {
+	return err
+}
+```
+
+```go
+// ScanCol：读取第一行的单列值。
+rows, err := engine.SQL(ctx,
+	"SELECT COUNT(1) FROM users WHERE status = ?", "active",
+)
+if err != nil {
+	return err
+}
+defer rows.Close()
+
+var count int64
+if err := lorm.ScanCol(rows, &count); err != nil {
+	return err
+}
+```
+
+```go
+// ScanCols：读取全部行的单列值。
+rows, err := engine.SQL(ctx,
+	"SELECT id FROM users WHERE status = ? ORDER BY id", "active",
+)
+if err != nil {
+	return err
+}
+defer rows.Close()
+
+var ids []int64
+if err := lorm.ScanCols(rows, &ids); err != nil {
+	return err
+}
+```
+
+#### 写入数据 (`Engine.Exec`)
+
+`Engine.Exec` 返回标准库的 `sql.Result`，可据此获取受影响行数：
+
+```go
+result, err := engine.Exec(ctx,
+	"UPDATE users SET status = ? WHERE id = ?",
+	"inactive", 42,
+)
+if err != nil {
+	return err
+}
+
+rowsAffected, err := result.RowsAffected()
+if err != nil {
+	return err
+}
+```
+
+> **注意**：原生 SQL 会原样交给数据库驱动执行。请使用参数绑定，不要拼接用户输入；占位符必须匹配所用驱动，例如 MySQL 和 SQLite 使用 `?`，PostgreSQL 使用 `$1`、`$2`。原生写入不受 `Update.Exec` 与 `Delete.Exec` 的全表写保护约束。
+
+---
+
 ### 防全表写安全哨兵
 
 为防止因代码疏漏执行了无条件的全局更新或删除，`Update.Exec` 与 `Delete.Exec` 会进行静态审查，拦截缺少有效 `WHERE` 条件的调用：
@@ -369,10 +494,6 @@ _, err := engine.Update[*User]().
 	AllowGlobalWrite().
 	Exec(ctx)
 ```
-
-> **注意**：通过 `Engine.Exec` 执行的原始 SQL 字符串不受此检查约束。
-
----
 
 ## 7. 强类型 SQL 构建器
 
@@ -714,4 +835,3 @@ func (s *StringSlice) Scan(src any) error {
    adminQuery := baseQuery.Clone().Where(builder.Eq{u.LormCols().Role(): "admin"})
    ```
 4. **统一使用强类型列名**：优先使用 `u.LormCols().FieldName()`，杜绝魔法字符串，保障重构安全性。
-
