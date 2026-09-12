@@ -3,8 +3,6 @@
 package testdata
 
 import (
-	json "github.com/bytedance/sonic"
-
 	"github.com/yvvlee/lorm"
 )
 
@@ -203,7 +201,7 @@ const _lorm_file_testdata_user_42feee12_raw = `{"Path":"testdata/user.go","LormI
 
 var _lorm_file_testdata_user_42feee12_model_descriptor_map = func() map[string]*lorm.ModelDescriptor {
 	var file lorm.FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_testdata_user_42feee12_raw, &file)
+	_ = lorm.JSONUnmarshal([]byte(_lorm_file_testdata_user_42feee12_raw), &file)
 	m := make(map[string]*lorm.ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

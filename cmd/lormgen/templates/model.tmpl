@@ -3,7 +3,6 @@
 package {{.Package}}
 
 import (
-    json "github.com/bytedance/sonic"
 {{range .Imports}}
     {{.Alias}} {{.Path}}
 {{end}}
@@ -425,7 +424,7 @@ const {{.RawVarPrefix}}_raw = `{{.JsonMarshal}}`
 {{/* Build one shared descriptor map per generated file so model methods can return metadata without reparsing JSON. */}}
 var {{.RawVarPrefix}}_model_descriptor_map = func() map[string]*{{$.LormImportAlias}}.ModelDescriptor {
     var file {{$.LormImportAlias}}.FileDescriptor
-    _ = json.UnmarshalString({{.RawVarPrefix}}_raw ,&file)
+    _ = {{$.LormImportAlias}}.JSONUnmarshal([]byte({{.RawVarPrefix}}_raw) ,&file)
     m := make(map[string]*{{$.LormImportAlias}}.ModelDescriptor,len(file.Structs))
     for _,s := range file.Structs {
         m[s.Name] = s

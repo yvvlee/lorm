@@ -2,13 +2,13 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"go/ast"
 	"go/types"
 	"os"
 	"path/filepath"
 	"testing"
 
-	json "github.com/bytedance/sonic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
@@ -39,7 +39,8 @@ func Test_Generate(t *testing.T) {
 	userFile := findSyntaxFile(t, generator, pkg, "user.go")
 	fileInfo, err := generator.extractFile(pkg, userFile)
 	require.NoError(t, err)
-	fileInfoJson, err := json.MarshalString(fileInfo)
+	fileInfoBytes, err := json.Marshal(fileInfo)
+	fileInfoJson := string(fileInfoBytes)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
 	exceptFileInfoJson, err := testdata.ReadFile("testdata/user_file_descriptor.json")
@@ -57,7 +58,8 @@ func Test_Generate(t *testing.T) {
 	userAddressFile := findSyntaxFile(t, generator, pkg, "user_address.go")
 	fileInfo, err = generator.extractFile(pkg, userAddressFile)
 	require.NoError(t, err)
-	fileInfoJson, err = json.MarshalString(fileInfo)
+	fileInfoBytes, err = json.Marshal(fileInfo)
+	fileInfoJson = string(fileInfoBytes)
 	assert.Nil(t, err)
 	assert.NotNil(t, fileInfo)
 	exceptFileInfoJson, err = testdata.ReadFile("testdata/user_address_file_descriptor.json")

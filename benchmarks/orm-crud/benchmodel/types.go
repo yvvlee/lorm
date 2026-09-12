@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+
+	"github.com/yvvlee/lorm"
 )
 
 type StringMap map[string]string
@@ -58,7 +60,7 @@ func (c *ContactList) Scan(src any) error {
 }
 
 func marshalJSON(v any) (driver.Value, error) {
-	data, err := json.Marshal(v)
+	data, err := lorm.JSONMarshal(v)
 	if err != nil {
 		return nil, err
 	}

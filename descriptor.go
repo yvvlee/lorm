@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unicode"
 
-	json "github.com/bytedance/sonic"
 	"github.com/samber/lo"
 )
 
@@ -16,6 +15,12 @@ type FieldFlag uint8
 // HasFlag reports whether f includes flag.
 func (f FieldFlag) HasFlag(flag FieldFlag) bool {
 	return f&flag == flag
+}
+
+// JsonMarshal returns d encoded as JSON.
+func (d *FileDescriptor) JsonMarshal() string {
+	b, _ := JSONMarshal(d)
+	return string(b)
 }
 
 // Field flag bits stored in FieldDescriptor.Flag.
@@ -61,12 +66,6 @@ func (d *FileDescriptor) RawVarPrefix() string {
 	}
 	digest := sha256.Sum256([]byte(d.Path))
 	return fmt.Sprintf("_lorm_file_%s_%x", normalized.String(), digest[:4])
-}
-
-// JsonMarshal returns d encoded as JSON.
-func (d *FileDescriptor) JsonMarshal() string {
-	s, _ := json.MarshalString(d)
-	return s
 }
 
 // Import describes an imported package reference.

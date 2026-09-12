@@ -3,10 +3,20 @@ package lorm
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
+)
 
-	json "github.com/bytedance/sonic"
+var (
+	// JSONMarshal encodes a value for JSON fields. It defaults to encoding/json.Marshal
+	// and may be replaced by a compatible implementation (for example sonic.Marshal)
+	// during application initialization when higher throughput is required.
+	JSONMarshal   = json.Marshal
+	// JSONUnmarshal decodes a value for JSON fields. It defaults to encoding/json.Unmarshal
+	// and may be replaced by a compatible implementation (for example sonic.Unmarshal)
+	// during application initialization when higher throughput is required.
+	JSONUnmarshal = json.Unmarshal
 )
 
 // Table is a model that also exposes a database table name.
@@ -84,7 +94,7 @@ func (s *JSONFieldWrapper[T]) Value() (driver.Value, error) {
 	if v, ok := any(s.target).(driver.Valuer); ok {
 		return v.Value()
 	}
-	return json.Marshal(s.target)
+	return JSONMarshal(s.target)
 }
 
 // String returns the JSON encoding of the wrapped value.
@@ -92,13 +102,13 @@ func (s *JSONFieldWrapper[T]) String() string {
 	if s.target == nil {
 		return ""
 	}
-	str, _ := json.MarshalString(s.target)
-	return str
+	b, _ := JSONMarshal(s.target)
+	return string(b)
 }
 
 // MarshalJSON returns the wrapped value encoded as JSON.
 func (s *JSONFieldWrapper[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.target)
+	return JSONMarshal(s.target)
 }
 
 // UnmarshalJSON decodes JSON into the wrapped value.
@@ -106,7 +116,7 @@ func (s *JSONFieldWrapper[T]) UnmarshalJSON(data []byte) error {
 	if s.target == nil {
 		return errors.New("lorm: JSON scan target is nil")
 	}
-	return json.Unmarshal(data, s.target)
+	return JSONUnmarshal(data, s.target)
 }
 
 // Scan implements sql.Scanner for JSON-encoded columns.
@@ -135,9 +145,9 @@ func (s *JSONFieldWrapper[T]) Scan(src any) error {
 	// Fall back to JSON decoding for drivers that return raw strings or bytes.
 	switch v := src.(type) {
 	case []byte:
-		return json.Unmarshal(v, s.target)
+		return JSONUnmarshal(v, s.target)
 	case string:
-		return json.Unmarshal([]byte(v), s.target)
+		return JSONUnmarshal([]byte(v), s.target)
 	}
 	return fmt.Errorf("cannot unmarshal %v into %T", src, s.target)
 }

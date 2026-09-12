@@ -786,6 +786,24 @@ type Customer struct {
 }
 ```
 
+JSON fields use the standard library `encoding/json` by default. Applications that
+need higher JSON throughput can replace the compatible hooks once during startup:
+
+```go
+import (
+	"github.com/bytedance/sonic"
+	"github.com/yvvlee/lorm"
+)
+
+func init() {
+	lorm.JSONMarshal = sonic.Marshal
+	lorm.JSONUnmarshal = sonic.Unmarshal
+}
+```
+
+Configure these hooks before concurrent access begins; changing them at runtime can
+cause a data race.
+
 ### Custom Type Converters via `ScannerValuer`
 
 For custom data formats, implement standard Go `driver.Valuer` and `sql.Scanner` interfaces on your type:

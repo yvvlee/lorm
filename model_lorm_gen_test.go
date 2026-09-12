@@ -3,7 +3,7 @@
 package lorm
 
 import (
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 )
 
 func (m *Test) TableName() string {
@@ -314,7 +314,7 @@ const _lorm_file_test_model_raw = `{"Path":"test/model.go","LormImportAlias":"lo
 
 var _lorm_file_test_model_model_descriptor_map = func() map[string]*ModelDescriptor {
 	var file FileDescriptor
-	_ = json.UnmarshalString(_lorm_file_test_model_raw, &file)
+	_ = json.Unmarshal([]byte(_lorm_file_test_model_raw), &file)
 	m := make(map[string]*ModelDescriptor, len(file.Structs))
 	for _, s := range file.Structs {
 		m[s.Name] = s

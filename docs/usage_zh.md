@@ -786,6 +786,23 @@ type Customer struct {
 }
 ```
 
+默认使用标准库 `encoding/json`。如果应用对 JSON 字段的吞吐量敏感，可以在创建
+`Engine` 或并发访问开始前，将两个函数变量替换为兼容实现（例如 Sonic）：
+
+```go
+import (
+	"github.com/bytedance/sonic"
+	"github.com/yvvlee/lorm"
+)
+
+func init() {
+	lorm.JSONMarshal = sonic.Marshal
+	lorm.JSONUnmarshal = sonic.Unmarshal
+}
+```
+
+替换应在程序初始化阶段一次性完成，避免运行期间修改函数变量造成数据竞争。
+
 ### 自定义类型转换 (`ScannerValuer`)
 
 若字段需特殊自定义编解码，只需让类型实现标准库 `driver.Valuer` 与 `sql.Scanner` 接口：

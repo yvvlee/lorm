@@ -21,7 +21,7 @@ func TestFileDescriptorHelpers(t *testing.T) {
 		(&FileDescriptor{Path: "feature_v2/model.go"}).RawVarPrefix(),
 	)
 
-	s := d.JsonMarshal()
+	s, _ := JSONMarshal(d)
 	assert.NotEmpty(t, s)
 }
 
