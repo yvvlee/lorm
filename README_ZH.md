@@ -8,7 +8,7 @@
   <a href="https://pkg.go.dev/github.com/yvvlee/lorm"><img src="https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg" alt="Go Reference"></a>
   <a href="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml"><img src="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg" alt="Build Status"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27-007D9C?logo=go" alt="Go Version">
+  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27.1-007D9C?logo=go" alt="Go Version">
 </p>
 
 <p align="center">
@@ -88,7 +88,7 @@
 
 ## 📦 安装
 
-LORM 需要 **Go 1.27** 或更高版本。
+LORM 需要 **Go 1.27.1** 或更高版本。
 
 ```bash
 # 安装 LORM 核心库
@@ -213,7 +213,7 @@ cols := u.LormCols()
 // 强类型 WHERE 与 ORDER BY
 users, err := engine.Query[*User]().
 	Where(builder.Eq{cols.Email(): "alice@example.com"}).
-	OrderBy(cols.CreatedAt() + " DESC").
+	Desc(cols.CreatedAt()).
 	Find(ctx)
 
 // 表别名支持（例如 users AS u）

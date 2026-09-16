@@ -68,6 +68,15 @@ func (s *UpdateStmt[T]) Clone() *UpdateStmt[T] {
 	}
 }
 
+// ToSql returns the query and arguments using the engine's placeholder format.
+// It does not execute or reset the statement. Exec still checks write guards.
+func (s *UpdateStmt[T]) ToSql() (string, []any, error) {
+	if s.err != nil {
+		return "", nil, s.err
+	}
+	return statementSQL(s.engine, s.builder)
+}
+
 // Exec executes the built UPDATE statement.
 func (s *UpdateStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	defer s.reset()
@@ -223,6 +232,24 @@ func (s *UpdateStmt[T]) ID(id any) *UpdateStmt[T] {
 // OrderBy adds ORDER BY expressions to the query.
 func (s *UpdateStmt[T]) OrderBy(orderBys ...string) *UpdateStmt[T] {
 	s.builder.OrderBy(orderBys...)
+	return s
+}
+
+// Asc appends columns in ascending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *UpdateStmt[T]) Asc(columns ...string) *UpdateStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " ASC")
+	}
+	return s
+}
+
+// Desc appends columns in descending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *UpdateStmt[T]) Desc(columns ...string) *UpdateStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " DESC")
+	}
 	return s
 }
 

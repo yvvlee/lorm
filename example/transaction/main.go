@@ -100,7 +100,7 @@ func transfer(ctx context.Context, engine *lorm.Engine, fromID, toID, amount int
 func printAccounts(ctx context.Context, engine *lorm.Engine) {
 	var a Account
 	accounts, err := engine.Query[*Account]().
-		OrderBy(a.LormCols().ID() + " ASC").
+		Asc(a.LormCols().ID()).
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)

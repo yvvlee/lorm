@@ -49,7 +49,7 @@ func TestCustomModelFlow(t *testing.T) {
 		).
 		From(user.TableName() + " AS u").
 		InnerJoin(role.TableName() + " AS r ON " + u.RoleID() + " = " + r.ID()).
-		OrderBy(u.ID() + " ASC").
+		Asc(u.ID()).
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, rows, 2)

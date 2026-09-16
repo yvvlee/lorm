@@ -1,6 +1,6 @@
 module github.com/yvvlee/lorm/example
 
-go 1.27
+go 1.27.1
 
 tool github.com/yvvlee/lorm/cmd/lormgen
 

@@ -43,7 +43,7 @@ func invalid(engine *lorm.Engine) {
 	for name, source := range tests {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			goMod := "module compilecheck\n\ngo 1.27\n\nrequire github.com/yvvlee/lorm v0.0.0\n\nreplace github.com/yvvlee/lorm => " + filepath.ToSlash(root) + "\n"
+			goMod := "module compilecheck\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\n\nreplace github.com/yvvlee/lorm => " + filepath.ToSlash(root) + "\n"
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o600))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "query_test.go"), []byte(source), 0o600))
 

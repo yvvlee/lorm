@@ -108,6 +108,33 @@ func (s *SelectStmt[T]) ensureSelectColumns() (bool, error) {
 	return true, nil
 }
 
+// ToSql returns the query and arguments using the engine's placeholder format.
+// It does not execute or reset the statement, or change its projection.
+func (s *SelectStmt[T]) ToSql() (string, []any, error) {
+	if s.err != nil {
+		return "", nil, s.err
+	}
+	clone := s.Clone()
+	if _, err := clone.ensureSelectColumns(); err != nil {
+		return "", nil, err
+	}
+	return statementSQL(s.engine, clone.builder)
+}
+
+// Count returns the total number of results, ignoring ordering, limit, and offset.
+// DISTINCT and GROUP BY count their result rows. Like other terminal methods,
+// Count resets the statement on both success and failure.
+func (s *SelectStmt[T]) Count(ctx context.Context) (uint64, error) {
+	defer s.reset()
+	if s.err != nil {
+		return 0, s.err
+	}
+	if _, err := s.ensureSelectColumns(); err != nil {
+		return 0, err
+	}
+	return querySelectCount(ctx, s.engine, s.builder)
+}
+
 // Get returns the first matching value and whether a row was found.
 func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	var t T
@@ -511,6 +538,24 @@ func (s *SelectStmt[T]) OrderByClause(pred any, args ...any) *SelectStmt[T] {
 // OrderBy adds ORDER BY expressions to the query.
 func (s *SelectStmt[T]) OrderBy(orderBys ...string) *SelectStmt[T] {
 	s.builder.OrderBy(orderBys...)
+	return s
+}
+
+// Asc appends columns in ascending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *SelectStmt[T]) Asc(columns ...string) *SelectStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " ASC")
+	}
+	return s
+}
+
+// Desc appends columns in descending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *SelectStmt[T]) Desc(columns ...string) *SelectStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " DESC")
+	}
 	return s
 }
 

@@ -54,7 +54,7 @@ func main() {
 	}
 
 	users, err := engine.Query[*User]().
-		OrderBy(u.LormCols().ID() + " ASC").
+		Asc(u.LormCols().ID()).
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -70,7 +70,7 @@ func main() {
 	}
 
 	remaining, err := engine.Query[*User]().
-		OrderBy(u.LormCols().ID() + " ASC").
+		Asc(u.LormCols().ID()).
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)

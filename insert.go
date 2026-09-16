@@ -38,7 +38,7 @@ type InsertStmt[T Table] struct {
 
 func (s *InsertStmt[T]) reset() {
 	s.builder = newInsertBuilder[T](s.engine)
-	s.models = s.models[:0]
+	s.models = nil
 	s.err = nil
 	s.requireIDBackfill = false
 }
@@ -115,6 +115,9 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 		if err := validateInsertPlan(plans[i], i); err != nil {
 			return 0, err
 		}
+		if i > 0 && !sameInsertShape(plans[0], plans[i]) {
+			return 0, fmt.Errorf("lorm: insert plan at index %d has a different column shape", i)
+		}
 	}
 
 	if len(plans) > 1 && s.requireIDBackfill {
@@ -126,7 +129,7 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	if len(plans) == 1 {
 		return s.execPlans(ctx, s.builder, s.models, plans, plans[0].AutoIncrementZero)
 	}
-	return s.execBatch(ctx, plans)
+	return s.execPlans(ctx, s.builder, s.models, plans, false)
 }
 
 func validateInsertPlan(plan InsertPlan, index int) error {
@@ -167,45 +170,6 @@ func sameInsertColumns(left, right []string) bool {
 		return true
 	}
 	return slices.Equal(left, right)
-}
-
-func (s *InsertStmt[T]) execBatch(ctx context.Context, plans []InsertPlan) (rowsAffected int64, err error) {
-	firstGroupEnd := len(plans)
-	for i := 1; i < len(plans); i++ {
-		if !sameInsertShape(plans[0], plans[i]) {
-			firstGroupEnd = i
-			break
-		}
-	}
-	if firstGroupEnd == len(plans) {
-		return s.execPlans(ctx, s.builder, s.models, plans, false)
-	}
-
-	err = s.engine.TX(ctx, func(txCtx context.Context) error {
-		for start := 0; start < len(plans); {
-			end := start + 1
-			for end < len(plans) && sameInsertShape(plans[start], plans[end]) {
-				end++
-			}
-			rows, execErr := s.execPlans(
-				txCtx,
-				s.builder.Clone(),
-				s.models[start:end],
-				plans[start:end],
-				false,
-			)
-			if execErr != nil {
-				return execErr
-			}
-			rowsAffected += rows
-			start = end
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return rowsAffected, nil
 }
 
 func (s *InsertStmt[T]) execOneByOne(ctx context.Context, plans []InsertPlan) (rowsAffected int64, err error) {

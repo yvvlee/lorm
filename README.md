@@ -8,7 +8,7 @@
   <a href="https://pkg.go.dev/github.com/yvvlee/lorm"><img src="https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg" alt="Go Reference"></a>
   <a href="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml"><img src="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg" alt="Build Status"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27-007D9C?logo=go" alt="Go Version">
+  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27.1-007D9C?logo=go" alt="Go Version">
 </p>
 
 <p align="center">
@@ -88,7 +88,7 @@ Traditional Go ORMs often trade performance and control for convenience—introd
 
 ## 📦 Installation
 
-LORM requires **Go 1.27** or later.
+LORM requires **Go 1.27.1** or later.
 
 ```bash
 # Install the core library
@@ -213,7 +213,7 @@ cols := u.LormCols()
 // Type-safe WHERE and ORDER BY
 users, err := engine.Query[*User]().
 	Where(builder.Eq{cols.Email(): "alice@example.com"}).
-	OrderBy(cols.CreatedAt() + " DESC").
+	Desc(cols.CreatedAt()).
 	Find(ctx)
 
 // With table aliases (e.g. `users AS u`)

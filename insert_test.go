@@ -174,7 +174,7 @@ func TestInsertAutoPrimaryKeyColumnPolicy(t *testing.T) {
 		assert.Equal(t, []any{int64(42), "explicit"}, call.args)
 	})
 
-	t.Run("mixedBatchPreservesInputGroups", func(t *testing.T) {
+	t.Run("mixedBatchFailsBeforeWriting", func(t *testing.T) {
 		recorder := newCaptureSQLRecorder()
 		engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 		models := []*reservedWordModel{
@@ -184,21 +184,20 @@ func TestInsertAutoPrimaryKeyColumnPolicy(t *testing.T) {
 			{Group: "generated-last"},
 		}
 
-		_, err := engine.Insert[*reservedWordModel]().AddModels(models...).Exec(context.Background())
-		require.NoError(t, err)
-		assert.Len(t, recorder.BeginTxCalls(), 1)
-		calls := recorder.Calls()
-		require.Len(t, calls, 3)
-		assert.Equal(t, "INSERT INTO `order` (`group`) VALUES (?)", calls[0].query)
-		assert.Equal(t, "INSERT INTO `order` (`id`,`group`) VALUES (?,?),(?,?)", calls[1].query)
-		assert.Equal(t, "INSERT INTO `order` (`group`) VALUES (?)", calls[2].query)
+		stmt := engine.Insert[*reservedWordModel]().AddModels(models...)
+		rows, err := stmt.Exec(context.Background())
+		require.ErrorContains(t, err, "index 1 has a different column shape")
+		assert.Zero(t, rows)
+		assert.Empty(t, recorder.BeginTxCalls())
+		assert.Empty(t, recorder.Calls())
+		assert.Nil(t, stmt.models)
 		assert.Zero(t, models[0].ID)
 		assert.EqualValues(t, 42, models[1].ID)
 		assert.EqualValues(t, 43, models[2].ID)
 		assert.Zero(t, models[3].ID)
 	})
 
-	t.Run("requiredBackfillHandlesMixedIDsOneByOne", func(t *testing.T) {
+	t.Run("requiredBackfillRejectsMixedIDs", func(t *testing.T) {
 		recorder := newCaptureSQLRecorder()
 		engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
 		models := []*reservedWordModel{
@@ -211,11 +210,56 @@ func TestInsertAutoPrimaryKeyColumnPolicy(t *testing.T) {
 			RequireIDBackfill().
 			AddModels(models...).
 			Exec(context.Background())
-		require.NoError(t, err)
-		assert.EqualValues(t, 3, rows)
-		assert.Len(t, recorder.Calls(), 3)
-		assert.NotZero(t, models[0].ID)
+		require.ErrorContains(t, err, "index 1 has a different column shape")
+		assert.Zero(t, rows)
+		assert.Empty(t, recorder.BeginTxCalls())
+		assert.Empty(t, recorder.Calls())
+		assert.Zero(t, models[0].ID)
 		assert.EqualValues(t, 42, models[1].ID)
-		assert.NotZero(t, models[2].ID)
+		assert.Zero(t, models[2].ID)
 	})
+}
+
+func TestInsertResetReleasesModelsWithoutChangingCallerSlice(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	first, second := &reservedWordModel{Group: "first"}, &reservedWordModel{Group: "second"}
+	models := []*reservedWordModel{first, second}
+	stmt := engine.Insert[*reservedWordModel]().AddModels(models...)
+	_, err := stmt.Exec(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, stmt.models)
+	assert.Same(t, first, models[0])
+	assert.Same(t, second, models[1])
+}
+
+type customInsertColumnsModel struct {
+	reservedWordModel
+	columns []string
+}
+
+func (*customInsertColumnsModel) TableName() string { return "order" }
+
+func (m *customInsertColumnsModel) LormBeforeInsert(HookTime) InsertPlan {
+	return InsertPlan{Columns: m.columns, Values: make([]any, len(m.columns))}
+}
+
+func TestInsertRejectsDifferentCustomColumns(t *testing.T) {
+	for _, columns := range [][]string{{"a"}, {"a", "c"}, {"b", "a"}} {
+		for _, backfill := range []bool{false, true} {
+			recorder := newCaptureSQLRecorder()
+			engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+			stmt := engine.Insert[*customInsertColumnsModel]().AddModels(
+				&customInsertColumnsModel{columns: []string{"a", "b"}},
+				&customInsertColumnsModel{columns: columns},
+			)
+			if backfill {
+				stmt.RequireIDBackfill()
+			}
+			_, err := stmt.Exec(context.Background())
+			require.ErrorContains(t, err, "index 1 has a different column shape")
+			assert.Empty(t, recorder.Calls())
+			assert.Empty(t, recorder.BeginTxCalls())
+		}
+	}
 }

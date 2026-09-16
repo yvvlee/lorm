@@ -45,6 +45,15 @@ func (s *DeleteStmt[T]) Clone() *DeleteStmt[T] {
 	}
 }
 
+// ToSql returns the query and arguments using the engine's placeholder format.
+// It does not execute or reset the statement. Exec still checks write guards.
+func (s *DeleteStmt[T]) ToSql() (string, []any, error) {
+	if s.err != nil {
+		return "", nil, s.err
+	}
+	return statementSQL(s.engine, s.builder)
+}
+
 // Exec executes the built DELETE statement.
 func (s *DeleteStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error) {
 	defer s.reset()
@@ -118,6 +127,24 @@ func (s *DeleteStmt[T]) AllowGlobalWrite() *DeleteStmt[T] {
 // OrderBy adds ORDER BY expressions to the query.
 func (s *DeleteStmt[T]) OrderBy(orderBys ...string) *DeleteStmt[T] {
 	s.builder.OrderBy(orderBys...)
+	return s
+}
+
+// Asc appends columns in ascending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *DeleteStmt[T]) Asc(columns ...string) *DeleteStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " ASC")
+	}
+	return s
+}
+
+// Desc appends columns in descending order, quoting each column identifier.
+// Columns must be names, not SQL expressions. Use OrderBy for expressions.
+func (s *DeleteStmt[T]) Desc(columns ...string) *DeleteStmt[T] {
+	for _, column := range columns {
+		s.builder.OrderBy(s.engine.Escaper().Escape(column) + " DESC")
+	}
 	return s
 }
 

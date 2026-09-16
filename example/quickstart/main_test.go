@@ -43,7 +43,7 @@ func TestQuickstartFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	users, err := engine.Query[*User]().
-		OrderBy(u.LormCols().ID() + " ASC").
+		Asc(u.LormCols().ID()).
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, users, 2)
@@ -53,7 +53,7 @@ func TestQuickstartFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	remaining, err := engine.Query[*User]().
-		OrderBy(u.LormCols().ID() + " ASC").
+		Asc(u.LormCols().ID()).
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, remaining, 1)

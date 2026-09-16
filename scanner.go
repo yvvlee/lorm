@@ -22,14 +22,15 @@ func scanModelValues[T Model](rows *sql.Rows) ([]T, error) {
 	}
 	var res []T
 	var model T
+	values := make([]any, len(columns))
+	var ignored any
 	for rows.Next() {
 		item := model.New()
-		values := make([]any, len(columns))
 		for i, column := range columns {
 			field := item.LormFieldPtr(column)
 			if field == nil {
 				// Keep scanning aligned even when the model does not expose this column.
-				values[i] = new(any)
+				values[i] = &ignored
 				continue
 			}
 			values[i] = field
@@ -37,6 +38,7 @@ func scanModelValues[T Model](rows *sql.Rows) ([]T, error) {
 		if err = rows.Scan(values...); err != nil {
 			return nil, err
 		}
+		ignored = nil
 		typed, ok := item.(T)
 		if !ok {
 			return nil, fmt.Errorf("lorm: Model.New returned %T, want %T", item, model)

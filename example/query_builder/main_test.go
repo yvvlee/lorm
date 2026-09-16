@@ -39,7 +39,7 @@ func TestQueryBuilderFlow(t *testing.T) {
 			},
 			builder.Eq{p.LormCols().Status(): "active"},
 		}).
-		OrderBy(p.LormCols().Price() + " ASC").
+		Asc(p.LormCols().Price()).
 		Find(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, filtered, 2)

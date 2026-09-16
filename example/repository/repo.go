@@ -21,6 +21,6 @@ func (r *UserRepository) ListAdults(ctx context.Context, minAge int) ([]*User, e
 	var u User
 	return r.Engine.Query[*User]().
 		Where(builder.Gte(u.LormCols().Age(), minAge)).
-		OrderBy(u.LormCols().ID() + " ASC").
+		Asc(u.LormCols().ID()).
 		Find(ctx)
 }

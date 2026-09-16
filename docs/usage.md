@@ -45,7 +45,7 @@ LORM is engineered around five fundamental principles:
 ## 2. Installation & Toolchain
 
 ### Requirements
-- **Go 1.27** or higher.
+- **Go 1.27.1** or higher.
 
 ### Installing Dependencies and CLI Tool
 
@@ -259,11 +259,32 @@ _, err := engine.Insert[*User]().
 > **Note on Primary Keys**:
 > - If an `auto_increment` primary key is zero (`0`), LORM omits it from the `INSERT` column list so the database generates it.
 > - If it is non-zero, LORM writes the explicit value.
-> - Mixed batches with both zero and non-zero IDs are automatically grouped into contiguous sub-batches inside a single transaction.
+> - Every model in a batch must produce the same columns in the same order and the same auto-increment policy. A mismatch returns an error before any SQL is executed, including with `RequireIDBackfill()`. Insert models with zero and non-zero auto-increment IDs in separate calls.
 
 ---
 
 ### Query
+
+#### Count results (`Count`)
+
+```go
+total, err := engine.Query[*User]().
+	Where(builder.Eq{"status": "active"}).
+	Count(ctx)
+```
+
+`Count(ctx)` returns `(uint64, error)`. It ignores ordering, limit, and offset, while preserving filtering, `DISTINCT`, grouping, and `HAVING`. Grouped queries count groups, not their input rows. This is a terminal method: the statement resets after success or failure. `Page` continues to query the total before fetching the requested page.
+
+#### Preview SQL (`ToSql`)
+
+```go
+stmt := engine.Query[*User]().Where(builder.Eq{"id": 42})
+query, args, err := stmt.ToSql()
+```
+
+`ToSql()` is available on select, update, and delete statements. It returns SQL and bound arguments separately, with the engine's placeholder format applied. It does not execute, reset, or change the statement. Update/delete write guards are still checked by `Exec`. Insert preview is not provided because preparing insert models can run mutating hooks and ID backfill can require multiple statements.
+
+For raw SQL, positional placeholder conversion treats `?` as a parameter without parsing SQL quotes or comments. In formats such as PostgreSQL's `$1`, write `??` for a literal question mark. Question-mark dialects leave SQL unchanged. Engine calls with no arguments skip conversion. Prefer binding string values as arguments instead of putting literal question marks in SQL strings.
 
 #### Querying a Single Row (`Get`)
 `Get` returns `(model T, found bool, err error)`. The second boolean indicates whether a matching row was found:
@@ -290,7 +311,7 @@ c := u.LormCols()
 
 users, err := engine.Query[*User]().
 	Where(builder.Gte(c.Age(), 18)).
-	OrderBy(c.CreatedAt() + " DESC").
+	Desc(c.CreatedAt()).
 	Limit(20).
 	Find(ctx)
 ```
@@ -546,7 +567,7 @@ ids, err := engine.Query[*User]().
 	Select(c.ID()).
 	From("users AS u").
 	Where(builder.Like(c.Email(), "%@example.com")).
-	OrderBy(c.ID() + " DESC").
+	Desc(c.ID()).
 	FindCols[int64](ctx)
 ```
 
@@ -562,7 +583,7 @@ ids, err := engine.Query[*User]().
 var u User
 users, total, err := engine.Query[*User]().
 	Where(builder.Eq{u.LormCols().Status(): "active"}).
-	OrderBy(u.LormCols().ID() + " DESC").
+	Desc(u.LormCols().ID()).
 	Page(ctx, 1, 20) // Page 1, 20 items per page
 
 if err != nil {
@@ -572,6 +593,8 @@ log.Printf("Found %d users (Total: %d)", len(users), total)
 ```
 
 ### Single-Column Queries (`GetCol`, `FindCols`, `PageCols`)
+
+Use `Asc(columns ...string)` and `Desc(columns ...string)` to sort by column names without concatenating SQL. Both methods quote identifiers, including qualified names such as `u.id`. Calls append ordering terms in sequence, so `Desc(c.CreatedAt()).Asc(c.ID())` sorts by creation time descending, then ID ascending. Multiple columns are supported; zero arguments add nothing. These methods are available on select, update, and delete statements, subject to database support for ordered writes. Use `OrderBy("COALESCE(score, 0) DESC")` for SQL expressions.
 
 When selecting a single column or aggregate value, use generic column scanners:
 
@@ -593,7 +616,7 @@ ids, err := engine.Query[*User]().
 // 3. Paginate single column values
 pageIDs, total, err := engine.Query[*User]().
 	Select(c.ID()).
-	OrderBy(c.ID() + " ASC").
+	Asc(c.ID()).
 	PageCols[int64](ctx, 1, 50)
 ```
 
@@ -721,7 +744,7 @@ func (r *UserRepositoryImpl) FindAdults(ctx context.Context, page, size uint64) 
 	var u model.User
 	return r.Engine.Query[*model.User]().
 		Where(builder.Gte(u.LormCols().Age(), 18)).
-		OrderBy(u.LormCols().ID() + " DESC").
+		Desc(u.LormCols().ID()).
 		Page(ctx, page, size)
 }
 ```

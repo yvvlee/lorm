@@ -45,7 +45,7 @@ LORM 围绕以下五大核心原则构建：
 ## 2. 安装与工具链
 
 ### 环境要求
-- **Go 1.27** 或更高版本。
+- **Go 1.27.1** 或更高版本。
 
 ### 安装依赖库与代码生成器
 
@@ -259,11 +259,32 @@ _, err := engine.Insert[*User]().
 > **主键状态处理机制**：
 > - 自增主键为零值（`0`）时，LORM 会在 `INSERT` 语句中省略该列，由数据库自动生成。
 > - 自增主键为非零值时，LORM 会显式插入该指定值。
-> - 同一批次中若混有零值与非零值主键，LORM 会自动在同一事务中将其拆分为连续的子批次分别执行。
+> - 同一批次所有模型的写入字段、字段顺序和自增主键处理方式必须完全一致，否则在执行任何 SQL 前返回错误。`RequireIDBackfill()` 同样遵守这一要求。自增主键为零值和非零值的模型需要分开调用插入。
 
 ---
 
 ### 查询数据 (Query)
+
+#### 统计数量 (`Count`)
+
+```go
+total, err := engine.Query[*User]().
+	Where(builder.Eq{"status": "active"}).
+	Count(ctx)
+```
+
+`Count(ctx)` 返回 `(uint64, error)`。它忽略排序、Limit 和 Offset，保留筛选、`DISTINCT`、分组和 `HAVING`。分组查询返回分组数量。它属于终结方法，无论成功或失败都会重置 Stmt。`Page` 仍会先查询总数，再查询当前页。
+
+#### 预览 SQL (`ToSql`)
+
+```go
+stmt := engine.Query[*User]().Where(builder.Eq{"id": 42})
+query, args, err := stmt.ToSql()
+```
+
+查询、更新和删除 Stmt 提供 `ToSql()`。它分别返回 SQL 和绑定参数，占位符已按引擎配置转换。它不会执行 SQL、重置或改变 Stmt。更新和删除的写入条件检查仍在 `Exec` 时执行。插入暂不提供预览，因为生成插入计划可能执行会修改模型的钩子，逐行回填 ID 也可能需要多条 SQL。
+
+原始 SQL 中，占位符转换会把 `?` 视为参数，不解析 SQL 引号或注释。使用 PostgreSQL 的 `$1` 等格式时，字面问号需写成 `??`。问号占位符方言保持原始 SQL 不变。引擎在没有绑定参数时跳过转换。字符串值应优先通过参数传入，避免在 SQL 字符串字面量中直接放置问号。
 
 #### 查询单条记录 (`Get`)
 `Get` 返回 `(model T, found bool, err error)`。第二个 bool 明确指示是否命中记录：
@@ -290,7 +311,7 @@ c := u.LormCols()
 
 users, err := engine.Query[*User]().
 	Where(builder.Gte(c.Age(), 18)).
-	OrderBy(c.CreatedAt() + " DESC").
+	Desc(c.CreatedAt()).
 	Limit(20).
 	Find(ctx)
 ```
@@ -546,7 +567,7 @@ ids, err := engine.Query[*User]().
 	Select(c.ID()).
 	From("users AS u").
 	Where(builder.Like(c.Email(), "%@example.com")).
-	OrderBy(c.ID() + " DESC").
+	Desc(c.ID()).
 	FindCols[int64](ctx)
 ```
 
@@ -562,7 +583,7 @@ ids, err := engine.Query[*User]().
 var u User
 users, total, err := engine.Query[*User]().
 	Where(builder.Eq{u.LormCols().Status(): "active"}).
-	OrderBy(u.LormCols().ID() + " DESC").
+	Desc(u.LormCols().ID()).
 	Page(ctx, 1, 20) // 第 1 页，每页 20 条
 
 if err != nil {
@@ -572,6 +593,8 @@ log.Printf("当前页获取 %d 条 (总记录数: %d)", len(users), total)
 ```
 
 ### 单列值查询 (`GetCol`, `FindCols`, `PageCols`)
+
+字段排序可以使用 `Asc(columns ...string)` 和 `Desc(columns ...string)`，无需拼接 SQL。两个方法都会转义字段名，也支持 `u.id` 这样的带别名字段。多次调用按顺序追加，例如 `Desc(c.CreatedAt()).Asc(c.ID())` 表示先按创建时间降序，再按 ID 升序。每次可以传多个字段，不传参数则不追加排序。查询、更新和删除语句均提供这两个方法，但更新和删除排序仍需数据库支持。SQL 表达式继续使用 `OrderBy("COALESCE(score, 0) DESC")`。
 
 当只查询单列标量或聚合值时，无需声明结构体，直接使用泛型列提取方法：
 
@@ -593,7 +616,7 @@ ids, err := engine.Query[*User]().
 // 3. 分页获取单列数据
 pageIDs, total, err := engine.Query[*User]().
 	Select(c.ID()).
-	OrderBy(c.ID() + " ASC").
+	Asc(c.ID()).
 	PageCols[int64](ctx, 1, 50)
 ```
 
@@ -721,7 +744,7 @@ func (r *UserRepositoryImpl) FindAdults(ctx context.Context, page, size uint64) 
 	var u model.User
 	return r.Engine.Query[*model.User]().
 		Where(builder.Gte(u.LormCols().Age(), 18)).
-		OrderBy(u.LormCols().ID() + " DESC").
+		Desc(u.LormCols().ID()).
 		Page(ctx, page, size)
 }
 ```

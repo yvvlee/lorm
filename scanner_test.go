@@ -84,11 +84,11 @@ func TestScannerHelpersCoverage(t *testing.T) {
 	require.NoError(t, err)
 
 	recorder.QueueQueryRows(
-		[]string{"id", "name", "ignored"},
-		[]driver.Value{int64(1), "alice", int64(9)},
-		[]driver.Value{int64(2), "bob", int64(10)},
+		[]string{"id", "ignored", "name", "ignored2"},
+		[]driver.Value{int64(1), []byte("discard"), "alice", int64(9)},
+		[]driver.Value{int64(2), nil, "bob", int64(10)},
 	)
-	rows, err := db.Query(`SELECT 1 AS id, 'alice' AS name, 9 AS ignored UNION ALL SELECT 2, 'bob', 10`)
+	rows, err := db.Query(`SELECT id, ignored, name, ignored2 FROM items`)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -131,4 +131,34 @@ func TestScannerHelpersCoverage(t *testing.T) {
 	defer multiColRow.Close()
 	err = ScanCol(multiColRow, &value)
 	require.ErrorContains(t, err, "exactly one column")
+}
+
+// Includes two unmapped columns to measure both destination slice reuse and
+// discarded values without relying on a generated ordered scanner.
+func BenchmarkScanModelsCustomColumns(b *testing.B) {
+	recorder := newScriptedQueryRecorder()
+	db, err := sql.Open(registerScriptedQueryDriver(recorder), "")
+	require.NoError(b, err)
+	b.Cleanup(func() { _ = db.Close() })
+	result := scriptedQueryResult{columns: []string{"id", "ignored1", "name", "ignored2"}}
+	for i := range 100 {
+		result.rows = append(result.rows, []driver.Value{int64(i), "discard", "name", int64(i)})
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		recorder.results = append(recorder.results[:0], result)
+		recorder.queryCalls = recorder.queryCalls[:0]
+		rows, err := db.Query("SELECT id, ignored1, name, ignored2 FROM items")
+		if err != nil {
+			b.Fatal(err)
+		}
+		models, err := scanModelValues[*scanCoverageModel](rows)
+		_ = rows.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(models) != 100 || models[99].ID != 99 || models[0].Name != "name" {
+			b.Fatal("unexpected scanned models")
+		}
+	}
 }

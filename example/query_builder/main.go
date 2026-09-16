@@ -41,7 +41,7 @@ func main() {
 			},
 			builder.Eq{p.LormCols().Status(): "active"},
 		}).
-		OrderBy(p.LormCols().Price() + " ASC").
+		Asc(p.LormCols().Price()).
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)

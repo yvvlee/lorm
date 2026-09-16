@@ -53,7 +53,7 @@ func main() {
 		).
 		From(user.TableName() + " AS u").
 		InnerJoin(role.TableName() + " AS r ON " + u.RoleID() + " = " + r.ID()).
-		OrderBy(u.ID() + " ASC").
+		Asc(u.ID()).
 		Find(ctx)
 	if err != nil {
 		log.Fatal(err)
