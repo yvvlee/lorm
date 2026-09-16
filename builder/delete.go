@@ -58,8 +58,7 @@ func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
 	sql.WriteString(b.from)
 
 	if len(b.whereParts) > 0 {
-		sql.WriteString(" WHERE ")
-		args, err = appendToSql(b.whereParts, sql, " AND ", args)
+		args, err = appendConditionClause(b.whereParts, sql, " WHERE ", true, args)
 		if err != nil {
 			return
 		}

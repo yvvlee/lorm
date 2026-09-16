@@ -354,44 +354,21 @@ func Between[T cmp.Ordered](field string, start, end T) Sqlizer {
 	return fieldExpr{field: field, suffix: " BETWEEN ? AND ?", args: []any{start, end}}
 }
 
-type conj []Sqlizer
-
-func (c conj) join(sep, defaultExpr string) (sql string, args []any, err error) {
-	if len(c) == 0 {
-		return defaultExpr, []any{}, nil
-	}
-	var sqlParts []string
-	for _, sqlizer := range c {
-		if sqlizer == nil {
-			continue
-		}
-		partSQL, partArgs, err := sqlizer.ToSql()
-		if err != nil {
-			return "", nil, err
-		}
-		if partSQL != "" {
-			sqlParts = append(sqlParts, partSQL)
-			args = append(args, partArgs...)
-		}
-	}
-	if len(sqlParts) > 0 {
-		sql = fmt.Sprintf("(%s)", strings.Join(sqlParts, sep))
-	} else {
-		sql = defaultExpr
-	}
-	return
-}
-
 // And joins predicates with AND and wraps the result in parentheses.
-type And conj
+// Nil predicates and empty Or groups are skipped. An empty And is true.
+type And []Sqlizer
 
 func (a And) ToSql() (string, []any, error) {
-	return conj(a).join(" AND ", sqlTrue)
+	condition, err := buildCondition(a)
+	return condition.sql, condition.args, err
 }
 
 // Or joins predicates with OR and wraps the result in parentheses.
-type Or conj
+// Nil predicates and empty groups are skipped. If nothing remains, Or emits no SQL.
+// A group containing only false predicates remains false.
+type Or []Sqlizer
 
 func (o Or) ToSql() (string, []any, error) {
-	return conj(o).join(" OR ", sqlFalse)
+	condition, err := buildConditions(o, true, true)
+	return condition.sql, condition.args, err
 }

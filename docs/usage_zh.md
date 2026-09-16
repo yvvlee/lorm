@@ -542,18 +542,24 @@ c := u.LormCols()
 ### 复合逻辑组合 (`And` / `Or`)
 
 ```go
-whereClause := builder.And(
+whereClause := builder.And{
 	builder.Eq{c.Status(): "active"},
-	builder.Or(
+	builder.Or{
 		builder.Gt(c.Score(), 90),
 		builder.Eq{c.Role(): "admin"},
-	),
-)
+	},
+}
 
 users, err := engine.Query[*User]().
 	Where(whereClause).
 	Find(ctx)
 ```
+
+空 `Or{}` 表示没有条件，在外层 `And`、`Or`、`Where` 和 `Having` 中跳过。所有子条件都是 `nil` 或空 `Or` 时，也会跳过整个 `Or` 分组。空 `And{}`、`Eq{}` 和 `NotEq{}` 仍表示恒真。
+
+没有条件与恒真、恒假是不同状态。`In(field, 空切片)` 为恒假，`NotIn(field, 空切片)` 为恒真。组合时按布尔规则化简，例如 `Or{NotIn("id", []int{}), Eq{"status": 1}}` 整体恒真，不能变成 `status = ?`。最终恒真的 `WHERE` 会省略，恒假则保留 `1=0`。`HAVING` 会影响聚合语义，因此只省略空条件，保留恒真和恒假条件。没有有效限制条件的更新和删除仍需显式调用 `AllowGlobalWrite()`。
+
+原始 SQL 只识别独立的 `TRUE`、`FALSE`、`1=1`、`1=0` 常量，不分析任意 SQL 表达式是否恒真。条件构建错误始终返回，不会因其他分支为恒真或恒假而忽略。
 
 ### 表别名支持 (`WithAlias`)
 

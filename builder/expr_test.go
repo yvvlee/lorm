@@ -271,7 +271,7 @@ func TestEmptyOrToSql(t *testing.T) {
 	sql, args, err := Or{}.ToSql()
 	assert.NoError(t, err)
 
-	expectedSql := "(1=0)"
+	expectedSql := ""
 	assert.Equal(t, expectedSql, sql)
 
 	expectedArgs := []any{}
@@ -285,7 +285,7 @@ func TestConjunctionIgnoresNilPredicates(t *testing.T) {
 		want string
 	}{
 		{name: "empty and", pred: And{nil}, want: sqlTrue},
-		{name: "empty or", pred: Or{nil}, want: sqlFalse},
+		{name: "empty or", pred: Or{nil}, want: ""},
 		{name: "mixed and", pred: And{nil, Eq{"id": 1}}, want: "(id = ?)"},
 		{name: "mixed or", pred: Or{nil, Eq{"id": 1}}, want: "(id = ?)"},
 	}

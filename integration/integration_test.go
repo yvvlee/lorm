@@ -570,9 +570,17 @@ func TestEngine(t *testing.T) {
 		},
 	}
 	_, err = repo.InsertIgnoreAll(ctx, batch)
+	require.ErrorContains(t, err, "index 1 has a different column shape")
+	inserted, err := repo.GetByField(ctx, "str", "repo_insert_ignore_all_inserted")
+	require.NoError(t, err)
+	assert.Nil(t, inserted)
+
+	// Both rows must include the primary key column for a single batch.
+	batch[1].ID = original.ID + 1
+	_, err = repo.InsertIgnoreAll(ctx, batch)
 	require.NoError(t, err)
 
-	inserted, err := repo.GetByField(ctx, "str", "repo_insert_ignore_all_inserted")
+	inserted, err = repo.GetByField(ctx, "str", "repo_insert_ignore_all_inserted")
 	require.NoError(t, err)
 	require.NotNil(t, inserted)
 	assert.NotZero(t, inserted.ID)
@@ -679,7 +687,15 @@ func TestInsertIgnoreAll(t *testing.T) {
 		},
 	}
 	_, err = engine.Insert[*Test]().Ignore().AddModels(models...).Exec(ctx)
+	require.ErrorContains(t, err, "index 1 has a different column shape")
+	count, err := engine.Query[*Test]().Count(ctx)
 	require.NoError(t, err)
+	assert.EqualValues(t, 1, count)
+
+	models[1].ID = m1.ID + 1
+	rows, err := engine.Insert[*Test]().Ignore().AddModels(models...).Exec(ctx)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rows)
 
 	result, found, err := engine.Query[*Test]().Where("id = ?", m1.ID).Get(ctx)
 	require.NoError(t, err)

@@ -143,8 +143,7 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	}
 
 	if len(b.whereParts) > 0 {
-		sql.WriteString(" WHERE ")
-		args, err = appendToSql(b.whereParts, sql, " AND ", args)
+		args, err = appendConditionClause(b.whereParts, sql, " WHERE ", true, args)
 		if err != nil {
 			return
 		}
@@ -156,8 +155,8 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	}
 
 	if len(b.havingParts) > 0 {
-		sql.WriteString(" HAVING ")
-		args, err = appendToSql(b.havingParts, sql, " AND ", args)
+		// HAVING can imply grouping even without GROUP BY, so retain explicit true predicates.
+		args, err = appendConditionClause(b.havingParts, sql, " HAVING ", false, args)
 		if err != nil {
 			return
 		}

@@ -2,7 +2,7 @@ package builder
 
 import (
 	"fmt"
-	"strings"
+	"io"
 )
 
 type wherePart part
@@ -29,19 +29,20 @@ func (p wherePart) ToSql() (sql string, args []any, err error) {
 }
 
 func hasEffectiveWhere(parts []Sqlizer) bool {
-	for _, part := range parts {
-		sql, _, err := part.ToSql()
-		if err != nil {
-			return true
-		}
-		condition := strings.ToUpper(strings.TrimSpace(sql))
-		for strings.HasPrefix(condition, "(") && strings.HasSuffix(condition, ")") {
-			condition = strings.TrimSpace(condition[1 : len(condition)-1])
-		}
-		condition = strings.ReplaceAll(condition, " ", "")
-		if condition != "" && condition != "1=1" && condition != "TRUE" {
-			return true
-		}
+	condition, err := buildConditions(parts, false, false)
+	return err == nil && (condition.kind == conditionExpression || condition.kind == conditionFalse)
+}
+
+func appendConditionClause(parts []Sqlizer, w io.Writer, clause string, omitTrue bool, args []any) ([]any, error) {
+	condition, err := buildConditions(parts, false, false)
+	if err != nil {
+		return nil, err
 	}
-	return false
+	if condition.kind == conditionEmpty || (omitTrue && condition.kind == conditionTrue) {
+		return args, nil
+	}
+	if _, err := io.WriteString(w, clause+condition.sql); err != nil {
+		return nil, err
+	}
+	return append(args, condition.args...), nil
 }

@@ -542,18 +542,24 @@ c := u.LormCols()
 ### Logical Combinations (`And` / `Or`)
 
 ```go
-whereClause := builder.And(
+whereClause := builder.And{
 	builder.Eq{c.Status(): "active"},
-	builder.Or(
+	builder.Or{
 		builder.Gt(c.Score(), 90),
 		builder.Eq{c.Role(): "admin"},
-	),
-)
+	},
+}
 
 users, err := engine.Query[*User]().
 	Where(whereClause).
 	Find(ctx)
 ```
+
+An empty `Or{}` means no condition and is skipped inside `And`, `Or`, `Where`, and `Having`. An `Or` containing only `nil` or empty `Or` predicates is also skipped. Empty `And{}`, `Eq{}`, and `NotEq{}` still mean true.
+
+Absence is distinct from true and false. `In(field, emptySlice)` is false, while `NotIn(field, emptySlice)` is true. Groups simplify according to boolean rules: `Or{NotIn("id", []int{}), Eq{"status": 1}}` is true, not `status = ?`. A final true `WHERE` is omitted; false remains `1=0`. `HAVING` affects grouping semantics, so only absent conditions are omitted; true and false predicates are retained. Updates and deletes without a restrictive condition still require `AllowGlobalWrite()`.
+
+Raw SQL only recognizes standalone `TRUE`, `FALSE`, `1=1`, and `1=0` constants; arbitrary SQL is not analyzed for tautologies. Condition build errors are always returned, even if another branch makes the group true or false.
 
 ### Table Aliases with `WithAlias`
 

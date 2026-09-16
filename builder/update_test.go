@@ -63,7 +63,7 @@ func TestUpdateBuilderHasEffectiveWhere(t *testing.T) {
 	assert.False(t, Update("users").Where(Eq{}).HasWhere())
 	assert.False(t, Update("users").Where("TRUE").HasWhere())
 	assert.True(t, Update("users").Where("id = ?", 1).HasWhere())
-	assert.True(t, Update("users").Where(Or{}).HasWhere())
+	assert.False(t, Update("users").Where(Or{}).HasWhere())
 }
 
 func TestUpdateBuilderPlaceholders(t *testing.T) {
