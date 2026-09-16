@@ -3,6 +3,7 @@ package lorm
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 type session struct {
@@ -45,11 +46,14 @@ func (s *session) Exist(ctx context.Context, query string, args ...any) (exist b
 		return
 	}
 	defer rows.Close()
-	if rows.Next() {
-		exist = true
-		return
-	}
+	exist = rows.Next()
 	err = rows.Err()
+	if closeErr := rows.Close(); closeErr != nil {
+		return false, errors.Join(err, closeErr)
+	}
+	if err != nil {
+		return false, err
+	}
 	return
 }
 

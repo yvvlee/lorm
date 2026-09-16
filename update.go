@@ -199,13 +199,22 @@ func (s *UpdateStmt[T]) SetMap(clauses map[string]any) *UpdateStmt[T] {
 	if !s.enterManualMode() {
 		return s
 	}
-	s.builder.SetMap(escapeMap(s.engine.Escaper(), clauses))
+	clauses, s.err = escapeMap(s.engine.Escaper(), clauses)
+	if s.err == nil {
+		s.builder.SetMap(clauses)
+	}
 	return s
 }
 
 // Where adds WHERE expressions to the query.
 func (s *UpdateStmt[T]) Where(pred any, args ...any) *UpdateStmt[T] {
-	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
+	if s.err != nil {
+		return s
+	}
+	pred, s.err = escapePredicate(s.engine.Escaper(), pred)
+	if s.err == nil {
+		s.builder.Where(pred, args...)
+	}
 	return s
 }
 

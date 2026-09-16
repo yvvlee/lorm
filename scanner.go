@@ -123,6 +123,7 @@ func scanColumnValues[T any](rows *sql.Rows) ([]T, error) {
 }
 
 // ScanCols scans the only column of each row into v.
+// Use []byte for byte data that must outlive the current row.
 func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 	columns, err := rows.Columns()
 	if err != nil {
@@ -165,7 +166,8 @@ func ScanModel[T Model](row *sql.Rows, m T) error {
 	return scanRow(row, values...)
 }
 
-// ScanCol scans the only column of the first row into t.
+// ScanCol scans the only column of the first row into t. The caller owns rows;
+// sql.RawBytes remains valid only until the next Next, Scan, or Close call.
 func ScanCol[T any](row *sql.Rows, t *T) error {
 	columns, err := row.Columns()
 	if err != nil {

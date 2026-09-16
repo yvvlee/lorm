@@ -18,8 +18,10 @@ import (
 )
 
 type scriptedQueryResult struct {
-	columns []string
-	rows    [][]driver.Value
+	columns      []string
+	rows         [][]driver.Value
+	closeErr     error
+	reuseBuffers bool
 }
 
 type scriptedQueryRecorder struct {
@@ -129,7 +131,11 @@ func (c *scriptedQueryConn) ExecContext(_ context.Context, _ string, _ []driver.
 
 func (c *scriptedQueryConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	result := c.recorder.RecordQuery(query, args)
-	return &scriptedQueryRows{columns: result.columns, rows: result.rows}, nil
+	rows := &scriptedQueryRows{columns: result.columns, rows: result.rows, closeErr: result.closeErr}
+	if result.reuseBuffers {
+		rows.buffers = make([][]byte, len(result.columns))
+	}
+	return rows, nil
 }
 
 type scriptedQueryTx struct{}
@@ -138,13 +144,20 @@ func (scriptedQueryTx) Commit() error   { return nil }
 func (scriptedQueryTx) Rollback() error { return nil }
 
 type scriptedQueryRows struct {
-	columns []string
-	rows    [][]driver.Value
-	index   int
+	columns  []string
+	rows     [][]driver.Value
+	index    int
+	closeErr error
+	buffers  [][]byte
 }
 
 func (r *scriptedQueryRows) Columns() []string { return r.columns }
-func (r *scriptedQueryRows) Close() error      { return nil }
+func (r *scriptedQueryRows) Close() error {
+	for _, buffer := range r.buffers {
+		clear(buffer)
+	}
+	return r.closeErr
+}
 
 func (r *scriptedQueryRows) Next(dest []driver.Value) error {
 	if r.index >= len(r.rows) {
@@ -153,15 +166,22 @@ func (r *scriptedQueryRows) Next(dest []driver.Value) error {
 	row := r.rows[r.index]
 	for i := range dest {
 		dest[i] = row[i]
+		if data, ok := row[i].([]byte); ok && r.buffers != nil {
+			r.buffers[i] = append(r.buffers[i][:0], data...)
+			dest[i] = r.buffers[i]
+		}
 	}
 	r.index++
 	return nil
 }
 
 type txBehavior struct {
-	beginErr    error
-	commitErr   error
-	rollbackErr error
+	beginErr      error
+	commitErr     error
+	rollbackErr   error
+	beginCalls    *atomic.Int64
+	commitCalls   *atomic.Int64
+	rollbackCalls *atomic.Int64
 }
 
 var txBehaviorDriverSeq atomic.Uint64
@@ -207,6 +227,9 @@ func (c *txBehaviorConn) Begin() (driver.Tx, error) {
 	return c.BeginTx(context.Background(), driver.TxOptions{})
 }
 func (c *txBehaviorConn) BeginTx(context.Context, driver.TxOptions) (driver.Tx, error) {
+	if c.behavior.beginCalls != nil {
+		c.behavior.beginCalls.Add(1)
+	}
 	if c.behavior.beginErr != nil {
 		return nil, c.behavior.beginErr
 	}
@@ -218,8 +241,18 @@ type txBehaviorTx struct {
 	behavior txBehavior
 }
 
-func (tx txBehaviorTx) Commit() error   { return tx.behavior.commitErr }
-func (tx txBehaviorTx) Rollback() error { return tx.behavior.rollbackErr }
+func (tx txBehaviorTx) Commit() error {
+	if tx.behavior.commitCalls != nil {
+		tx.behavior.commitCalls.Add(1)
+	}
+	return tx.behavior.commitErr
+}
+func (tx txBehaviorTx) Rollback() error {
+	if tx.behavior.rollbackCalls != nil {
+		tx.behavior.rollbackCalls.Add(1)
+	}
+	return tx.behavior.rollbackErr
+}
 
 var pingErrorDriverSeq atomic.Uint64
 

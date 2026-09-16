@@ -114,6 +114,7 @@ func TestInsertRequireIDBackfillUsesTransactionAndSharedTime(t *testing.T) {
 	models := []*Test{{Str: "first"}, {Str: "second"}}
 
 	rowsAffected, err := engine.Insert[*Test]().
+		BatchSize(10).
 		RequireIDBackfill().
 		AddModels(models...).
 		Exec(context.Background())

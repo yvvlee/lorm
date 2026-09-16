@@ -3,6 +3,7 @@ package builder
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -138,7 +139,17 @@ func (b *InsertBuilder) appendValuesToSQL(w io.Writer, args []any) ([]any, error
 				if err != nil {
 					return nil, err
 				}
+				if strings.TrimSpace(vsql) == "" {
+					return nil, fmt.Errorf("insert value expression at row %d, column %d must not be empty", r, v)
+				}
+				_, subquery := vs.(*SelectBuilder)
+				if subquery {
+					_, _ = io.WriteString(w, "(")
+				}
 				_, _ = io.WriteString(w, vsql)
+				if subquery {
+					_, _ = io.WriteString(w, ")")
+				}
 				args = append(args, vargs...)
 			} else {
 				_, _ = io.WriteString(w, "?")

@@ -20,7 +20,8 @@ type AfterInsertHook interface {
 	LormAfterInsert(result InsertResult) error
 }
 
-// BeforeUpdateHook prepares a full-model update without mutating the model.
+// BeforeUpdateHook prepares a full-model update, initializing nil embedded
+// structs as needed. Managed field values are applied by AfterUpdateHook.
 type BeforeUpdateHook interface {
 	LormBeforeUpdate(now HookTime) (UpdatePlan, error)
 }

@@ -132,6 +132,7 @@ func (e *Engine) isTransactionSession(ctx context.Context) bool {
 type sessionIDKey struct{}
 
 // TX runs fn in a transaction and reuses the current session for nested calls.
+// Unfinished transactions are rolled back on exit, including panic and runtime.Goexit.
 func (e *Engine) TX(ctx context.Context, fn func(context.Context) error) error {
 	return e.tx(ctx, nil, fn)
 }
@@ -156,18 +157,29 @@ func (e *Engine) tx(ctx context.Context, opts *sql.TxOptions, fn func(context.Co
 		e.logger.ErrorContext(ctx, "BEGIN TRANSACTION failed", "err", err)
 		return err
 	}
-	sessionID := uuid.NewString()
-	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID)
-
-	s := &session{engine: e, tx: tx}
+	var sessionID string
 	defer func() {
-		if p := recover(); p != nil {
-			rbErr := tx.Rollback()
+		p := recover()
+		// Rollback also covers Goexit. An already completed transaction returns
+		// sql.ErrTxDone without issuing another database operation.
+		rbErr := tx.Rollback()
+		if p != nil {
 			e.logger.ErrorContext(ctx, "ROLLBACK (panic)", "sessionID", sessionID, "panic", p, "rbErr", rbErr)
 			panic(p)
 		}
+		if errors.Is(rbErr, sql.ErrTxDone) {
+			return
+		}
+		if rbErr != nil {
+			e.logger.ErrorContext(ctx, "ROLLBACK failed", "sessionID", sessionID, "rbErr", rbErr)
+		} else {
+			e.logger.InfoContext(ctx, "ROLLBACK", "sessionID", sessionID)
+		}
 	}()
+	sessionID = uuid.NewString()
+	e.logger.InfoContext(ctx, "BEGIN TRANSACTION", "sessionID", sessionID)
 
+	s := &session{engine: e, tx: tx}
 	innerCtx := context.WithValue(ctx, e, s)
 	innerCtx = context.WithValue(innerCtx, sessionIDKey{}, sessionID)
 	if err = fn(innerCtx); err != nil {
@@ -193,13 +205,8 @@ func (e *Engine) txWithoutLogging(ctx context.Context, opts *sql.TxOptions, fn f
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	s := &session{engine: e, tx: tx}
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
-		}
-	}()
 
 	innerCtx := context.WithValue(ctx, e, s)
 	if err = fn(innerCtx); err != nil {

@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
           go-version: '1.27.1'
           cache-dependency-path: go.sum
@@ -37,7 +37,6 @@ jobs:
 
   integration:
     name: Integration (${{ matrix.database }})
-    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -54,7 +53,7 @@ jobs:
             dsn: file:test.db?cache=shared&mode=memory
     services:
       mysql:
-        image: mysql:8.0
+        image: ${{ matrix.driver == 'mysql' && 'mysql:8.0' || '' }}
         env:
           MYSQL_ROOT_PASSWORD: 123456
           MYSQL_DATABASE: test
@@ -63,7 +62,7 @@ jobs:
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
       postgres:
-        image: postgres:13
+        image: ${{ matrix.driver == 'pgx' && 'postgres:13' || '' }}
         env:
           POSTGRES_PASSWORD: 123456
           POSTGRES_DB: test
@@ -73,10 +72,10 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
           go-version: '1.27.1'
           cache-dependency-path: integration/go.sum

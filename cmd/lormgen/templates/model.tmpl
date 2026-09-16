@@ -31,7 +31,7 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         switch name {
             {{- range $struct.Fields}}
             case "{{.DBField}}":
-                {{- if .EnsureFullName }}
+                {{- range .EnsureFields }}
                 if m.{{.EnsureFullName}} == nil {
                     m.{{.EnsureFullName}} = new({{.EnsureType}})
                 }
@@ -68,9 +68,9 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         switch name {
             {{- range $struct.Fields}}
             case "{{.DBField}}":
-                {{- if .EnsureFullName }}
+                {{- range .EnsureFields }}
                 if m.{{.EnsureFullName}} == nil {
-                    return nil
+                    m.{{.EnsureFullName}} = new({{.EnsureType}})
                 }
                 {{- end }}
                 {{- if .Flag.HasFlag 4 }}
@@ -222,7 +222,7 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         if err != nil {
             return err
         }
-                {{- if .EnsureFullName }}
+                {{- range .EnsureFields }}
         if m.{{.EnsureFullName}} == nil {
             m.{{.EnsureFullName}} = new({{.EnsureType}})
         }
@@ -244,6 +244,11 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
 
     {{if $struct.NeedsBeforeUpdateHook}}
     func (m *{{$struct.Name}}) LormBeforeUpdate(now {{$.LormImportAlias}}.HookTime) ({{$.LormImportAlias}}.UpdatePlan, error) {
+        {{- range $struct.EnsureFields }}
+        if m.{{.EnsureFullName}} == nil {
+            m.{{.EnsureFullName}} = new({{.EnsureType}})
+        }
+        {{- end }}
         plan := {{$.LormImportAlias}}.UpdatePlan{
             Set: make([]{{$.LormImportAlias}}.ColumnValue, 0, {{len $struct.Fields}}),
             Where: make([]{{$.LormImportAlias}}.ColumnValue, 0),
@@ -252,29 +257,12 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         {{- range $struct.Fields }}
             {{- if .Flag.HasFlag 1 }}
         plan.PrimaryKeyCount++
-                {{- if .EnsureFullName }}
-        if m.{{.EnsureFullName}} == nil {
-            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: nil})
-        } else {
-                    {{- if .Flag.HasFlag 4 }}
-            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
-                    {{- else }}
-            plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
-                    {{- end }}
-        }
-                {{- else }}
-                    {{- if .Flag.HasFlag 4 }}
+                {{- if .Flag.HasFlag 4 }}
         plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
-                    {{- else }}
+                {{- else }}
         plan.Where = append(plan.Where, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
-                    {{- end }}
                 {{- end }}
             {{- else if .Flag.HasFlag 32 }}
-                {{- if .EnsureFullName }}
-        if m.{{.EnsureFullName}} == nil {
-            return plan, {{$.LormImportAlias}}.NilVersionError("{{$struct.Name}}", "{{.FullName}}")
-        }
-                {{- end }}
                 {{- if .Pointer }}
         if m.{{.FullName}} == nil {
             return plan, {{$.LormImportAlias}}.NilVersionError("{{$struct.Name}}", "{{.FullName}}")
@@ -294,22 +282,10 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{.ManagedTimeKind}}(now.Unix())})
                 {{- end }}
             {{- else }}
-                {{- if .EnsureFullName }}
-        if m.{{.EnsureFullName}} == nil {
-            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: nil})
-        } else {
-                    {{- if .Flag.HasFlag 4 }}
-            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
-                    {{- else }}
-            plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
-                    {{- end }}
-        }
-                {{- else }}
-                    {{- if .Flag.HasFlag 4 }}
+                {{- if .Flag.HasFlag 4 }}
         plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: {{$.LormImportAlias}}.NewJSONFieldWrapper(&m.{{.FullName}})})
-                    {{- else }}
+                {{- else }}
         plan.Set = append(plan.Set, {{$.LormImportAlias}}.ColumnValue{Column: "{{.DBField}}", Value: m.{{.FullName}}})
-                    {{- end }}
                 {{- end }}
             {{- end }}
         {{- end }}
@@ -325,7 +301,7 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
         {{- range $struct.Fields }}
             {{- if .Flag.HasFlag 16 }}
         {
-                {{- if .EnsureFullName }}
+                {{- range .EnsureFields }}
             if m.{{.EnsureFullName}} == nil {
                 m.{{.EnsureFullName}} = new({{.EnsureType}})
             }
@@ -370,6 +346,11 @@ const {{.RawVarPrefix}}_requires_64_bit_int uint = 1 << 63
                 {{- end }}
         }
             {{- else if .Flag.HasFlag 32 }}
+                {{- range .EnsureFields }}
+        if m.{{.EnsureFullName}} == nil {
+            m.{{.EnsureFullName}} = new({{.EnsureType}})
+        }
+                {{- end }}
                 {{- if .Pointer }}
         (*m.{{.FullName}})++
                 {{- else }}

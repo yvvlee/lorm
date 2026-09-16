@@ -94,7 +94,13 @@ func (s *DeleteStmt[T]) PrefixExpr(expr builder.Sqlizer) *DeleteStmt[T] {
 
 // Where adds WHERE expressions to the query.
 func (s *DeleteStmt[T]) Where(pred any, args ...any) *DeleteStmt[T] {
-	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
+	if s.err != nil {
+		return s
+	}
+	pred, s.err = escapePredicate(s.engine.Escaper(), pred)
+	if s.err == nil {
+		s.builder.Where(pred, args...)
+	}
 	return s
 }
 

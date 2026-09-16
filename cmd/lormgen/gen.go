@@ -278,54 +278,29 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 					if !hasModel {
 						continue
 					}
+					if typeSpec.TypeParams != nil && typeSpec.TypeParams.NumFields() > 0 {
+						extractErr = fmt.Errorf("model %s: generic models are not supported", structInfo.Name)
+						return false
+					}
 
-					// Iterate through struct fields
-					for _, field := range fields {
-						if len(field.Names) == 0 {
-							// Flatten named embedded structs so generated field accessors can treat them like direct members.
-							embedFieldPrefix, err := parseNameTag(field, g.tagKey)
-							if err != nil {
-								extractErr = fmt.Errorf("invalid embedded field tag for %s.%s: %w", structInfo.Name, embeddedFieldName(field.Type), err)
-								return false
-							}
-							embedName, ensureType, embeddedPointer, structType := resolveEmbeddedStruct(pkg, field.Type)
-							if structType == nil {
-								extractErr = fmt.Errorf("unsupported embedded field %q in %s", exprSource(field.Type), structInfo.Name)
-								return false
-							}
-							for _, embedField := range structType.Fields.List {
-								fieldList, err := g.parseField(pkg, structInfo.Name+"."+embedName, embedField)
-								if err != nil {
-									extractErr = err
-									return false
-								}
-								if len(fieldList) > 0 {
-									for _, f := range fieldList {
-										f.FullName = embedName + "." + f.Name
-										f.DBField = embedFieldPrefix + f.DBField
-										if embeddedPointer {
-											f.EnsureFullName = embedName
-											f.EnsureType = ensureType
-										}
-									}
-									structInfo.Fields = append(structInfo.Fields, fieldList...)
-								}
-							}
-						} else {
-							// Regular field
-							fieldList, err := g.parseField(pkg, structInfo.Name, field)
-							if err != nil {
-								extractErr = err
-								return false
-							}
-							if len(fieldList) > 0 {
-								structInfo.Fields = append(structInfo.Fields, fieldList...)
-							}
-						}
+					structInfo.Fields, extractErr = g.flattenFields(pkg, &fileInfo, structInfo.Name, fields, "", "", nil, make(map[*ast.StructType]bool))
+					if extractErr != nil {
+						return false
 					}
 					if err := validateModelDescriptor(structInfo); err != nil {
 						extractErr = err
 						return false
+					}
+					// Embedded fields are also direct members of the model, even
+					// when none of their children become database columns.
+					for _, field := range fields {
+						if len(field.Names) == 0 {
+							expr, _ := unwrapPointerExpr(field.Type)
+							if err := validateGeneratedModelMethod(structInfo, embeddedFieldName(expr)); err != nil {
+								extractErr = err
+								return false
+							}
+						}
 					}
 					populateModelMetadata(structInfo)
 					if structInfo.TableName != "" {
@@ -352,6 +327,101 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 	return &fileInfo, nil
 }
 
+// flattenFields keeps the Go access path, database prefix, and pointer ancestors
+// together while traversing embedded structs in declaration order.
+func (g *Generator) flattenFields(pkg *packages.Package, file *lorm.FileDescriptor, modelName string, fields []*ast.Field, path, prefix string, parents []*lorm.FieldDescriptor, visiting map[*ast.StructType]bool) ([]*lorm.FieldDescriptor, error) {
+	var result []*lorm.FieldDescriptor
+	for _, field := range fields {
+		if len(field.Names) > 0 {
+			parsed, err := g.parseField(pkg, modelName+strings.TrimSuffix("."+path, "."), field)
+			if err != nil {
+				return nil, err
+			}
+			for _, f := range parsed {
+				f.FullName = path + f.Name
+				f.DBField = prefix + f.DBField
+				if len(parents) > 0 {
+					last := parents[len(parents)-1]
+					f.EnsureFullName, f.EnsureType = last.EnsureFullName, last.EnsureType
+					f.EnsureParents = append([]*lorm.FieldDescriptor(nil), parents[:len(parents)-1]...)
+				}
+			}
+			result = append(result, parsed...)
+			continue
+		}
+
+		expr, _ := unwrapPointerExpr(field.Type)
+		if name := embeddedFieldName(expr); name != "" && !ast.IsExported(name) {
+			continue
+		}
+		typ := typeOfExpr(pkg, expr)
+		if typ != nil {
+			if named, ok := types.Unalias(typ).(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == lormPackage {
+				if name := named.Obj().Name(); name == "UnimplementedTable" || name == "UnimplementedModel" {
+					continue
+				}
+			}
+		}
+		embedName, _, pointer, embedded := resolveEmbeddedStruct(pkg, field.Type)
+		if embedded == nil {
+			return nil, fmt.Errorf("unsupported embedded field %q in %s.%s", exprSource(field.Type), modelName, strings.TrimSuffix(path, "."))
+		}
+		if visiting[embedded] {
+			return nil, fmt.Errorf("recursive embedded field %s.%s%s", modelName, path, embedName)
+		}
+		embedPrefix, err := parseNameTag(field, g.tagKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid embedded field tag for %s.%s%s: %w", modelName, path, embedName, err)
+		}
+		embedParents := parents
+		if pointer {
+			ensureType := types.TypeString(typ, func(p *types.Package) string { return embeddedTypeQualifier(pkg, file, p) })
+			embedParents = append(append([]*lorm.FieldDescriptor(nil), parents...), &lorm.FieldDescriptor{
+				EnsureFullName: path + embedName,
+				EnsureType:     ensureType,
+			})
+		}
+		visiting[embedded] = true
+		nested, err := g.flattenFields(pkg, file, modelName, embedded.Fields.List, path+embedName+".", prefix+embedPrefix, embedParents, visiting)
+		delete(visiting, embedded)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, nested...)
+	}
+	return result, nil
+}
+
+// Nested embeddings can require a type from a package the model did not import.
+func embeddedTypeQualifier(pkg *packages.Package, file *lorm.FileDescriptor, target *types.Package) string {
+	if target == pkg.Types {
+		return ""
+	}
+	used := make(map[string]bool)
+	for _, imp := range file.Imports {
+		alias := imp.Alias
+		if alias == "" {
+			if imported := pkg.Imports[strings.Trim(imp.Path, "\"")]; imported != nil {
+				alias = imported.Name
+			}
+		}
+		used[alias] = true
+		if strings.Trim(imp.Path, "\"") == target.Path() && alias != "_" {
+			if alias == "." {
+				return ""
+			}
+			return alias
+		}
+	}
+	base := "_lorm_embed_" + target.Name()
+	alias := base
+	for i := 2; used[alias] || pkg.Types.Scope().Lookup(alias) != nil; i++ {
+		alias = fmt.Sprintf("%s%d", base, i)
+	}
+	file.Imports = append(file.Imports, &lorm.Import{Path: fmt.Sprintf("%q", target.Path()), Alias: alias})
+	return alias
+}
+
 func relativeToWorkingDir(filePath string) string {
 	fileRefPath, err := filepath.Rel(wd, filePath)
 	if err == nil && !strings.HasPrefix(fileRefPath, ".."+string(filepath.Separator)) && fileRefPath != ".." {
@@ -369,6 +439,14 @@ func relativeToWorkingDir(filePath string) string {
 
 // parseField expands grouped declarations like "A, B string" into one descriptor per field name.
 func (g *Generator) parseField(pkg *packages.Package, structName string, field *ast.Field) ([]*lorm.FieldDescriptor, error) {
+	if !hasExportedName(field.Names) {
+		return nil, nil
+	}
+	if len(field.Names) > 1 && field.Tag != nil {
+		if _, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(g.tagKey); exists {
+			return nil, fmt.Errorf("invalid lorm tag for %s.%s: grouped fields with a lorm tag must be declared separately", structName, fieldNames(field))
+		}
+	}
 	fieldType, err := exprToString(field.Type)
 	if err != nil {
 		return nil, fmt.Errorf("unsupported field type %q for %s.%s", exprSource(field.Type), structName, fieldNames(field))
@@ -382,6 +460,9 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 		return nil, fmt.Errorf("invalid lorm tag for %s.%s: auto_increment requires primary_key", structName, fieldNames(field))
 	}
 	typ := typeOfExpr(pkg, field.Type)
+	if isRawBytesType(typ) {
+		return nil, fmt.Errorf("unsupported field type for %s.%s: sql.RawBytes borrows driver memory; use []byte instead", structName, fieldNames(field))
+	}
 	integerKind, integerBits, integerType := runtimeIntegerInfo(typ)
 	managedFlags := 0
 	for _, managedFlag := range []lorm.FieldFlag{lorm.FlagCreated, lorm.FlagUpdated, lorm.FlagVersion} {
@@ -392,11 +473,23 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 	if managedFlags > 1 {
 		return nil, fmt.Errorf("invalid lorm tag for %s.%s: created, updated, and version are mutually exclusive", structName, fieldNames(field))
 	}
+	if flag.HasFlag(lorm.FlagPrimaryKey) && flag&(lorm.FlagUpdated|lorm.FlagVersion) != 0 {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: primary_key cannot be combined with updated or version", structName, fieldNames(field))
+	}
+	if flag.HasFlag(lorm.FlagAutoIncrement) && managedFlags > 0 {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: auto_increment cannot be combined with created, updated, or version", structName, fieldNames(field))
+	}
+	if flag.HasFlag(lorm.FlagJson) && (managedFlags > 0 || flag.HasFlag(lorm.FlagAutoIncrement)) {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: json cannot be combined with auto_increment, created, updated, or version", structName, fieldNames(field))
+	}
 	if flag.HasFlag(lorm.FlagAutoIncrement) && !integerType {
 		return nil, fmt.Errorf("invalid lorm tag for %s.%s: auto_increment requires a built-in integer type or a pointer to one", structName, fieldNames(field))
 	}
 	if flag.HasFlag(lorm.FlagVersion) && !integerType {
 		return nil, fmt.Errorf("invalid lorm tag for %s.%s: version requires a built-in integer type or a pointer to one", structName, fieldNames(field))
+	}
+	if flag.HasFlag(lorm.FlagVersion) && integerBits != 0 && integerBits < 32 {
+		return nil, fmt.Errorf("invalid lorm tag for %s.%s: version requires an integer type of at least 32 bits or a pointer to one", structName, fieldNames(field))
 	}
 	managedTimeKind := ""
 	if flag.HasFlag(lorm.FlagCreated) || flag.HasFlag(lorm.FlagUpdated) {
@@ -430,18 +523,18 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 		_, pointer = types.Unalias(typ).Underlying().(*types.Pointer)
 	}
 	var fields []*lorm.FieldDescriptor
-	for i, name := range field.Names {
+	for _, name := range field.Names {
+		if !name.IsExported() {
+			continue
+		}
 		fieldInfo := &lorm.FieldDescriptor{
 			Name:     name.Name,
 			FullName: name.Name,
 			DBField:  g.fieldMapper.ConvertName(name.Name),
 		}
-		if i == len(field.Names)-1 {
-			fieldInfo.Flag = flag
-			// When fields are declared in aggregation, the tag only takes effect for the last field, eg: fieldA, fieldB string `lorm:"field_b"`
-			if dbField != "" {
-				fieldInfo.DBField = dbField
-			}
+		fieldInfo.Flag = flag
+		if dbField != "" {
+			fieldInfo.DBField = dbField
 		}
 
 		fieldInfo.Type = fieldType
@@ -454,12 +547,40 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 	return fields, nil
 }
 
+func hasExportedName(names []*ast.Ident) bool {
+	for _, name := range names {
+		if name.IsExported() {
+			return true
+		}
+	}
+	return false
+}
+
+func isRawBytesType(typ types.Type) bool {
+	seen := make(map[types.Type]bool)
+	for typ != nil {
+		typ = types.Unalias(typ)
+		if seen[typ] {
+			return false
+		}
+		seen[typ] = true
+		if pointer, ok := typ.Underlying().(*types.Pointer); ok {
+			typ = pointer.Elem()
+			continue
+		}
+		named, ok := typ.(*types.Named)
+		return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "RawBytes"
+	}
+	return false
+}
+
 func supportsManagedIntTime(sizes types.Sizes) bool {
 	return sizes != nil && sizes.Sizeof(types.Typ[types.Int]) >= 8
 }
 
 func validateModelDescriptor(model *lorm.ModelDescriptor) error {
 	columns := make(map[string]string, len(model.Fields))
+	accessors := make(map[string]string, len(model.Fields))
 	var versionField, autoIncrementField string
 	for _, field := range model.Fields {
 		if previous, exists := columns[field.DBField]; exists {
@@ -472,6 +593,17 @@ func validateModelDescriptor(model *lorm.ModelDescriptor) error {
 			)
 		}
 		columns[field.DBField] = field.FullName
+		if field.Name == "All" || field.Name == "WithAlias" {
+			return fmt.Errorf("model %s field %s conflicts with generated method %s_Fields.%s", model.Name, field.FullName, model.Name, field.Name)
+		}
+		if previous, exists := accessors[field.Name]; exists {
+			return fmt.Errorf("model %s fields %s and %s generate the same column accessor %s_Fields.%s", model.Name, previous, field.FullName, model.Name, field.Name)
+		}
+		accessors[field.Name] = field.FullName
+		root, _, _ := strings.Cut(field.FullName, ".")
+		if err := validateGeneratedModelMethod(model, root); err != nil {
+			return err
+		}
 
 		if field.Flag.HasFlag(lorm.FlagVersion) {
 			if versionField != "" {
@@ -498,6 +630,30 @@ func validateModelDescriptor(model *lorm.ModelDescriptor) error {
 	}
 	if model.TableName != "" && len(model.Fields) == 1 && autoIncrementField != "" {
 		return fmt.Errorf("model %s contains only auto-increment primary key %s; at least one other database column is required", model.Name, autoIncrementField)
+	}
+	return nil
+}
+
+// Only reserve methods emitted for this model. Promoted fields on embedded
+// structs use explicit access paths and may share a model method's name.
+func validateGeneratedModelMethod(model *lorm.ModelDescriptor, name string) error {
+	var generated bool
+	switch name {
+	case "New", "LormFieldPtr", "LormFieldValue", "LormScan", "LormModelDescriptor", "LormCols":
+		generated = true
+	case "TableName":
+		generated = model.TableName != ""
+	case "LormBeforeInsert":
+		generated = model.TableName != "" && model.NeedsBeforeInsertHook()
+	case "LormAfterInsert":
+		generated = model.TableName != "" && model.NeedsAfterInsertHook()
+	case "LormBeforeUpdate":
+		generated = model.TableName != "" && model.NeedsBeforeUpdateHook()
+	case "LormAfterUpdate":
+		generated = model.TableName != "" && model.NeedsAfterUpdateHook()
+	}
+	if generated {
+		return fmt.Errorf("model %s field %s conflicts with generated method %s.%s", model.Name, name, model.Name, name)
 	}
 	return nil
 }
@@ -750,31 +906,15 @@ func resolveEmbeddedStruct(pkg *packages.Package, expr ast.Expr) (string, string
 		return "", "", false, nil
 	}
 
-	var obj types.Object
-	switch x := expr.(type) {
-	case *ast.Ident:
-		if pkg != nil && pkg.TypesInfo != nil {
-			obj = pkg.TypesInfo.Uses[x]
-			if obj == nil {
-				obj = pkg.TypesInfo.Defs[x]
-			}
-		}
-		if obj == nil && x.Obj != nil {
-			if ts, ok := x.Obj.Decl.(*ast.TypeSpec); ok {
-				if structType, ok := ts.Type.(*ast.StructType); ok {
-					return embedName, ensureType, pointer, structType
-				}
-			}
-		}
-	case *ast.SelectorExpr:
-		if pkg != nil && pkg.TypesInfo != nil {
-			obj = pkg.TypesInfo.Uses[x.Sel]
-		}
-	}
-	if obj == nil {
+	typ := typeOfExpr(pkg, expr)
+	if typ == nil {
 		return "", "", false, nil
 	}
-	ts := findTypeSpecByObject(pkg, obj)
+	named, ok := types.Unalias(typ).(*types.Named)
+	if !ok || named.TypeArgs().Len() != 0 {
+		return "", "", false, nil
+	}
+	ts := findTypeSpecByObject(pkg, named.Obj())
 	if ts == nil {
 		return "", "", false, nil
 	}
@@ -800,6 +940,10 @@ func embeddedFieldName(expr ast.Expr) string {
 		return x.Name
 	case *ast.SelectorExpr:
 		return x.Sel.Name
+	case *ast.IndexExpr:
+		return embeddedFieldName(x.X)
+	case *ast.IndexListExpr:
+		return embeddedFieldName(x.X)
 	default:
 		return ""
 	}

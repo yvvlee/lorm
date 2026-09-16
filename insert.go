@@ -10,6 +10,9 @@ import (
 	"github.com/yvvlee/lorm/builder"
 )
 
+// DefaultInsertBatchSize is the maximum number of models per INSERT by default.
+const DefaultInsertBatchSize = 1000
+
 func newInsertBuilder[T Table](engine *Engine) *builder.InsertBuilder {
 	var t T
 	return builder.Insert(engine.Escaper().Escape(t.TableName()))
@@ -34,6 +37,7 @@ type InsertStmt[T Table] struct {
 	models            []T
 	err               error
 	requireIDBackfill bool
+	batchSize         int
 }
 
 func (s *InsertStmt[T]) reset() {
@@ -41,6 +45,7 @@ func (s *InsertStmt[T]) reset() {
 	s.models = nil
 	s.err = nil
 	s.requireIDBackfill = false
+	s.batchSize = 0
 }
 
 // Clone returns a copy of the statement state. Terminal methods still reset
@@ -52,6 +57,7 @@ func (s *InsertStmt[T]) Clone() *InsertStmt[T] {
 		models:            append([]T(nil), s.models...),
 		err:               s.err,
 		requireIDBackfill: s.requireIDBackfill,
+		batchSize:         s.batchSize,
 	}
 }
 
@@ -64,6 +70,18 @@ func (s *InsertStmt[T]) AddModel(model T) *InsertStmt[T] {
 // AddModels appends models to the insert batch. Models must not be nil.
 func (s *InsertStmt[T]) AddModels(models ...T) *InsertStmt[T] {
 	s.models = append(s.models, models...)
+	return s
+}
+
+// BatchSize sets the maximum number of models per INSERT. Size must be positive.
+// The default is DefaultInsertBatchSize. Split batches run in one transaction.
+// RequireIDBackfill always executes one model per statement.
+func (s *InsertStmt[T]) BatchSize(size int) *InsertStmt[T] {
+	if size <= 0 {
+		s.err = fmt.Errorf("lorm: insert batch size must be positive, got %d", size)
+		return s
+	}
+	s.batchSize = size
 	return s
 }
 
@@ -124,10 +142,17 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 		if hasGeneratedInsertPlan(plans) && !s.engine.SupportsReturning() && !s.engine.SupportsLastInsertId() {
 			return 0, fmt.Errorf("lorm: required ID backfill is not supported by driver %q", s.engine.DriverName())
 		}
-		return s.execOneByOne(ctx, plans)
+		return s.execBatches(ctx, plans, 1, true)
 	}
 	if len(plans) == 1 {
 		return s.execPlans(ctx, s.builder, s.models, plans, plans[0].AutoIncrementZero)
+	}
+	batchSize := s.batchSize
+	if batchSize == 0 {
+		batchSize = DefaultInsertBatchSize
+	}
+	if len(plans) > batchSize {
+		return s.execBatches(ctx, plans, batchSize, false)
 	}
 	return s.execPlans(ctx, s.builder, s.models, plans, false)
 }
@@ -172,20 +197,22 @@ func sameInsertColumns(left, right []string) bool {
 	return slices.Equal(left, right)
 }
 
-func (s *InsertStmt[T]) execOneByOne(ctx context.Context, plans []InsertPlan) (rowsAffected int64, err error) {
+func (s *InsertStmt[T]) execBatches(ctx context.Context, plans []InsertPlan, batchSize int, backfillID bool) (rowsAffected int64, err error) {
 	err = s.engine.TX(ctx, func(txCtx context.Context) error {
-		for i, model := range s.models {
+		for start := 0; start < len(plans); {
+			end := start + min(batchSize, len(plans)-start)
 			rows, execErr := s.execPlans(
 				txCtx,
 				s.builder.Clone(),
-				[]T{model},
-				plans[i:i+1],
-				plans[i].AutoIncrementZero,
+				s.models[start:end],
+				plans[start:end],
+				backfillID && plans[start].AutoIncrementZero,
 			)
 			if execErr != nil {
 				return execErr
 			}
 			rowsAffected += rows
+			start = end
 		}
 		return nil
 	})

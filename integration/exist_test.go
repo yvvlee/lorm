@@ -55,3 +55,14 @@ func TestExistPreservesQueryResults(t *testing.T) {
 		})
 	}
 }
+
+func TestExistReturnsPostgresErrorAfterFirstRow(t *testing.T) {
+	e := initEngine(t)
+	t.Cleanup(func() { _ = e.Close() })
+	if e.DriverName() != "pgx" {
+		t.Skip("PostgreSQL reports this execution error while closing the result set")
+	}
+	exists, err := e.Exist(context.Background(), "SELECT 1 / (2 - x) FROM generate_series(1, 2) AS x")
+	require.ErrorContains(t, err, "division by zero")
+	require.False(t, exists)
+}

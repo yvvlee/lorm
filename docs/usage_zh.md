@@ -113,13 +113,19 @@ type User struct {
 | `auto_increment` | 声明为自增字段。必须同时具备 `primary_key`。可写模型必须另有至少一个数据库字段。 | 整数类型 |
 | `created` | 插入数据且字段为零值时，自动填充当前时间。 | `time.Time`, `sql.NullTime`, `int64`, `uint64`, `uint32`, `uint`, 64位 `int`, `string` 及其一层指针 |
 | `updated` | 插入时零值填充时间，并在更新模型时自动刷新为当前时间。 | 同 `created` |
-| `version` | 声明为乐观锁版本字段，更新时自动作为条件比对并自增。每个模型最多 1 个。 | 整数类型 |
+| `version` | 声明为乐观锁版本字段，更新时自动作为条件比对并自增。每个模型最多 1 个。 | 至少 32 位的内置整数：`int32`、`uint32`、`int64`、`uint64`、`int`、`uint`，及其类型别名或一层指针 |
 | `json` | 自动进行 JSON 序列化与反序列化。 | 结构体、切片、Map |
+
+`created`、`updated`、`version` 互斥。`primary_key` 不能同时标记 `updated` 或 `version`。`auto_increment` 不能同时标记时间维护或版本字段。`json` 不能与自增、时间维护或版本标记组合。冲突标记和带 `lorm` tag 的合并字段声明会在生成阶段报错。
 
 ### 结构体嵌套与展开规则
 
-- **内嵌结构体展开**：内嵌结构体会被自动展开平铺到父模型的列访问器中。
-- **列名前缀**：在内嵌结构体字段上声明 tag 可以为其展开的所有子列名添加统一前缀。
+- **私有字段**：生成器跳过所有未导出字段，包括私有嵌入字段及其子字段。被跳过字段的类型和 tag 不参与校验。
+- **模型类型**：不支持带类型参数的泛型模型，生成阶段直接报错。普通泛型辅助类型不受影响。
+- **字节字段**：模型字段不能使用 `sql.RawBytes`、其别名或指针，标记 `json` 也不例外。生成阶段报错，并提示改用 `[]byte`。
+- **名称冲突**：展开后的字段不能生成同名列访问方法，也不能占用列访问器的 `All`、`WithAlias`。模型的直接字段及嵌入字段不能与实际生成的模型方法同名。冲突在生成阶段报错，错误包含模型、字段及冲突名称。
+- **内嵌结构体展开**：内嵌结构体会递归展开到父模型的列访问器中，支持跨文件、跨包及多层指针嵌入。读取字段值、插入、更新和扫描时，会按需逐层初始化空的嵌入指针，并使用子字段自身的值或零值。嵌入指针为空不表示其子字段为 SQL `NULL`；普通指针字段为空仍按该字段的空值规则处理，包括嵌入结构体内部的普通指针字段。循环嵌入在生成阶段报错。
+- **列名前缀**：在内嵌结构体字段上声明 tag 可以为其展开的所有子列名添加统一前缀。多层嵌入的前缀按从外到内的顺序连接。
 - **独立行声明**：凡带有 `lorm` tag 的字段必须单独占用一行，避免 `FieldA, FieldB string \`lorm:"..."\`` 这种合并声明。
 - **时间类型约束**：时间字段为整数时保存 Unix 时间戳（秒）；为字符串时使用 `time.DateTime` (`2006-01-02 15:04:05`)。`int8`、`uint8`、`int16`、`uint16`、`int32` 不支持作为时间托管字段。
 
@@ -246,10 +252,13 @@ users := []*User{
 	{Name: "Charlie", Email: "charlie@example.com"},
 }
 
-// 1. 标准批量插入（单条多行 SQL，最高吞吐性能）：
+// 1. 标准批量插入，默认每批最多 1000 个模型：
 _, err := engine.Insert[*User]().
 	AddModels(users...).
 	Exec(ctx)
+
+// 自定义每批模型数，必须大于 0：
+_, err = engine.Insert[*User]().BatchSize(500).AddModels(users...).Exec(ctx)
 
 // 2. 需要对每个模型回填自增 ID 时：
 _, err := engine.Insert[*User]().
@@ -257,6 +266,10 @@ _, err := engine.Insert[*User]().
 	RequireIDBackfill(). // 在事务中退化为逐行执行并回填 ID
 	Exec(ctx)
 ```
+
+默认分批大小为 `lorm.DefaultInsertBatchSize`（1000）。分批使用同一事务；已有事务时复用调用方事务，错误须由调用方继续返回以触发回滚。执行失败时返回错误和 0 行。`BatchSize` 按模型数限制，字段较多时须根据数据库参数上限调小。`Exec` 后恢复默认大小；`Clone` 保留当前设置。
+
+普通批量插入不回填 ID，包括最后一批只有一个模型的情况。`RequireIDBackfill()` 始终逐行执行。事务回滚不会撤销模型上已回填的 ID。
 
 > **主键状态处理机制**：
 > - 自增主键为零值（`0`）时，LORM 会在 `INSERT` 语句中省略该列，由数据库自动生成。
@@ -420,6 +433,8 @@ if err := rows.Err(); err != nil {
 
 对于已通过 `lormgen` 生成字段映射的模型，可以使用 `ScanModel` 和 `ScanModels` 按列名扫描。单列结果可以使用 `ScanCol` 和 `ScanCols`；这两个方法要求 SQL 结果严格只有一列。
 
+使用 `ScanCols` 保留字节数据时，请使用 `[]byte`。`ScanCol` 只读取当前行，不关闭结果集；使用 `sql.RawBytes` 时，数据仅在下一次 `Next`、`Scan` 或 `Close` 之前有效。
+
 ```go
 // ScanModel：读取第一行到模型。
 rows, err := engine.SQL(ctx,
@@ -543,9 +558,11 @@ c := u.LormCols()
 | **模糊匹配** | `builder.Like(c.Name(), "John%")` | `` `name` LIKE ? `` |
 | **PostgreSQL 数组** | `builder.Any("roles", []string{"admin", "editor"})` | `"roles" = ANY(?)` |
 
-`try.TimeRange` 直接绑定 `time.Time`，保留纳秒和时区信息。`CASE` 的条件和值必须生成非空表达式；例如 `Case().When(builder.Or{}, "1")` 会返回错误。
+`try.TimeRange` 直接绑定 `time.Time`，保留纳秒和时区信息。`CASE` 的条件和值、`UPDATE SET` 的值、`INSERT VALUES` 中的表达式必须生成非空 SQL。传入空 `Or`、`Expr("")` 或 `Expr("  ")` 会返回错误。普通字符串值和 `nil` 值仍正常绑定为参数。
 
 > ⚠️ **关于 `builder.Eq` 的重要说明**：`builder.Eq{field: value}` 始终生成 `field = ?` 并将 `value` 作为一个驱动参数。它**不会**把 `nil` 改写为 `IS NULL`，也不会把切片自动展开为 `IN (...)`。空值判断与集合判断请分别显式使用 `builder.IsNull()` 与 `builder.In()`。
+
+语句的 `Where`、`Having`、`SetMap` 会检查 map 的键。若不同写法加引号后指向同一字段，则返回错误，不执行 SQL。嵌套 `And`、`Or` 中的 `Eq`、`NotEq` 同样检查。
 
 ### 复合逻辑组合 (`And` / `Or`)
 
@@ -608,6 +625,8 @@ log.Printf("当前页获取 %d 条 (总记录数: %d)", len(users), total)
 
 ### 单列值查询 (`GetCol`, `FindCols`, `PageCols`)
 
+这三个方法返回时，结果集已经关闭。字节数据请使用 `[]byte`。
+
 字段排序可以使用 `Asc(columns ...string)` 和 `Desc(columns ...string)`，无需拼接 SQL。两个方法都会转义字段名，也支持 `u.id` 这样的带别名字段。多次调用按顺序追加，例如 `Desc(c.CreatedAt()).Asc(c.ID())` 表示先按创建时间降序，再按 ID 升序。每次可以传多个字段，不传参数则不追加排序。查询、更新和删除语句均提供这两个方法，但更新和删除排序仍需数据库支持。SQL 表达式继续使用 `OrderBy("COALESCE(score, 0) DESC")`。
 
 标识符中的引号必须完整配对。已加引号的 `"a.b"` 会作为一个字段保留。`Asc("\"name\" DESC")` 这样的错误输入会立即 panic。
@@ -662,6 +681,8 @@ err := engine.TX(ctx, func(txCtx context.Context) error {
 })
 ```
 
+创建事务的最外层 `TX` 或 `TXWithOptions` 负责在退出时清理尚未结束的事务。回调返回错误、发生 panic 或调用 `runtime.Goexit()` 时都会回滚。panic 会继续向外传播；`Goexit()` 仍会结束当前 goroutine。事务清理在退出时完成，无需等待 `engine.Close()`。已完成提交或回滚时不会重复向数据库发送回滚操作。
+
 ### 嵌套事务支持
 
 若在已持有事务的 `context` 下再次调用 `Engine.TX`，LORM 会自动复用当前事务会话，而不会重复开启底层物理事务。
@@ -701,7 +722,7 @@ err := engine.TX(ctx, func(txCtx context.Context) error {
 
 ### 乐观锁版本控制 (`version`)
 
-在模型整数类型字段上标注 `version` tag：
+在模型至少 32 位的内置整数类型字段上标注 `version` tag。8 位和 16 位整数会在生成阶段报错：
 
 ```go
 type Product struct {

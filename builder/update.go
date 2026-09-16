@@ -87,6 +87,9 @@ func (b *UpdateBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bo
 			if err != nil {
 				return "", nil, false, err
 			}
+			if strings.TrimSpace(vsql) == "" {
+				return "", nil, false, fmt.Errorf("update SET expression for column %q must not be empty", clause.column)
+			}
 			if _, ok := vs.(*SelectBuilder); ok {
 				// Subqueries in SET need parentheses, while other Sqlizers can provide their own syntax.
 				valSql = fmt.Sprintf("(%s)", vsql)

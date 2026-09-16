@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,46 @@ func TestConcatExpr(t *testing.T) {
 
 	expectedArgs := []any{"f", "l"}
 	assert.Equal(t, expectedArgs, args)
+}
+
+func TestEqExpressionValuesAndArgumentOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		pred Sqlizer
+		want string
+		args []any
+	}{
+		{"eq", Eq{"z": nil, "a": Expr("COALESCE(?, ?)", 1, 2), "m": 3}, "a = COALESCE(?, ?) AND m = ? AND z = ?", []any{1, 2, 3, nil}},
+		{"not_eq", NotEq{"z": nil, "a": Expr("COALESCE(?, ?)", 1, 2), "m": 3}, "a <> COALESCE(?, ?) AND m <> ? AND z <> ?", []any{1, 2, 3, nil}},
+		{"without_args", Eq{"id": Expr("other_id")}, "id = other_id", nil},
+		{"expression_key", Eq{"COALESCE(?, id)": Expr("other_id")}, "COALESCE(other_id, id) = ?", nil},
+		{"escaped_key", Eq{"data ?? 'key'": Expr("TRUE")}, "data ?? 'key' = TRUE", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sql, args, err := tc.pred.ToSql()
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, sql)
+			assert.Equal(t, tc.args, args)
+		})
+	}
+	want := errors.New("nested expression failed")
+	for _, pred := range []Sqlizer{Eq{"a": 1, "b": failingCondition{want}}, NotEq{"a": 1, "b": failingCondition{want}}} {
+		sql, args, err := pred.ToSql()
+		assert.ErrorIs(t, err, want)
+		assert.Empty(t, sql)
+		assert.Nil(t, args)
+	}
+}
+
+var benchmarkEqSQL string
+var benchmarkEqArgs []any
+
+func BenchmarkEqThreeFields(b *testing.B) {
+	pred := Eq{"tenant_id": 42, "status": 1, "name": "alice"}
+	b.ReportAllocs()
+	for b.Loop() {
+		benchmarkEqSQL, benchmarkEqArgs, _ = pred.ToSql()
+	}
 }
 
 func TestConcatExprBadType(t *testing.T) {

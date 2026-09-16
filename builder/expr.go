@@ -180,33 +180,44 @@ func (eq Eq) toSQL(useNotOpr bool) (sql string, args []any, err error) {
 		return
 	}
 
-	equalOpr := "="
+	equalOpr := " = "
 	if useNotOpr {
-		equalOpr = "<>"
+		equalOpr = " <> "
 	}
 	keys := lo.Keys(eq)
 	slices.Sort(keys)
 
-	var exprs []Sqlizer
+	size := (len(keys)-1)*len(" AND ") + len(keys)*(len(equalOpr)+1)
 	for _, key := range keys {
-		exprs = append(exprs, Expr(fmt.Sprintf("%s %s ?", key, equalOpr), eq[key]))
+		size += len(key)
 	}
-
-	var sqlParts []string
-	for _, sqlizer := range exprs {
-		partSQL, partArgs, err := sqlizer.ToSql()
-		if err != nil {
-			return "", nil, err
+	var result strings.Builder
+	result.Grow(size)
+	args = make([]any, 0, len(keys))
+	for i, key := range keys {
+		if i > 0 {
+			result.WriteString(" AND ")
 		}
-		if partSQL != "" {
-			sqlParts = append(sqlParts, partSQL)
+		value := eq[key]
+		if _, ok := value.(Sqlizer); ok {
+			// Preserve Expr expansion, including placeholders in expression keys.
+			partSQL, partArgs, err := Expr(key+equalOpr+"?", value).ToSql()
+			if err != nil {
+				return "", nil, err
+			}
+			result.WriteString(partSQL)
 			args = append(args, partArgs...)
+			continue
 		}
+		result.WriteString(key)
+		result.WriteString(equalOpr)
+		result.WriteByte('?')
+		args = append(args, value)
 	}
-	if len(sqlParts) > 0 {
-		sql = strings.Join(sqlParts, " AND ")
+	if len(args) == 0 {
+		args = nil
 	}
-	return
+	return result.String(), args, nil
 }
 
 func (eq Eq) ToSql() (sql string, args []any, err error) {

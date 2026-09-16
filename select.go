@@ -161,6 +161,9 @@ func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 	} else {
 		res, err = scanModelValue[T](rows)
 	}
+	if closeErr := rows.Close(); closeErr != nil {
+		return t, false, errors.Join(err, closeErr)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return t, false, nil
@@ -171,6 +174,7 @@ func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 }
 
 // GetCol returns the first selected column and whether a row was found.
+// Use []byte for byte data that must outlive the query.
 func (s *SelectStmt[M]) GetCol[T any](ctx context.Context) (T, bool, error) {
 	var value T
 	defer s.reset()
@@ -189,7 +193,12 @@ func (s *SelectStmt[M]) GetCol[T any](ctx context.Context) (T, bool, error) {
 		return value, false, err
 	}
 	defer rows.Close()
-	if err = ScanCol(rows, &value); err != nil {
+	err = ScanCol(rows, &value)
+	if closeErr := rows.Close(); closeErr != nil {
+		var zero T
+		return zero, false, errors.Join(err, closeErr)
+	}
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return value, false, nil
 		}
@@ -362,7 +371,11 @@ func querySelectCount(ctx context.Context, engine *Engine, selectBuilder *builde
 	}
 	defer rows.Close()
 	var count uint64
-	if err = ScanCol(rows, &count); err != nil {
+	err = ScanCol(rows, &count)
+	if closeErr := rows.Close(); closeErr != nil {
+		return 0, errors.Join(err, closeErr)
+	}
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		}
@@ -496,7 +509,13 @@ func (s *SelectStmt[T]) CrossJoin(join string, rest ...any) *SelectStmt[T] {
 //
 // Where will panic if pred isn't any of the above types.
 func (s *SelectStmt[T]) Where(pred any, args ...any) *SelectStmt[T] {
-	s.builder.Where(escapePredicate(s.engine.Escaper(), pred), args...)
+	if s.err != nil {
+		return s
+	}
+	pred, s.err = escapePredicate(s.engine.Escaper(), pred)
+	if s.err == nil {
+		s.builder.Where(pred, args...)
+	}
 	return s
 }
 
@@ -529,7 +548,13 @@ func (s *SelectStmt[T]) GroupBy(groupBys ...string) *SelectStmt[T] {
 //
 // See Where.
 func (s *SelectStmt[T]) Having(pred any, rest ...any) *SelectStmt[T] {
-	s.builder.Having(escapePredicate(s.engine.Escaper(), pred), rest...)
+	if s.err != nil {
+		return s
+	}
+	pred, s.err = escapePredicate(s.engine.Escaper(), pred)
+	if s.err == nil {
+		s.builder.Having(pred, rest...)
+	}
 	return s
 }
 

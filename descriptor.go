@@ -88,14 +88,13 @@ func (m *ModelDescriptor) EnsureFields() []*FieldDescriptor {
 	seen := make(map[string]struct{})
 	fields := make([]*FieldDescriptor, 0)
 	for _, field := range m.Fields {
-		if field.EnsureFullName == "" {
-			continue
+		for _, parent := range field.EnsureFields() {
+			if _, ok := seen[parent.EnsureFullName]; ok {
+				continue
+			}
+			seen[parent.EnsureFullName] = struct{}{}
+			fields = append(fields, parent)
 		}
-		if _, ok := seen[field.EnsureFullName]; ok {
-			continue
-		}
-		seen[field.EnsureFullName] = struct{}{}
-		fields = append(fields, field)
 	}
 	return fields
 }
@@ -153,10 +152,21 @@ type FieldDescriptor struct {
 	DBField         string
 	Type            string
 	Flag            FieldFlag
-	Pointer         bool   `json:"-"`
-	EnsureFullName  string `json:",omitempty"`
-	EnsureType      string `json:",omitempty"`
-	ManagedTimeKind string `json:"-"`
-	IntegerKind     string `json:"-"`
-	IntegerBits     int    `json:"-"`
+	Pointer         bool               `json:"-"`
+	EnsureFullName  string             `json:",omitempty"`
+	EnsureType      string             `json:",omitempty"`
+	EnsureParents   []*FieldDescriptor `json:",omitempty"`
+	ManagedTimeKind string             `json:"-"`
+	IntegerKind     string             `json:"-"`
+	IntegerBits     int                `json:"-"`
+}
+
+// EnsureFields returns pointer ancestors from outermost to innermost.
+func (f *FieldDescriptor) EnsureFields() []*FieldDescriptor {
+	if f.EnsureFullName == "" {
+		return nil
+	}
+	fields := make([]*FieldDescriptor, 0, len(f.EnsureParents)+1)
+	fields = append(fields, f.EnsureParents...)
+	return append(fields, f)
 }
