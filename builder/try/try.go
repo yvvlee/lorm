@@ -95,28 +95,21 @@ func Range[T cmp.Ordered](dbField string, min, max *T) builder.Sqlizer {
 	}
 }
 
-func timeToString(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.Format(time.DateTime)
-}
-
 // TimeRange adds condition dbField >= start if start is not zero, and dbField < end if end is not zero
 func TimeRange(dbField string, start, end *time.Time) builder.Sqlizer {
 	if start == nil || start.IsZero() {
 		if end == nil || end.IsZero() {
 			return nil
 		} else {
-			return builder.Lt(dbField, timeToString(end))
+			return builder.Lt(dbField, *end)
 		}
 	} else {
 		if end == nil || end.IsZero() {
-			return builder.Gte(dbField, timeToString(start))
+			return builder.Gte(dbField, *start)
 		} else {
 			return builder.And{
-				builder.Gte(dbField, timeToString(start)),
-				builder.Lt(dbField, timeToString(end)),
+				builder.Gte(dbField, *start),
+				builder.Lt(dbField, *end),
 			}
 		}
 	}

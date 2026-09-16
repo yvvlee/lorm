@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/samber/lo"
 )
@@ -317,11 +318,16 @@ func IsNotNull(field string) Sqlizer {
 	return fieldExpr{field: field, suffix: " IS NOT NULL"}
 }
 
+// orderedValue includes timestamps without converting them to strings.
+type orderedValue interface {
+	cmp.Ordered | time.Time
+}
+
 // Lt is syntactic sugar for use with Where/Having/Set methods.
 // Ex:
 //
 //	.Where(Lt("id", 1))
-func Lt[T cmp.Ordered](field string, value T) Sqlizer {
+func Lt[T orderedValue](field string, value T) Sqlizer {
 	return fieldExpr{field: field, suffix: " < ?", args: []any{value}}
 }
 
@@ -329,7 +335,7 @@ func Lt[T cmp.Ordered](field string, value T) Sqlizer {
 // Ex:
 //
 //	.Where(Lte("id", 1)) == "id <= 1"
-func Lte[T cmp.Ordered](field string, value T) Sqlizer {
+func Lte[T orderedValue](field string, value T) Sqlizer {
 	return fieldExpr{field: field, suffix: " <= ?", args: []any{value}}
 }
 
@@ -337,7 +343,7 @@ func Lte[T cmp.Ordered](field string, value T) Sqlizer {
 // Ex:
 //
 //	.Where(Gt("id", 1)) == "id > 1"
-func Gt[T cmp.Ordered](field string, value T) Sqlizer {
+func Gt[T orderedValue](field string, value T) Sqlizer {
 	return fieldExpr{field: field, suffix: " > ?", args: []any{value}}
 }
 
@@ -345,12 +351,12 @@ func Gt[T cmp.Ordered](field string, value T) Sqlizer {
 // Ex:
 //
 //	.Where(Gte("id", 1)) == "id >= 1"
-func Gte[T cmp.Ordered](field string, value T) Sqlizer {
+func Gte[T orderedValue](field string, value T) Sqlizer {
 	return fieldExpr{field: field, suffix: " >= ?", args: []any{value}}
 }
 
 // Between builds a field BETWEEN ? AND ? predicate.
-func Between[T cmp.Ordered](field string, start, end T) Sqlizer {
+func Between[T orderedValue](field string, start, end T) Sqlizer {
 	return fieldExpr{field: field, suffix: " BETWEEN ? AND ?", args: []any{start, end}}
 }
 

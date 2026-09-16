@@ -37,7 +37,14 @@ func (b *DeleteBuilder) Clone() *DeleteBuilder {
 }
 
 // ToSql renders the DELETE statement and its bound arguments.
-func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
+func (b *DeleteBuilder) ToSql() (string, []any, error) {
+	sql, args, _, err := b.ToSqlWithWhere()
+	return sql, args, err
+}
+
+// ToSqlWithWhere renders SQL and reports whether that same SQL has a restrictive WHERE.
+// Each condition is evaluated once, so write guards do not need to rebuild the query.
+func (b *DeleteBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bool, err error) {
 	if len(b.from) == 0 {
 		err = fmt.Errorf("delete statements must specify a from table")
 		return
@@ -58,7 +65,13 @@ func (b *DeleteBuilder) ToSql() (sqlStr string, args []any, err error) {
 	sql.WriteString(b.from)
 
 	if len(b.whereParts) > 0 {
-		args, err = appendConditionClause(b.whereParts, sql, " WHERE ", true, args)
+		var condition conditionSQL
+		condition, err = buildConditions(b.whereParts, false, false)
+		if err != nil {
+			return
+		}
+		hasWhere = condition.kind == conditionExpression || condition.kind == conditionFalse
+		args, err = appendBuiltConditionClause(condition, sql, " WHERE ", true, args)
 		if err != nil {
 			return
 		}

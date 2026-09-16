@@ -25,8 +25,16 @@ import (
 )
 
 const (
-	lormPackage = "github.com/yvvlee/lorm"
+	lormPackage       = "github.com/yvvlee/lorm"
+	defaultFileSuffix = "_lorm_gen"
 )
+
+func effectiveFileSuffix(suffix string) string {
+	if suffix == "" {
+		return defaultFileSuffix
+	}
+	return suffix
+}
 
 var (
 	//go:embed templates/model.tmpl
@@ -54,7 +62,7 @@ func NewGenerator(
 		tableMapper: tableMapper,
 		fieldMapper: fieldMapper,
 		tagKey:      tagKey,
-		fileSuffix:  fileSuffix,
+		fileSuffix:  effectiveFileSuffix(fileSuffix),
 		fileSet:     token.NewFileSet(),
 	}
 }
@@ -119,6 +127,9 @@ func (g *Generator) generateFile(file *lorm.FileDescriptor) (string, error) {
 		return "", err
 	}
 	generatedFilePath := g.generatedFilePath(file.Path)
+	if filepath.Clean(generatedFilePath) == filepath.Clean(file.Path) {
+		return "", fmt.Errorf("generated file would overwrite source file %q", file.Path)
+	}
 	formatted, err := imports.Process(generatedFilePath, content, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to format generated code: %w", err)
@@ -131,7 +142,7 @@ func (g *Generator) generateFile(file *lorm.FileDescriptor) (string, error) {
 }
 
 func (g *Generator) generatedFilePath(originFile string) string {
-	return originFile[:len(originFile)-3] + g.fileSuffix + ".go"
+	return strings.TrimSuffix(originFile, ".go") + effectiveFileSuffix(g.fileSuffix) + ".go"
 }
 
 func (g *Generator) load(files []string) ([]*packages.Package, error) {
@@ -211,6 +222,11 @@ func (g *Generator) extractFile(pkg *packages.Package, file *ast.File) (*lorm.Fi
 		}),
 		Structs: nil,
 	}
+	buildConstraint, err := sourceBuildConstraint(fileRefPath, file)
+	if err != nil {
+		return nil, err
+	}
+	fileInfo.BuildConstraint = buildConstraint
 
 	var extractErr error
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -479,6 +495,9 @@ func validateModelDescriptor(model *lorm.ModelDescriptor) error {
 			}
 			autoIncrementField = field.FullName
 		}
+	}
+	if model.TableName != "" && len(model.Fields) == 1 && autoIncrementField != "" {
+		return fmt.Errorf("model %s contains only auto-increment primary key %s; at least one other database column is required", model.Name, autoIncrementField)
 	}
 	return nil
 }
@@ -830,6 +849,9 @@ func findTypeSpecByPos(pkg *packages.Package, pos token.Pos) *ast.TypeSpec {
 // generateCode renders the template and applies gofmt before the file hits disk.
 func generateCode(fileInfo *lorm.FileDescriptor) ([]byte, error) {
 	for _, model := range fileInfo.Structs {
+		if err := validateModelDescriptor(model); err != nil {
+			return nil, err
+		}
 		populateModelMetadata(model)
 	}
 	var buf bytes.Buffer

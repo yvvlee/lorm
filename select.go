@@ -204,7 +204,11 @@ func (s *SelectStmt[T]) Exist(ctx context.Context) (bool, error) {
 	if s.err != nil {
 		return false, s.err
 	}
-	query, args, err := s.builder.Clone().Select("1").Limit(1).ToSql()
+	defaultProjection, err := s.ensureSelectColumns()
+	if err != nil {
+		return false, err
+	}
+	query, args, err := s.builder.ToExistBuilder(defaultProjection).ToSql()
 	if err != nil {
 		return false, err
 	}

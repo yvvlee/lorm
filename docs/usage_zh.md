@@ -110,7 +110,7 @@ type User struct {
 | :--- | :--- | :--- |
 | `列名 (column_name)` | 显式指定该字段对应的数据库列名。缺省时默认转为 `snake_case`。 | 所有字段 |
 | `primary_key` | 声明为主键字段。支持复合主键。 | 标量类型 / 整数 / 字符串 |
-| `auto_increment` | 声明为自增字段。必须同时具备 `primary_key`。 | 整数类型 |
+| `auto_increment` | 声明为自增字段。必须同时具备 `primary_key`。可写模型必须另有至少一个数据库字段。 | 整数类型 |
 | `created` | 插入数据且字段为零值时，自动填充当前时间。 | `time.Time`, `sql.NullTime`, `int64`, `uint64`, `uint32`, `uint`, 64位 `int`, `string` 及其一层指针 |
 | `updated` | 插入时零值填充时间，并在更新模型时自动刷新为当前时间。 | 同 `created` |
 | `version` | 声明为乐观锁版本字段，更新时自动作为条件比对并自增。每个模型最多 1 个。 | 整数类型 |
@@ -144,8 +144,10 @@ lormgen [flags] <directory|file>...
 | `--table-prefix` | `""` | 生成表名的统一定义前缀（如 `t_`） |
 | `--table-suffix` | `""` | 生成表名的统一定义后缀 |
 | `--tag-key` | `lorm` | 结构体 Tag Key |
-| `--file-suffix` | `_lorm_gen` | 生成 Go 文件的命名后缀 |
+| `--file-suffix` | `_lorm_gen` | 生成 Go 文件的命名后缀；空值也使用默认后缀 |
 | `--ignore` | `""` | 忽略文件的 Glob 模式（可多次指定） |
+
+生成文件保留源文件的 `//go:build` 条件。仅有旧式 `// +build` 时会转换为新格式。文件名中的系统和架构限制也会写入生成文件的编译条件。
 
 ### 生成的代码包含什么
 
@@ -274,6 +276,10 @@ total, err := engine.Query[*User]().
 ```
 
 `Count(ctx)` 返回 `(uint64, error)`。它忽略排序、Limit 和 Offset，保留筛选、`DISTINCT`、分组和 `HAVING`。分组查询返回分组数量。它属于终结方法，无论成功或失败都会重置 Stmt。`Page` 仍会先查询总数，再查询当前页。
+
+#### 判断是否存在结果 (`Exist`)
+
+`Exist(ctx)` 返回 `(bool, error)`，只读取是否存在第一行，不映射模型。普通查询使用 `SELECT 1 ... LIMIT 1`。指定字段、去重、分组等查询会保留原查询，通过外层查询只取常量和至多一行。`Limit(0)` 返回 `false`，`Offset` 仍然生效。它属于终结方法，成功或失败后都会重置 Stmt。
 
 #### 预览 SQL (`ToSql`)
 
@@ -537,6 +543,8 @@ c := u.LormCols()
 | **模糊匹配** | `builder.Like(c.Name(), "John%")` | `` `name` LIKE ? `` |
 | **PostgreSQL 数组** | `builder.Any("roles", []string{"admin", "editor"})` | `"roles" = ANY(?)` |
 
+`try.TimeRange` 直接绑定 `time.Time`，保留纳秒和时区信息。`CASE` 的条件和值必须生成非空表达式；例如 `Case().When(builder.Or{}, "1")` 会返回错误。
+
 > ⚠️ **关于 `builder.Eq` 的重要说明**：`builder.Eq{field: value}` 始终生成 `field = ?` 并将 `value` 作为一个驱动参数。它**不会**把 `nil` 改写为 `IS NULL`，也不会把切片自动展开为 `IN (...)`。空值判断与集合判断请分别显式使用 `builder.IsNull()` 与 `builder.In()`。
 
 ### 复合逻辑组合 (`And` / `Or`)
@@ -601,6 +609,8 @@ log.Printf("当前页获取 %d 条 (总记录数: %d)", len(users), total)
 ### 单列值查询 (`GetCol`, `FindCols`, `PageCols`)
 
 字段排序可以使用 `Asc(columns ...string)` 和 `Desc(columns ...string)`，无需拼接 SQL。两个方法都会转义字段名，也支持 `u.id` 这样的带别名字段。多次调用按顺序追加，例如 `Desc(c.CreatedAt()).Asc(c.ID())` 表示先按创建时间降序，再按 ID 升序。每次可以传多个字段，不传参数则不追加排序。查询、更新和删除语句均提供这两个方法，但更新和删除排序仍需数据库支持。SQL 表达式继续使用 `OrderBy("COALESCE(score, 0) DESC")`。
+
+标识符中的引号必须完整配对。已加引号的 `"a.b"` 会作为一个字段保留。`Asc("\"name\" DESC")` 这样的错误输入会立即 panic。
 
 当只查询单列标量或聚合值时，无需声明结构体，直接使用泛型列提取方法：
 

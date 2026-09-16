@@ -166,6 +166,7 @@ func TestGenerateCodeEmitsOnlyRelevantWriteHooks(t *testing.T) {
 						Flag:        lorm.FlagPrimaryKey | lorm.FlagAutoIncrement,
 						IntegerKind: "int64", IntegerBits: 64,
 					},
+					{Name: "Name", FullName: "Name", DBField: "name"},
 				},
 			},
 			{

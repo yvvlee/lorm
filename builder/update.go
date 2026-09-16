@@ -47,7 +47,14 @@ func (b *UpdateBuilder) Clone() *UpdateBuilder {
 }
 
 // ToSql renders the UPDATE statement and its bound arguments.
-func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
+func (b *UpdateBuilder) ToSql() (string, []any, error) {
+	sql, args, _, err := b.ToSqlWithWhere()
+	return sql, args, err
+}
+
+// ToSqlWithWhere renders SQL and reports whether that same SQL has a restrictive WHERE.
+// Each condition is evaluated once, so write guards do not need to rebuild the query.
+func (b *UpdateBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bool, err error) {
 	if len(b.table) == 0 {
 		err = fmt.Errorf("update statements must specify a table")
 		return
@@ -78,7 +85,7 @@ func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 		if vs, ok := clause.value.(Sqlizer); ok {
 			vsql, vargs, err := vs.ToSql()
 			if err != nil {
-				return "", nil, err
+				return "", nil, false, err
 			}
 			if _, ok := vs.(*SelectBuilder); ok {
 				// Subqueries in SET need parentheses, while other Sqlizers can provide their own syntax.
@@ -104,7 +111,13 @@ func (b *UpdateBuilder) ToSql() (sqlStr string, args []any, err error) {
 	}
 
 	if len(b.whereParts) > 0 {
-		args, err = appendConditionClause(b.whereParts, sql, " WHERE ", true, args)
+		var condition conditionSQL
+		condition, err = buildConditions(b.whereParts, false, false)
+		if err != nil {
+			return
+		}
+		hasWhere = condition.kind == conditionExpression || condition.kind == conditionFalse
+		args, err = appendBuiltConditionClause(condition, sql, " WHERE ", true, args)
 		if err != nil {
 			return
 		}

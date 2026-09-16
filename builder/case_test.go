@@ -139,3 +139,25 @@ func TestCaseWithNoWhenClause(t *testing.T) {
 
 	assert.Equal(t, "case expression must contain at lease one WHEN clause", err.Error())
 }
+
+func TestCaseRejectsEmptyRequiredExpressions(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		stmt   *CaseBuilder
+		clause string
+	}{
+		{"empty or", Case().When(Or{}, "1"), "WHEN"},
+		{"nil when", Case().When(nil, "1"), "WHEN"},
+		{"whitespace when", Case().When(" \n", "1"), "WHEN"},
+		{"empty then", Case().When("1=1", Expr("")), "THEN"},
+		{"empty else", Case().When("1=1", "1").Else(nil), "ELSE"},
+		{"empty value", Case(Expr("")).When("1", "2"), "CASE value"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := Select().AddColumn(tt.stmt).ToSql()
+			assert.ErrorContains(t, err, "non-empty "+tt.clause+" expression")
+		})
+	}
+	_, _, err := Case().When(And{}, Expr("NULL")).ToSql()
+	assert.NoError(t, err)
+}

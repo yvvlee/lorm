@@ -46,6 +46,7 @@ var FlagTagMap = map[FieldFlag]string{
 // FileDescriptor describes a source file used by lorm metadata/code generation.
 type FileDescriptor struct {
 	Path             string
+	BuildConstraint  string `json:",omitempty"`
 	LormImportAlias  string
 	Package          string
 	Imports          []*Import

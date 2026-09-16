@@ -3,6 +3,8 @@ package builder
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"strings"
 )
 
 // sqlizerBuffer is a helper that allows to write many Sqlizers one by one
@@ -14,7 +16,7 @@ type sqlizerBuffer struct {
 }
 
 // WriteSql converts Sqlizer to SQL strings and writes it to buffer
-func (b *sqlizerBuffer) WriteSql(item Sqlizer) {
+func (b *sqlizerBuffer) WriteSql(item Sqlizer, clause string) {
 	if b.err != nil {
 		return
 	}
@@ -27,6 +29,10 @@ func (b *sqlizerBuffer) WriteSql(item Sqlizer) {
 		return
 	}
 
+	if strings.TrimSpace(str) == "" {
+		b.err = fmt.Errorf("case expression requires a non-empty %s expression", clause)
+		return
+	}
 	b.WriteString(str)
 	b.WriteByte(' ')
 	b.args = append(b.args, args...)
@@ -65,19 +71,19 @@ func (b *CaseBuilder) ToSql() (sqlStr string, args []any, err error) {
 
 	sql.WriteString("CASE ")
 	if b.what != nil {
-		sql.WriteSql(b.what)
+		sql.WriteSql(b.what, "CASE value")
 	}
 
 	for _, p := range b.whenParts {
 		sql.WriteString("WHEN ")
-		sql.WriteSql(p.when)
+		sql.WriteSql(p.when, "WHEN")
 		sql.WriteString("THEN ")
-		sql.WriteSql(p.then)
+		sql.WriteSql(p.then, "THEN")
 	}
 
 	if b.els != nil {
 		sql.WriteString("ELSE ")
-		sql.WriteSql(b.els)
+		sql.WriteSql(b.els, "ELSE")
 	}
 
 	sql.WriteString("END")

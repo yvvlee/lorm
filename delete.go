@@ -60,11 +60,11 @@ func (s *DeleteStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	if s.err != nil {
 		return 0, s.err
 	}
-	query, args, err := s.builder.ToSql()
+	query, args, hasWhere, err := s.builder.ToSqlWithWhere()
 	if err != nil {
 		return 0, err
 	}
-	if !s.allowGlobalWrite && !s.builder.HasWhere() {
+	if !s.allowGlobalWrite && !hasWhere {
 		return 0, errors.New("lorm.Delete().Exec() requires a WHERE clause or AllowGlobalWrite()")
 	}
 	result, err := s.engine.Exec(ctx, query, args...)

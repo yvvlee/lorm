@@ -110,7 +110,7 @@ type User struct {
 | :--- | :--- | :--- |
 | `column_name` | Explicitly maps the struct field to the database column name. Defaults to `snake_case` if omitted. | All fields |
 | `primary_key` | Marks the field as a primary key. Supports composite primary keys. | Scalars / Integers / Strings |
-| `auto_increment` | Marks the field as auto-incrementing. Must also be marked as `primary_key`. | Integers |
+| `auto_increment` | Marks the field as auto-incrementing. Must also be marked as `primary_key`. Writable models require at least one other database column. | Integers |
 | `created` | Auto-populates creation timestamp upon insert when the field is zero-valued. | `time.Time`, `sql.NullTime`, `int64`, `uint64`, `uint32`, `uint`, `int` (64-bit), `string`, and single pointers |
 | `updated` | Auto-populates timestamp on insert (when zero) and automatically refreshes to current time on updates. | Same as `created` |
 | `version` | Enables optimistic locking. Automatically incremented on `UPDATE`. Max 1 per model. | Integer types |
@@ -144,8 +144,10 @@ lormgen [flags] <directory|file>...
 | `--table-prefix` | `""` | Global prefix for generated table names (e.g. `tbl_`) |
 | `--table-suffix` | `""` | Global suffix for generated table names |
 | `--tag-key` | `lorm` | Struct tag key |
-| `--file-suffix` | `_lorm_gen` | Suffix for generated Go source files |
+| `--file-suffix` | `_lorm_gen` | Suffix for generated Go source files; empty values also use the default |
 | `--ignore` | `""` | Glob pattern to exclude files (can be specified multiple times) |
+
+Generated files preserve source `//go:build` constraints and convert legacy `// +build` constraints when needed. OS and architecture restrictions in source filenames are also included in the generated build constraint.
 
 ### What `lormgen` Generates
 
@@ -274,6 +276,10 @@ total, err := engine.Query[*User]().
 ```
 
 `Count(ctx)` returns `(uint64, error)`. It ignores ordering, limit, and offset, while preserving filtering, `DISTINCT`, grouping, and `HAVING`. Grouped queries count groups, not their input rows. This is a terminal method: the statement resets after success or failure. `Page` continues to query the total before fetching the requested page.
+
+#### Check for results (`Exist`)
+
+`Exist(ctx)` returns `(bool, error)` without mapping a model. Simple queries use `SELECT 1 ... LIMIT 1`. Custom projections, distinct queries, and grouped queries retain the original query inside an outer query that returns only a constant and at most one row. `Limit(0)` returns `false`; offsets remain effective. This terminal method resets the statement after success or failure.
 
 #### Preview SQL (`ToSql`)
 
@@ -537,6 +543,8 @@ c := u.LormCols()
 | **LIKE** | `builder.Like(c.Name(), "John%")` | `` `name` LIKE ? `` |
 | **PostgreSQL Array** | `builder.Any("roles", []string{"admin", "editor"})` | `"roles" = ANY(?)` |
 
+`try.TimeRange` binds `time.Time` values directly, preserving nanoseconds and time zones. CASE conditions and values must produce non-empty expressions; for example, `Case().When(builder.Or{}, "1")` returns an error.
+
 > ⚠️ **Important on `builder.Eq`**: `builder.Eq{field: value}` always renders `field = ?` with `value` as a single parameter. It does NOT convert `nil` to `IS NULL` or expand slices into `IN (...)`. Use `builder.IsNull()` and `builder.In()` explicitly.
 
 ### Logical Combinations (`And` / `Or`)
@@ -601,6 +609,8 @@ log.Printf("Found %d users (Total: %d)", len(users), total)
 ### Single-Column Queries (`GetCol`, `FindCols`, `PageCols`)
 
 Use `Asc(columns ...string)` and `Desc(columns ...string)` to sort by column names without concatenating SQL. Both methods quote identifiers, including qualified names such as `u.id`. Calls append ordering terms in sequence, so `Desc(c.CreatedAt()).Asc(c.ID())` sorts by creation time descending, then ID ascending. Multiple columns are supported; zero arguments add nothing. These methods are available on select, update, and delete statements, subject to database support for ordered writes. Use `OrderBy("COALESCE(score, 0) DESC")` for SQL expressions.
+
+Quoted identifiers must be complete. `"a.b"` remains a single identifier. Malformed inputs such as `Asc("\"name\" DESC")` panic immediately.
 
 When selecting a single column or aggregate value, use generic column scanners:
 

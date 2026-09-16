@@ -201,6 +201,25 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 	return
 }
 
+// ToExistBuilder checks for a result while preserving grouping and pagination.
+// It returns a constant and at most one row, without modifying the source builder.
+// columnsOnly permits replacing the projection on simple queries. The caller must
+// guarantee that it contains only column references, with no aggregate expressions.
+func (b *SelectBuilder) ToExistBuilder(columnsOnly bool) *SelectBuilder {
+	sub := b.Clone()
+	if columnsOnly && len(b.options) == 0 && len(b.groupBys) == 0 && len(b.havingParts) == 0 && len(b.suffixes) == 0 {
+		sub.Select("1")
+		if sub.limit != "0" {
+			sub.Limit(1)
+		}
+		return sub
+	}
+	result := Select("1").FromSelect(sub, "lorm_exist").Limit(1)
+	result.withParts, sub.withParts = sub.withParts, nil
+	result.prefixes, sub.prefixes = sub.prefixes, nil
+	return result
+}
+
 // ToCountBuilder rewrites the query into a COUNT query while preserving filters and joins.
 func (b *SelectBuilder) ToCountBuilder() *SelectBuilder {
 	hasDistinct := hasOption(b.options, "DISTINCT")

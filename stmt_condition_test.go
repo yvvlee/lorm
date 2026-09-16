@@ -66,3 +66,43 @@ func TestEmptyOrPreservesOtherFiltersAndBoundParameters(t *testing.T) {
 	assert.Equal(t, "DELETE FROM `order` WHERE (1=0)", recorder.Last().query)
 	assert.Empty(t, recorder.Last().args)
 }
+
+type changingWriteCondition struct {
+	calls int
+	first string
+}
+
+func (p *changingWriteCondition) ToSql() (string, []any, error) {
+	p.calls++
+	if p.calls == 1 {
+		return p.first, nil, nil
+	}
+	return "id = 7", nil, nil
+}
+
+func TestWriteGuardUsesTheExecutedCondition(t *testing.T) {
+	for _, first := range []string{"1=1", "", "id = 3", "1=0"} {
+		for _, operation := range []string{"update", "delete"} {
+			t.Run(operation+"/"+first, func(t *testing.T) {
+				recorder := newCaptureSQLRecorder()
+				engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+				pred := &changingWriteCondition{first: first}
+				var err error
+				if operation == "update" {
+					_, err = engine.Update[*reservedWordModel]().Set("group", "all").Where(pred).Exec(context.Background())
+				} else {
+					_, err = engine.Delete[*reservedWordModel]().Where(pred).Exec(context.Background())
+				}
+				assert.Equal(t, 1, pred.calls)
+				if first == "1=1" || first == "" {
+					require.ErrorContains(t, err, "requires a WHERE clause")
+					assert.Empty(t, recorder.Calls())
+				} else {
+					require.NoError(t, err)
+					assert.Contains(t, recorder.Last().query, "WHERE ")
+					assert.Contains(t, recorder.Last().query, first)
+				}
+			})
+		}
+	}
+}

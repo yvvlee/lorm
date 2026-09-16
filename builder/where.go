@@ -38,6 +38,10 @@ func appendConditionClause(parts []Sqlizer, w io.Writer, clause string, omitTrue
 	if err != nil {
 		return nil, err
 	}
+	return appendBuiltConditionClause(condition, w, clause, omitTrue, args)
+}
+
+func appendBuiltConditionClause(condition conditionSQL, w io.Writer, clause string, omitTrue bool, args []any) ([]any, error) {
 	if condition.kind == conditionEmpty || (omitTrue && condition.kind == conditionTrue) {
 		return args, nil
 	}

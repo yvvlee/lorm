@@ -72,14 +72,14 @@ func TestRange(t *testing.T) {
 }
 
 func TestTimeRange(t *testing.T) {
-	start := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC)
+	start := time.Date(2023, 1, 1, 0, 0, 0, 987654321, time.FixedZone("UTC+8", 8*60*60))
+	end := time.Date(2023, 1, 2, 0, 0, 0, 987654321, time.FixedZone("UTC+8", 8*60*60))
 
 	c := TimeRange("created_at", &start, &end)
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "(created_at >= ? AND created_at < ?)", sql)
-	assert.Equal(t, []any{"2023-01-01 00:00:00", "2023-01-02 00:00:00"}, args)
+	assert.Equal(t, []any{start, end}, args)
 }
 
 func TestNotEqual(t *testing.T) {
@@ -161,15 +161,13 @@ func TestNotIn(t *testing.T) {
 }
 
 func TestTimeRangeBranches(t *testing.T) {
-	assert.Equal(t, "", timeToString(nil))
-
 	// start nil, end set
 	end := time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC)
 	c := TimeRange("created_at", nil, &end)
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at < ?", sql)
-	assert.Equal(t, []any{"2023-01-02 00:00:00"}, args)
+	assert.Equal(t, []any{end}, args)
 
 	// start set, end nil
 	start := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -177,7 +175,7 @@ func TestTimeRangeBranches(t *testing.T) {
 	sql, args, err = c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "created_at >= ?", sql)
-	assert.Equal(t, []any{"2023-01-01 00:00:00"}, args)
+	assert.Equal(t, []any{start}, args)
 
 	var zero time.Time
 	assert.Nil(t, TimeRange("created_at", &zero, &zero))

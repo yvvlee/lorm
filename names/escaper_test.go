@@ -2,6 +2,8 @@ package names
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestQuoter_Escape(t *testing.T) {
@@ -85,6 +87,29 @@ func TestQuoter_Escape(t *testing.T) {
 				t.Errorf("Escape(%q) = %q, want %q", tt.fieldOrTable, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestQuoterPreservesQuotedIdentifierBoundaries(t *testing.T) {
+	for _, tt := range []struct{ input, want string }{
+		{`"a.b"`, `"a.b"`},
+		{`schema."a.b"`, `"schema"."a.b"`},
+		{`"schema.name".field`, `"schema.name"."field"`},
+		{`"schema.name"."a"".b"`, `"schema.name"."a"".b"`},
+		{`a"b.field`, `"a""b"."field"`},
+	} {
+		q := NewQuoter('"', '"')
+		assert.Equal(t, tt.want, q.Escape(tt.input))
+		assert.Equal(t, tt.want, q.Escape(q.Escape(tt.input)))
+	}
+	q := NewQuoter('[', ']')
+	assert.Equal(t, `[schema.name].[a]].b]`, q.Escape(`[schema.name].[a]].b]`))
+}
+
+func TestQuoterRejectsMalformedQuotedIdentifiers(t *testing.T) {
+	q := NewQuoter('"', '"')
+	for _, input := range []string{`"value" DESC, "id"`, `"unclosed`, `schema."field" ASC`, `"field"suffix`, `"a""`} {
+		assert.Panics(t, func() { q.Escape(input) }, input)
 	}
 }
 

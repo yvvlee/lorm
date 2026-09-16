@@ -21,7 +21,7 @@ func init() {
 	cmd.PersistentFlags().StringVar(&tablePrefix, "table-prefix", "", "db table name prefix")
 	cmd.PersistentFlags().StringVar(&tableSuffix, "table-suffix", "", "db table name suffix")
 	cmd.PersistentFlags().StringVar(&tagKey, "tag-key", "lorm", "table field tag key")
-	cmd.PersistentFlags().StringVar(&fileSuffix, "file-suffix", "_lorm_gen", "suffix of generated file")
+	cmd.PersistentFlags().StringVar(&fileSuffix, "file-suffix", defaultFileSuffix, "suffix of generated file")
 	cmd.PersistentFlags().StringSliceVar(&ignorePatterns, "ignore", nil, "wildcards of ignore files")
 }
 
@@ -153,10 +153,7 @@ func argsToFiles(args []string) ([]string, error) {
 }
 
 func isValidFile(file string) bool {
-	generatedSuffix := fileSuffix
-	if generatedSuffix == "" {
-		generatedSuffix = "_lorm_gen"
-	}
+	generatedSuffix := effectiveFileSuffix(fileSuffix)
 	return strings.HasSuffix(file, ".go") &&
 		!strings.HasSuffix(file, "_test.go") &&
 		!strings.HasSuffix(file, "_gen.go") &&
