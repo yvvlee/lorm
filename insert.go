@@ -15,17 +15,16 @@ func newInsertBuilder[T Table](engine *Engine) *builder.InsertBuilder {
 	return builder.Insert(engine.Escaper().Escape(t.TableName()))
 }
 
-func newInsertStmt[T Table](engine *Engine, isNil func(T) bool) *InsertStmt[T] {
+func newInsertStmt[T Table](engine *Engine) *InsertStmt[T] {
 	return &InsertStmt[T]{
 		engine:  engine,
 		builder: newInsertBuilder[T](engine),
-		isNil:   isNil,
 	}
 }
 
 // Insert builds an INSERT statement for pointer table P.
 func (e *Engine) Insert[P TablePointer[M], M any]() *InsertStmt[P] {
-	return newInsertStmt(e, func(model P) bool { return model == nil })
+	return newInsertStmt[P](e)
 }
 
 // InsertStmt is a fluent INSERT builder for table T.
@@ -33,7 +32,6 @@ type InsertStmt[T Table] struct {
 	engine            *Engine
 	builder           *builder.InsertBuilder
 	models            []T
-	isNil             func(T) bool
 	err               error
 	requireIDBackfill bool
 }
@@ -52,19 +50,18 @@ func (s *InsertStmt[T]) Clone() *InsertStmt[T] {
 		engine:            s.engine,
 		builder:           s.builder.Clone(),
 		models:            append([]T(nil), s.models...),
-		isNil:             s.isNil,
 		err:               s.err,
 		requireIDBackfill: s.requireIDBackfill,
 	}
 }
 
-// AddModel appends a model to the insert batch.
+// AddModel appends a model to the insert batch. The model must not be nil.
 func (s *InsertStmt[T]) AddModel(model T) *InsertStmt[T] {
 	s.models = append(s.models, model)
 	return s
 }
 
-// AddModels appends models to the insert batch.
+// AddModels appends models to the insert batch. Models must not be nil.
 func (s *InsertStmt[T]) AddModels(models ...T) *InsertStmt[T] {
 	s.models = append(s.models, models...)
 	return s
@@ -98,11 +95,6 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 	}
 	if len(s.models) == 0 {
 		return 0, nil
-	}
-	for i, model := range s.models {
-		if s.isNil(model) {
-			return 0, fmt.Errorf("lorm.Insert().Exec() model at index %d is nil", i)
-		}
 	}
 
 	now := time.Now()

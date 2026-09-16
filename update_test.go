@@ -41,13 +41,6 @@ func TestUpdateSetModelRequiresPrimaryKey(t *testing.T) {
 	assert.ErrorContains(t, err, "primary key")
 }
 
-func TestUpdateTypedNilReturnsErrorFromExec(t *testing.T) {
-	stmt := (&Engine{config: &Config{}}).Update[*Test]().SetModel(nil)
-
-	_, err := stmt.Exec(context.Background())
-	assert.ErrorContains(t, err, "model is nil")
-}
-
 func TestUpdateAssignmentModesCannotBeMixed(t *testing.T) {
 	engine := &Engine{config: &Config{}}
 	model := &reservedWordModel{ID: 1, Group: "model"}

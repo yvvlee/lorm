@@ -21,17 +21,16 @@ func newUpdateBuilder[T Table](engine *Engine) *builder.UpdateBuilder {
 	return builder.Update(engine.Escaper().Escape(t.TableName()))
 }
 
-func newUpdateStmt[T Table](engine *Engine, isNil func(T) bool) *UpdateStmt[T] {
+func newUpdateStmt[T Table](engine *Engine) *UpdateStmt[T] {
 	return &UpdateStmt[T]{
 		engine:  engine,
 		builder: newUpdateBuilder[T](engine),
-		isNil:   isNil,
 	}
 }
 
 // Update builds an UPDATE statement for pointer table P.
 func (e *Engine) Update[P TablePointer[M], M any]() *UpdateStmt[P] {
-	return newUpdateStmt(e, func(model P) bool { return model == nil })
+	return newUpdateStmt[P](e)
 }
 
 // UpdateStmt is a fluent UPDATE builder for table T.
@@ -40,7 +39,6 @@ type UpdateStmt[T Table] struct {
 	builder          *builder.UpdateBuilder
 	model            T
 	modelNow         time.Time
-	isNil            func(T) bool
 	mode             updateMode
 	allowGlobalWrite bool
 	err              error
@@ -64,7 +62,6 @@ func (s *UpdateStmt[T]) Clone() *UpdateStmt[T] {
 		builder:          s.builder.Clone(),
 		model:            s.model,
 		modelNow:         s.modelNow,
-		isNil:            s.isNil,
 		mode:             s.mode,
 		allowGlobalWrite: s.allowGlobalWrite,
 		err:              s.err,
@@ -141,7 +138,7 @@ func (s *UpdateStmt[T]) Set(column string, value any) *UpdateStmt[T] {
 	return s
 }
 
-// SetModel creates a full-field update plan for one model.
+// SetModel creates a full-field update plan for one model. The model must not be nil.
 func (s *UpdateStmt[T]) SetModel(model T) *UpdateStmt[T] {
 	if s.err != nil {
 		return s
@@ -156,10 +153,6 @@ func (s *UpdateStmt[T]) SetModel(model T) *UpdateStmt[T] {
 	}
 	s.mode = updateModeModel
 	s.model = model
-	if s.isNil(model) {
-		s.err = errors.New("lorm.Update().SetModel() model is nil")
-		return s
-	}
 
 	s.modelNow = time.Now()
 	plan, err := prepareUpdatePlan(model, s.modelNow)

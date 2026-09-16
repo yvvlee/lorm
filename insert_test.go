@@ -19,13 +19,6 @@ func TestInsertAllEmpty(t *testing.T) {
 	assert.EqualValues(t, 0, rows)
 }
 
-func TestInsertTypedNilReturnsErrorFromExec(t *testing.T) {
-	stmt := (&Engine{config: &Config{}}).Insert[*Test]().AddModel(nil)
-
-	_, err := stmt.Exec(context.Background())
-	assert.ErrorContains(t, err, "model at index 0 is nil")
-}
-
 func TestInsertStmtInternalBuilderWrappers(t *testing.T) {
 	stmt := (&Engine{
 		config: &Config{

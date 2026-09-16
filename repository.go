@@ -13,7 +13,6 @@ type Repository[T Table] struct {
 	Engine          *Engine
 	primaryKey      string
 	primaryKeyCount int
-	isNil           func(T) bool
 }
 
 // Repository creates common CRUD helpers for pointer table P.
@@ -32,7 +31,6 @@ func (e *Engine) Repository[P TablePointer[M], M any]() *Repository[P] {
 		Engine:          e,
 		primaryKey:      primaryKey,
 		primaryKeyCount: primaryKeyCount,
-		isNil:           func(value P) bool { return value == nil },
 	}
 }
 
@@ -98,12 +96,12 @@ func (r *Repository[T]) Update(ctx context.Context, model T) (rowsAffected int64
 	if r.primaryKeyCount == 0 {
 		return 0, errors.New("lorm.Repository.Update() requires tables with at least one primary key")
 	}
-	return newUpdateStmt(r.Engine, r.isNil).SetModel(model).Exec(ctx)
+	return newUpdateStmt[T](r.Engine).SetModel(model).Exec(ctx)
 }
 
 // UpdateMap updates the row identified by id with the provided column values.
 func (r *Repository[T]) UpdateMap(ctx context.Context, id any, data map[string]any) (rowsAffected int64, err error) {
-	return newUpdateStmt(r.Engine, r.isNil).
+	return newUpdateStmt[T](r.Engine).
 		ID(id).
 		SetMap(data).
 		Exec(ctx)
@@ -111,22 +109,22 @@ func (r *Repository[T]) UpdateMap(ctx context.Context, id any, data map[string]a
 
 // Insert inserts a model.
 func (r *Repository[T]) Insert(ctx context.Context, model T) (rowsAffected int64, err error) {
-	return newInsertStmt(r.Engine, r.isNil).AddModel(model).Exec(ctx)
+	return newInsertStmt[T](r.Engine).AddModel(model).Exec(ctx)
 }
 
 // InsertAll inserts models in one batch.
 func (r *Repository[T]) InsertAll(ctx context.Context, models []T) (rowsAffected int64, err error) {
-	return newInsertStmt(r.Engine, r.isNil).AddModels(models...).Exec(ctx)
+	return newInsertStmt[T](r.Engine).AddModels(models...).Exec(ctx)
 }
 
 // InsertIgnore inserts a model while ignoring duplicate conflicts when supported.
 func (r *Repository[T]) InsertIgnore(ctx context.Context, model T) (rowsAffected int64, err error) {
-	return newInsertStmt(r.Engine, r.isNil).Ignore().AddModel(model).Exec(ctx)
+	return newInsertStmt[T](r.Engine).Ignore().AddModel(model).Exec(ctx)
 }
 
 // InsertIgnoreAll inserts models while ignoring duplicate conflicts when supported.
 func (r *Repository[T]) InsertIgnoreAll(ctx context.Context, models []T) (rowsAffected int64, err error) {
-	return newInsertStmt(r.Engine, r.isNil).Ignore().AddModels(models...).Exec(ctx)
+	return newInsertStmt[T](r.Engine).Ignore().AddModels(models...).Exec(ctx)
 }
 
 // Delete deletes a row by its single-column primary key.
