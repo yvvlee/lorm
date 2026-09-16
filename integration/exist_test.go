@@ -30,10 +30,10 @@ func TestExistPreservesQueryResults(t *testing.T) {
 			return s.Select("str").Distinct().Limit(10).Offset(2)
 		}, false},
 		{"aggregate having", func(s *lorm.SelectStmt[*Test]) *lorm.SelectStmt[*Test] {
-			return s.Select("COUNT(*) AS total").Having("total > ?", 1)
+			return s.Select("COUNT(*) AS total").Having("COUNT(*) > ?", 1)
 		}, true},
 		{"aggregate having miss", func(s *lorm.SelectStmt[*Test]) *lorm.SelectStmt[*Test] {
-			return s.Select("COUNT(*) AS total").Having("total > ?", 2)
+			return s.Select("COUNT(*) AS total").Having("COUNT(*) > ?", 2)
 		}, false},
 		{"empty aggregate still has a row", func(s *lorm.SelectStmt[*Test]) *lorm.SelectStmt[*Test] {
 			return s.Select("COUNT(*)").Where("id < ?", 0)
