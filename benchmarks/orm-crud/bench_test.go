@@ -38,6 +38,7 @@ func BenchmarkCreate(b *testing.B) {
 }
 
 func BenchmarkReadByID(b *testing.B) {
+	b.Run("sql", benchmarkReadByIDSQL)
 	b.Run("lorm", benchmarkReadByIDLorm)
 	b.Run("gorm", benchmarkReadByIDGorm)
 	b.Run("xorm", benchmarkReadByIDXorm)
@@ -45,6 +46,7 @@ func BenchmarkReadByID(b *testing.B) {
 }
 
 func BenchmarkReadByIDComplex(b *testing.B) {
+	b.Run("sql", benchmarkReadByIDComplexSQL)
 	b.Run("lorm", benchmarkReadByIDComplexLorm)
 	b.Run("gorm", benchmarkReadByIDComplexGorm)
 	b.Run("xorm", benchmarkReadByIDComplexXorm)
@@ -73,6 +75,7 @@ func BenchmarkBatchCreate100(b *testing.B) {
 }
 
 func BenchmarkBatchRead100(b *testing.B) {
+	b.Run("sql", benchmarkBatchRead100SQL)
 	b.Run("lorm", benchmarkBatchReadLorm)
 	b.Run("gorm", benchmarkBatchReadGorm)
 	b.Run("xorm", benchmarkBatchReadXorm)
@@ -80,6 +83,7 @@ func BenchmarkBatchRead100(b *testing.B) {
 }
 
 func BenchmarkBatchRead100Complex(b *testing.B) {
+	b.Run("sql", benchmarkBatchRead100ComplexSQL)
 	b.Run("lorm", benchmarkBatchReadComplexLorm)
 	b.Run("gorm", benchmarkBatchReadComplexGorm)
 	b.Run("xorm", benchmarkBatchReadComplexXorm)

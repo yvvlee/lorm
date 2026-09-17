@@ -122,9 +122,24 @@ func scanColumnValues[T any](rows *sql.Rows) ([]T, error) {
 	return values, nil
 }
 
+// validateOwnedColumnType rejects borrowed driver buffers in retained results.
+// A type assertion distinguishes sql.RawBytes (including aliases) from []byte.
+func validateOwnedColumnType[T any]() error {
+	var value T
+	switch any(value).(type) {
+	case sql.RawBytes, *sql.RawBytes:
+		return fmt.Errorf("lorm: retained column results cannot use %T; use []byte instead", value)
+	}
+	return nil
+}
+
 // ScanCols scans the only column of each row into v.
-// Use []byte for byte data that must outlive the current row.
+// sql.RawBytes and *sql.RawBytes are rejected; use []byte for retained byte data.
+// The destination is replaced only after all rows complete successfully.
 func ScanCols[T any](rows *sql.Rows, v *[]T) error {
+	if err := validateOwnedColumnType[T](); err != nil {
+		return err
+	}
 	columns, err := rows.Columns()
 	if err != nil {
 		return err
@@ -143,8 +158,11 @@ func ScanCols[T any](rows *sql.Rows, v *[]T) error {
 		}
 		res = append(res, item)
 	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
 	*v = res
-	return rows.Err()
+	return nil
 }
 
 // ScanModel scans the first row into m using column names to locate fields.

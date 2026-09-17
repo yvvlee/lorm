@@ -3,6 +3,7 @@ package lorm
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -152,12 +153,44 @@ func TestInsertRequireIDBackfillResetsAfterExec(t *testing.T) {
 }
 
 func TestInsertRequireIDBackfillFailsWithoutDriverSupport(t *testing.T) {
-	engine := &Engine{config: &Config{driverName: "unsupported"}}
-	_, err := engine.Insert[*reservedWordModel]().
-		RequireIDBackfill().
-		AddModels(&reservedWordModel{}, &reservedWordModel{}).
-		Exec(context.Background())
-	assert.ErrorContains(t, err, "required ID backfill is not supported")
+	for _, count := range []int{1, 2} {
+		t.Run(fmt.Sprintf("models_%d", count), func(t *testing.T) {
+			recorder := newCaptureSQLRecorder()
+			engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+			engine.config.Dialect.SupportsReturning = false
+			engine.config.Dialect.SupportsLastInsertID = false
+			models := make([]*reservedWordModel, count)
+			for i := range models {
+				models[i] = &reservedWordModel{Group: "pending"}
+			}
+			stmt := engine.Insert[*reservedWordModel]().RequireIDBackfill()
+			rows, err := stmt.AddModels(models...).Exec(context.Background())
+			require.ErrorContains(t, err, "required ID backfill is not supported")
+			assert.Zero(t, rows)
+			assert.Empty(t, recorder.Calls())
+			assert.Empty(t, recorder.BeginTxCalls())
+			for _, model := range models {
+				assert.Zero(t, model.ID)
+			}
+			// The failed terminal operation must reset its requirement.
+			rows, err = stmt.AddModel(&reservedWordModel{Group: "next"}).Exec(context.Background())
+			require.NoError(t, err)
+			assert.EqualValues(t, 1, rows)
+		})
+	}
+}
+
+func TestInsertRequiredBackfillAllowsExplicitIDWithoutDriverSupport(t *testing.T) {
+	recorder := newCaptureSQLRecorder()
+	engine := newCaptureSQLEngine(t, recorder, false, testLogger{})
+	engine.config.Dialect.SupportsReturning = false
+	engine.config.Dialect.SupportsLastInsertID = false
+	model := &reservedWordModel{ID: 42, Group: "explicit"}
+	rows, err := engine.Insert[*reservedWordModel]().RequireIDBackfill().AddModel(model).Exec(context.Background())
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rows)
+	assert.EqualValues(t, 42, model.ID)
+	assert.Len(t, recorder.Calls(), 1)
 }
 
 func TestInsertAutoPrimaryKeyColumnPolicy(t *testing.T) {

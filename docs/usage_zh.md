@@ -135,6 +135,10 @@ type User struct {
 
 `lormgen` 扫描 Go 源码文件，解析结构体元数据，并在同一目录下生成 `*_lorm_gen.go` 源码。
 
+指定单个文件时，生成器也会加载同目录的 Go 源码，以解析嵌入类型和类型别名。源码选择规则与目录生成一致，排除测试文件和生成文件。只有指定文件会生成输出；`--ignore` 筛选生成目标，不排除类型解析所需的源码。
+
+所有输入目录的加载、校验和代码格式化完成后，才会将内存中的生成内容写入文件。任一输入在这些阶段失败，都不会创建或覆盖输出文件。写入阶段的文件系统错误会直接返回。
+
 ### 命令行用法
 
 ```bash
@@ -269,7 +273,7 @@ _, err := engine.Insert[*User]().
 
 默认分批大小为 `lorm.DefaultInsertBatchSize`（1000）。分批使用同一事务；已有事务时复用调用方事务，错误须由调用方继续返回以触发回滚。执行失败时返回错误和 0 行。`BatchSize` 按模型数限制，字段较多时须根据数据库参数上限调小。`Exec` 后恢复默认大小；`Clone` 保留当前设置。
 
-普通批量插入不回填 ID，包括最后一批只有一个模型的情况。`RequireIDBackfill()` 始终逐行执行。事务回滚不会撤销模型上已回填的 ID。
+普通批量插入不回填 ID，包括最后一批只有一个模型的情况。`RequireIDBackfill()` 始终逐行执行。当模型需要生成 ID，但方言配置不支持 `RETURNING` 和 `LastInsertId` 时，单条和批量插入都会在执行 SQL 前报错。显式指定 ID 时不需要回填能力。事务回滚不会撤销模型上已回填的 ID。
 
 > **主键状态处理机制**：
 > - 自增主键为零值（`0`）时，LORM 会在 `INSERT` 语句中省略该列，由数据库自动生成。
@@ -433,7 +437,7 @@ if err := rows.Err(); err != nil {
 
 对于已通过 `lormgen` 生成字段映射的模型，可以使用 `ScanModel` 和 `ScanModels` 按列名扫描。单列结果可以使用 `ScanCol` 和 `ScanCols`；这两个方法要求 SQL 结果严格只有一列。
 
-使用 `ScanCols` 保留字节数据时，请使用 `[]byte`。`ScanCol` 只读取当前行，不关闭结果集；使用 `sql.RawBytes` 时，数据仅在下一次 `Next`、`Scan` 或 `Close` 之前有效。
+`GetCol`、`FindCols`、`PageCols` 和 `ScanCols` 使用类型断言拒绝 `sql.RawBytes`、`*sql.RawBytes` 及其别名。请使用 `[]byte` 保留字节数据；它与 `sql.RawBytes` 是不同的类型，不会被误拒绝。`ScanCol` 只读取当前行，不关闭结果集；使用 `sql.RawBytes` 时，数据仅在下一次 `Next`、`Scan` 或 `Close` 之前有效。
 
 ```go
 // ScanModel：读取第一行到模型。

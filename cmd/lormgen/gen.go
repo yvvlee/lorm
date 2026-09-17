@@ -69,14 +69,25 @@ func NewGenerator(
 
 // Generate emits one generated file for each source file that declares Lorm models.
 func (g *Generator) Generate(files []string) error {
+	var outputs []generatedFile
 	for _, group := range groupFilesByDir(files) {
 		pkgs, err := g.load(group)
 		if err != nil {
 			return err
 		}
-		if err := g.generatePackages(pkgs); err != nil {
+		pending, err := g.renderPackages(pkgs, group)
+		if err != nil {
 			return err
 		}
+		outputs = append(outputs, pending...)
+	}
+	// Do not touch output files until every package has loaded, validated and
+	// rendered successfully. This includes errors in later directory groups.
+	for _, output := range outputs {
+		if err := output.write(); err != nil {
+			return err
+		}
+		fmt.Printf("Generated file: %s\n", output.path)
 	}
 	return nil
 }
@@ -101,44 +112,75 @@ func groupFilesByDir(files []string) [][]string {
 	return groups
 }
 
-func (g *Generator) generatePackages(pkgs []*packages.Package) error {
-	for _, pkg := range pkgs {
-		for _, file := range pkg.Syntax {
-			fileInfo, err := g.extractFile(pkg, file)
-			if err != nil {
-				return err
-			}
-			if fileInfo == nil {
-				continue
-			}
-			generatedFilePath, err := g.generateFile(fileInfo)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Generated file: %s\n", generatedFilePath)
-		}
+type generatedFile struct {
+	path    string
+	content []byte
+}
+
+func (file generatedFile) write() error {
+	if err := os.WriteFile(file.path, file.content, 0644); err != nil {
+		return fmt.Errorf("write generated file %q: %w", file.path, err)
 	}
 	return nil
 }
 
+func (g *Generator) renderPackages(pkgs []*packages.Package, files []string) ([]generatedFile, error) {
+	selected := make(map[string]bool, len(files))
+	for _, file := range files {
+		path, err := filepath.Abs(file)
+		if err != nil {
+			return nil, fmt.Errorf("resolve source file %q: %w", file, err)
+		}
+		selected[path] = true
+	}
+	var outputs []generatedFile
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Syntax {
+			if !selected[g.fileSet.File(file.Pos()).Name()] {
+				continue
+			}
+			fileInfo, err := g.extractFile(pkg, file)
+			if err != nil {
+				return nil, err
+			}
+			if fileInfo == nil {
+				continue
+			}
+			output, err := g.renderFile(fileInfo)
+			if err != nil {
+				return nil, err
+			}
+			outputs = append(outputs, output)
+		}
+	}
+	return outputs, nil
+}
+
 func (g *Generator) generateFile(file *lorm.FileDescriptor) (string, error) {
-	content, err := generateCode(file)
+	output, err := g.renderFile(file)
 	if err != nil {
 		return "", err
+	}
+	if err := output.write(); err != nil {
+		return "", err
+	}
+	return output.path, nil
+}
+
+func (g *Generator) renderFile(file *lorm.FileDescriptor) (generatedFile, error) {
+	content, err := generateCode(file)
+	if err != nil {
+		return generatedFile{}, err
 	}
 	generatedFilePath := g.generatedFilePath(file.Path)
 	if filepath.Clean(generatedFilePath) == filepath.Clean(file.Path) {
-		return "", fmt.Errorf("generated file would overwrite source file %q", file.Path)
+		return generatedFile{}, fmt.Errorf("generated file would overwrite source file %q", file.Path)
 	}
 	formatted, err := imports.Process(generatedFilePath, content, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to format generated code: %w", err)
+		return generatedFile{}, fmt.Errorf("failed to format generated code: %w", err)
 	}
-	err = os.WriteFile(generatedFilePath, formatted, 0644)
-	if err != nil {
-		return "", err
-	}
-	return generatedFilePath, nil
+	return generatedFile{path: generatedFilePath, content: formatted}, nil
 }
 
 func (g *Generator) generatedFilePath(originFile string) string {
@@ -146,6 +188,13 @@ func (g *Generator) generatedFilePath(originFile string) string {
 }
 
 func (g *Generator) load(files []string) ([]*packages.Package, error) {
+	// Match directory generation's source selection for type checking, even
+	// when only one file was requested. Rendering still uses the original list.
+	var err error
+	files, err = g.packageSourceFiles(files)
+	if err != nil {
+		return nil, err
+	}
 	// Request syntax plus type information so embedded structs and imported marker types can be resolved together.
 	// Configure loading options
 	cfg := &packages.Config{
@@ -181,6 +230,33 @@ func (g *Generator) load(files []string) ([]*packages.Package, error) {
 		return nil, errors.Join(loadErrors...)
 	}
 	return pkgs, nil
+}
+
+func (g *Generator) packageSourceFiles(files []string) ([]string, error) {
+	sources := make(map[string]bool, len(files))
+	dirs := make(map[string]bool)
+	for _, file := range files {
+		path, err := filepath.Abs(file)
+		if err != nil {
+			return nil, fmt.Errorf("resolve source file %q: %w", file, err)
+		}
+		sources[path] = true
+		dirs[filepath.Dir(path)] = true
+	}
+	for dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, fmt.Errorf("read source directory %q: %w", dir, err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && isSourceFile(entry.Name(), g.fileSuffix) {
+				sources[filepath.Join(dir, entry.Name())] = true
+			}
+		}
+	}
+	result := lo.Keys(sources)
+	sort.Strings(result)
+	return result, nil
 }
 
 // extractFile turns one parsed Go file into a descriptor when it declares a

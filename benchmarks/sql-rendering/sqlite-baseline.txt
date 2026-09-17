@@ -1,0 +1,90 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   15850	     20998 ns/op	    6065 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15505	     23535 ns/op	    7101 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     565	    556210 ns/op	  214204 B/op	    4507 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     457	    795381 ns/op	  319591 B/op	    5595 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17247	     20700 ns/op	    6067 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15554	     23121 ns/op	    7104 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     652	    538809 ns/op	  214324 B/op	    4509 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     457	    783865 ns/op	  319509 B/op	    5593 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17203	     20653 ns/op	    6066 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15505	     23051 ns/op	    7107 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     656	    540431 ns/op	  214306 B/op	    4509 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     457	    789026 ns/op	  319385 B/op	    5593 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17546	     20398 ns/op	    6065 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15546	     22947 ns/op	    7102 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     661	    544514 ns/op	  214399 B/op	    4509 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     452	    795494 ns/op	  319642 B/op	    5594 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17312	     20497 ns/op	    6064 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15724	     22829 ns/op	    7103 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     669	    537634 ns/op	  214292 B/op	    4508 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     451	    785922 ns/op	  319817 B/op	    5597 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17486	     20429 ns/op	    6065 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15814	     22893 ns/op	    7106 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     656	    540631 ns/op	  214308 B/op	    4508 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     458	    789736 ns/op	  319572 B/op	    5595 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17509	     20548 ns/op	    6067 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15764	     22830 ns/op	    7102 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     660	    541546 ns/op	  214381 B/op	    4509 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     451	    792038 ns/op	  319752 B/op	    5596 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17356	     20754 ns/op	    6066 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15651	     23242 ns/op	    7104 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     662	    541543 ns/op	  214269 B/op	    4508 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     457	    797809 ns/op	  319517 B/op	    5593 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17259	     23450 ns/op	    6067 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15576	     23341 ns/op	    7102 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     640	    571912 ns/op	  214338 B/op	    4508 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     440	    890037 ns/op	  319676 B/op	    5595 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/benchmarks/orm-crud
+cpu: Apple M1 Pro
+BenchmarkReadByID/lorm-10          	   17145	     20835 ns/op	    6067 B/op	     120 allocs/op
+BenchmarkReadByIDComplex/lorm-10   	   15482	     23179 ns/op	    7102 B/op	     127 allocs/op
+BenchmarkBatchRead100/lorm-10      	     644	    543704 ns/op	  214344 B/op	    4509 allocs/op
+BenchmarkBatchRead100Complex/lorm-10         	     453	    795825 ns/op	  319482 B/op	    5593 allocs/op
+PASS

@@ -3,6 +3,8 @@ package lorm
 import (
 	"database/sql"
 	"database/sql/driver"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -76,6 +78,32 @@ func TestScanColsEmptySlice(t *testing.T) {
 	err = ScanCols(rows, &values)
 	require.NoError(t, err)
 	require.Equal(t, []string{"alice", "bob"}, values)
+}
+
+func TestScanColsPreservesDestinationOnResultError(t *testing.T) {
+	for _, preallocated := range []bool{false, true} {
+		t.Run(fmt.Sprint(preallocated), func(t *testing.T) {
+			recorder := newScriptedQueryRecorder()
+			recorder.QueueQueryRows([]string{"id"}, []driver.Value{int64(1)}, []driver.Value{int64(2)})
+			closeErr := errors.New("result failed while closing")
+			recorder.results[0].closeErr = closeErr
+			db, err := openScriptedQueryDB(t, recorder)
+			require.NoError(t, err)
+			rows, err := db.Query("SELECT id FROM items")
+			require.NoError(t, err)
+			defer rows.Close()
+
+			var values []int64
+			if preallocated {
+				values = make([]int64, 0, 4)
+			}
+			original := values
+			err = ScanCols(rows, &values)
+			require.ErrorIs(t, err, closeErr)
+			require.Equal(t, original, values)
+			require.Equal(t, cap(original), cap(values))
+		})
+	}
 }
 
 func TestScannerHelpersCoverage(t *testing.T) {

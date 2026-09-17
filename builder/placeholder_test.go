@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,15 +62,52 @@ func TestEscapeAtp(t *testing.T) {
 	assert.Equal(t, "SELECT uuid, \"data\" #> '{tags}' AS tags FROM nodes WHERE  \"data\" -> 'tags' ?| array['@p1'] AND enabled = @p2", s)
 }
 
-func BenchmarkPlaceholdersArray(b *testing.B) {
-	var count = b.N
-	placeholders := make([]string, count)
-	for i := 0; i < count; i++ {
-		placeholders[i] = "?"
+func TestPositionalPlaceholderNumbering(t *testing.T) {
+	for _, format := range []PlaceholderFormat{Dollar, Colon, AtP} {
+		for _, count := range []int{99, 100, 128, 129, 1000} {
+			t.Run(format.PlaceholderString()+"/"+strconv.Itoa(count), func(t *testing.T) {
+				placeholders := make([]string, count)
+				for i := range placeholders {
+					placeholders[i] = format.PlaceholderString() + strconv.Itoa(i+1)
+				}
+				// Escaped question marks must not consume a sequence number.
+				query := "SELECT ??, " + Placeholders(count) + ", ??"
+				got, err := format.ReplacePlaceholders(query)
+				assert.NoError(t, err)
+				assert.Equal(t, "SELECT ?, "+strings.Join(placeholders, ",")+", ?", got)
+			})
+		}
 	}
-	var _ = strings.Join(placeholders, ",")
+}
+
+func BenchmarkPlaceholdersArray(b *testing.B) {
+	for _, count := range []int{1, 10, 100, 1000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				placeholders := make([]string, count)
+				for i := range placeholders {
+					placeholders[i] = "?"
+				}
+				result := strings.Join(placeholders, ",")
+				if len(result) != 2*count-1 {
+					b.Fatal("unexpected placeholder length")
+				}
+			}
+		})
+	}
 }
 
 func BenchmarkPlaceholdersStrings(b *testing.B) {
-	Placeholders(b.N)
+	for _, count := range []int{1, 10, 100, 1000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				result := Placeholders(count)
+				if len(result) != 2*count-1 {
+					b.Fatal("unexpected placeholder length")
+				}
+			}
+		})
+	}
 }

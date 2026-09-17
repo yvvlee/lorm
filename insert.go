@@ -98,8 +98,9 @@ func (s *InsertStmt[T]) Ignore() *InsertStmt[T] {
 	return s
 }
 
-// RequireIDBackfill makes a multi-model insert execute one statement per model
-// so every generated ID has an unambiguous destination.
+// RequireIDBackfill requires driver support whenever a model needs a generated ID.
+// Multi-model inserts execute one statement per model so each ID has an
+// unambiguous destination.
 func (s *InsertStmt[T]) RequireIDBackfill() *InsertStmt[T] {
 	s.requireIDBackfill = true
 	return s
@@ -138,10 +139,10 @@ func (s *InsertStmt[T]) Exec(ctx context.Context) (rowsAffected int64, err error
 		}
 	}
 
+	if s.requireIDBackfill && hasGeneratedInsertPlan(plans) && !s.engine.SupportsReturning() && !s.engine.SupportsLastInsertId() {
+		return 0, fmt.Errorf("lorm: required ID backfill is not supported by driver %q", s.engine.DriverName())
+	}
 	if len(plans) > 1 && s.requireIDBackfill {
-		if hasGeneratedInsertPlan(plans) && !s.engine.SupportsReturning() && !s.engine.SupportsLastInsertId() {
-			return 0, fmt.Errorf("lorm: required ID backfill is not supported by driver %q", s.engine.DriverName())
-		}
 		return s.execBatches(ctx, plans, 1, true)
 	}
 	if len(plans) == 1 {
@@ -184,17 +185,7 @@ func hasGeneratedInsertPlan(plans []InsertPlan) bool {
 func sameInsertShape(left, right InsertPlan) bool {
 	return left.AutoIncrementColumn == right.AutoIncrementColumn &&
 		left.AutoIncrementZero == right.AutoIncrementZero &&
-		sameInsertColumns(left.Columns, right.Columns)
-}
-
-func sameInsertColumns(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	if len(left) == 0 || &left[0] == &right[0] {
-		return true
-	}
-	return slices.Equal(left, right)
+		slices.Equal(left.Columns, right.Columns)
 }
 
 func (s *InsertStmt[T]) execBatches(ctx context.Context, plans []InsertPlan, batchSize int, backfillID bool) (rowsAffected int64, err error) {

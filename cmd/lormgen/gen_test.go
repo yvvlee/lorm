@@ -34,7 +34,6 @@ func Test_Generate(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, pkgs, 1)
 	pkg := pkgs[0]
-	assert.Len(t, pkg.Syntax, 2)
 
 	userFile := findSyntaxFile(t, generator, pkg, "user.go")
 	fileInfo, err := generator.extractFile(pkg, userFile)

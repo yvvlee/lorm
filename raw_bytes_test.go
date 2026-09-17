@@ -48,3 +48,42 @@ func TestOwnedByteColumnResultsSurviveBufferReuse(t *testing.T) {
 	require.NoError(t, ScanCol(rows, &raw))
 	require.Equal(t, sql.RawBytes("one"), raw)
 }
+
+func TestRetainedColumnResultsRejectRawBytes(t *testing.T) {
+	type RawAlias = sql.RawBytes
+	type RawPointerAlias = *sql.RawBytes
+	t.Run("raw", testRetainedColumnTypeRejected[sql.RawBytes])
+	t.Run("alias", testRetainedColumnTypeRejected[RawAlias])
+	t.Run("pointer", testRetainedColumnTypeRejected[*sql.RawBytes])
+	t.Run("pointer_alias", testRetainedColumnTypeRejected[RawPointerAlias])
+}
+
+func testRetainedColumnTypeRejected[T any](t *testing.T) {
+	r := newScriptedQueryRecorder()
+	e := newScriptedEngine(t, r)
+	ctx := context.Background()
+	stmt := e.Query[*orderedScanCoverageModel]().Select("name")
+	_, found, err := stmt.GetCol[T](ctx)
+	require.ErrorContains(t, err, "use []byte instead")
+	require.False(t, found)
+	require.Empty(t, stmt.builder.GetColumns(), "rejected terminal call must reset the statement")
+	_, err = stmt.Select("name").FindCols[T](ctx)
+	require.ErrorContains(t, err, "use []byte instead")
+	_, count, err := stmt.Select("name").PageCols[T](ctx, 1, 10)
+	require.ErrorContains(t, err, "use []byte instead")
+	require.Zero(t, count)
+	require.Nil(t, r.LastQuery(), "reject the type before executing SQL, including a page count")
+	var values []T
+	require.ErrorContains(t, ScanCols[T](nil, &values), "use []byte instead")
+}
+
+func TestOwnedColumnTypeDistinguishesByteTypes(t *testing.T) {
+	type ByteAlias = []byte
+	type Bytes []byte
+	type OwnedRaw sql.RawBytes
+	require.NoError(t, validateOwnedColumnType[[]byte]())
+	require.NoError(t, validateOwnedColumnType[ByteAlias]())
+	require.NoError(t, validateOwnedColumnType[Bytes]())
+	require.NoError(t, validateOwnedColumnType[OwnedRaw]())
+	require.NoError(t, validateOwnedColumnType[*[]byte]())
+}

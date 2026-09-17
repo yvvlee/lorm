@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 )
@@ -80,7 +79,8 @@ func Placeholders(count int) string {
 }
 
 func replacePositionalPlaceholders(sql, prefix string) (string, error) {
-	buf := &bytes.Buffer{}
+	buf := &strings.Builder{}
+	buf.Grow(len(sql))
 	i := 0
 	for {
 		p := strings.Index(sql, "?")

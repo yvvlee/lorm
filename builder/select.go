@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -91,7 +90,8 @@ func (b *SelectBuilder) ToSql() (sqlStr string, args []any, err error) {
 		return
 	}
 
-	sql := &bytes.Buffer{}
+	sql := &strings.Builder{}
+	sql.Grow(64)
 
 	if len(b.withParts) > 0 {
 		args, err = appendToSql(b.withParts, sql, " ", args)

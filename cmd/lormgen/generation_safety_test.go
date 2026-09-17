@@ -117,3 +117,46 @@ func TestGeneratePlatformModelCompilesForOtherTarget(t *testing.T) {
 		require.NoError(t, err, "%s: %s", goos, output)
 	}
 }
+
+func TestGenerateValidatesAllFilesBeforeWriting(t *testing.T) {
+	for _, tt := range []struct {
+		name                string
+		separateDirectories bool
+		invalidSource       string
+	}{
+		{"same_package", false, "type Invalid struct { lorm.UnimplementedModel; All bool }"},
+		{"later_package", true, "type Invalid struct { lorm.UnimplementedModel; All bool }"},
+		{"later_package_parse_error", true, "type Invalid struct {"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cwd, err := os.Getwd()
+			require.NoError(t, err)
+			repo := findRepoRoot(t, cwd)
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/buffered\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+			copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
+			firstDir, lastDir := dir, dir
+			if tt.separateDirectories {
+				firstDir, lastDir = filepath.Join(dir, "a"), filepath.Join(dir, "z")
+			}
+			first := filepath.Join(firstDir, "a.go")
+			second := filepath.Join(firstDir, "b.go")
+			last := filepath.Join(lastDir, "z.go")
+			const header = "package buffered\nimport \"github.com/yvvlee/lorm\"\n"
+			writeFile(t, first, header+"type First struct { lorm.UnimplementedModel; Name string }\n")
+			writeFile(t, second, header+"type Second struct { lorm.UnimplementedModel; Name string }\n")
+			writeFile(t, last, header+tt.invalidSource+"\n")
+			output := filepath.Join(firstDir, "a_lorm_gen.go")
+			const original = "package buffered\n// Preserve the previous output.\n"
+			writeFile(t, output, original)
+			g := NewGenerator(new(names.SnakeMapper), new(names.SnakeMapper), "lorm", "")
+			err = g.Generate([]string{first, second, last})
+			require.Error(t, err)
+			after, err := os.ReadFile(output)
+			require.NoError(t, err)
+			assert.Equal(t, original, string(after))
+			assert.NoFileExists(t, filepath.Join(firstDir, "b_lorm_gen.go"))
+			assert.NoFileExists(t, filepath.Join(lastDir, "z_lorm_gen.go"))
+		})
+	}
+}

@@ -1,0 +1,84 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm
+cpu: Apple M1 Pro
+BenchmarkSelectSQL/mysql-10         	  279808	       790.9 ns/op	    2192 B/op	      28 allocs/op
+BenchmarkSelectSQL/pgx-10           	  232020	      1018 ns/op	    3248 B/op	      31 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/builder
+cpu: Apple M1 Pro
+BenchmarkSelectRender/simple-10    	  877071	       261.4 ns/op	     232 B/op	       8 allocs/op
+BenchmarkSelectRender/prepared-10  	  633217	       351.5 ns/op	    1128 B/op	       9 allocs/op
+BenchmarkSelectRender/complex-10   	  434499	       555.7 ns/op	     880 B/op	      14 allocs/op
+BenchmarkSelectRender/large_in-10  	   46791	      5094 ns/op	   45424 B/op	       9 allocs/op
+BenchmarkReplacePlaceholders/0-10  	 7615460	        37.27 ns/op	      88 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/1-10  	 4360946	        53.97 ns/op	     112 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/10-10 	 1000000	       233.0 ns/op	     272 B/op	       3 allocs/op
+BenchmarkReplacePlaceholders/100-10         	  128745	      1884 ns/op	    1411 B/op	       6 allocs/op
+BenchmarkReplacePlaceholders/1000-10        	    8566	     29155 ns/op	   24581 B/op	     910 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm
+cpu: Apple M1 Pro
+BenchmarkSelectSQL/mysql-10         	  274824	       812.4 ns/op	    2192 B/op	      28 allocs/op
+BenchmarkSelectSQL/pgx-10           	  233780	      1045 ns/op	    3248 B/op	      31 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/builder
+cpu: Apple M1 Pro
+BenchmarkSelectRender/simple-10    	  862455	       259.9 ns/op	     232 B/op	       8 allocs/op
+BenchmarkSelectRender/prepared-10  	  668212	       351.0 ns/op	    1128 B/op	       9 allocs/op
+BenchmarkSelectRender/complex-10   	  440080	       555.0 ns/op	     880 B/op	      14 allocs/op
+BenchmarkSelectRender/large_in-10  	   45679	      5262 ns/op	   45424 B/op	       9 allocs/op
+BenchmarkReplacePlaceholders/0-10  	 7547990	        30.52 ns/op	      88 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/1-10  	 4375519	        54.68 ns/op	     112 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/10-10 	 1000000	       235.1 ns/op	     272 B/op	       3 allocs/op
+BenchmarkReplacePlaceholders/100-10         	  127638	      1897 ns/op	    1411 B/op	       6 allocs/op
+BenchmarkReplacePlaceholders/1000-10        	    8590	     28975 ns/op	   24581 B/op	     910 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm
+cpu: Apple M1 Pro
+BenchmarkSelectSQL/mysql-10         	  290066	       799.0 ns/op	    2192 B/op	      28 allocs/op
+BenchmarkSelectSQL/pgx-10           	  238726	      1020 ns/op	    3248 B/op	      31 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/builder
+cpu: Apple M1 Pro
+BenchmarkSelectRender/simple-10    	  858996	       258.1 ns/op	     232 B/op	       8 allocs/op
+BenchmarkSelectRender/prepared-10  	  687645	       349.8 ns/op	    1128 B/op	       9 allocs/op
+BenchmarkSelectRender/complex-10   	  430428	       549.4 ns/op	     880 B/op	      14 allocs/op
+BenchmarkSelectRender/large_in-10  	   46350	      5250 ns/op	   45424 B/op	       9 allocs/op
+BenchmarkReplacePlaceholders/0-10  	 7828947	        30.66 ns/op	      88 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/1-10  	 4485457	        53.67 ns/op	     112 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/10-10 	 1000000	       234.5 ns/op	     272 B/op	       3 allocs/op
+BenchmarkReplacePlaceholders/100-10         	  126780	      1874 ns/op	    1411 B/op	       6 allocs/op
+BenchmarkReplacePlaceholders/1000-10        	    8298	     29095 ns/op	   24581 B/op	     910 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm
+cpu: Apple M1 Pro
+BenchmarkSelectSQL/mysql-10         	  284445	       785.3 ns/op	    2192 B/op	      28 allocs/op
+BenchmarkSelectSQL/pgx-10           	  236764	       992.7 ns/op	    3248 B/op	      31 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/yvvlee/lorm/builder
+cpu: Apple M1 Pro
+BenchmarkSelectRender/simple-10    	  882040	       254.4 ns/op	     232 B/op	       8 allocs/op
+BenchmarkSelectRender/prepared-10  	  719414	       347.6 ns/op	    1128 B/op	       9 allocs/op
+BenchmarkSelectRender/complex-10   	  443226	       552.0 ns/op	     880 B/op	      14 allocs/op
+BenchmarkSelectRender/large_in-10  	   47371	      5032 ns/op	   45424 B/op	       9 allocs/op
+BenchmarkReplacePlaceholders/0-10  	 7822239	        30.08 ns/op	      88 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/1-10  	 4544797	        53.12 ns/op	     112 B/op	       2 allocs/op
+BenchmarkReplacePlaceholders/10-10 	 1000000	       234.6 ns/op	     272 B/op	       3 allocs/op
+BenchmarkReplacePlaceholders/100-10         	  129054	      1898 ns/op	    1411 B/op	       6 allocs/op
+BenchmarkReplacePlaceholders/1000-10        	    8407	     28932 ns/op	   24581 B/op	     910 allocs/op
+PASS

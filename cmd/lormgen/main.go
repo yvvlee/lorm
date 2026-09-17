@@ -153,7 +153,11 @@ func argsToFiles(args []string) ([]string, error) {
 }
 
 func isValidFile(file string) bool {
-	generatedSuffix := effectiveFileSuffix(fileSuffix)
+	return isSourceFile(file, fileSuffix)
+}
+
+func isSourceFile(file, suffix string) bool {
+	generatedSuffix := effectiveFileSuffix(suffix)
 	return strings.HasSuffix(file, ".go") &&
 		!strings.HasSuffix(file, "_test.go") &&
 		!strings.HasSuffix(file, "_gen.go") &&

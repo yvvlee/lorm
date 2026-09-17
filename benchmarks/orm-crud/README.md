@@ -78,6 +78,46 @@ cd benchmarks/orm-crud
 go generate ./ent
 ```
 
+## Native SQL baseline and isolated benchmarks
+
+See the [SQL rendering buffer comparison](../sql-rendering/README.md) for measured
+`bytes.Buffer` versus `strings.Builder` results and the SQLite read comparison.
+
+The four read benchmarks (`ReadByID`, `ReadByIDComplex`, `BatchRead100`, and
+`BatchRead100Complex`) also include a `sql` sub-benchmark. It uses `database/sql`
+directly with the same fields and JSON conversion types as LORM. Single-row
+reads return one model; batch reads collect model pointers in a slice.
+Database setup, seed inserts, and construction of the native SQL are outside the
+timer. These cases measure an application using fixed SQL, without ORM query
+construction or model mapping. They support the same three backends as the ORM
+cases. Native write baselines are not included.
+
+```bash
+cd benchmarks/orm-crud
+CGO_ENABLED=1 go test -run '^$' -bench '^Benchmark(ReadByID|ReadByIDComplex|BatchRead100|BatchRead100Complex)/(sql|lorm)$' -benchmem -count=5
+```
+
+For isolated costs, run these from the repository root:
+
+```bash
+go test -run '^$' -bench '^Benchmark(SelectSQL|ScanModelsDefaultColumns|InsertPlanBatch)$' -benchmem -count=5 .
+go test -run '^$' -bench '^BenchmarkPlaceholders(Array|Strings)$' -benchmem -count=5 ./builder
+```
+
+- `SelectSQL` includes statement construction, default projection, quoting, and
+  placeholder conversion for MySQL and PostgreSQL, without database I/O.
+- `ScanModelsDefaultColumns` measures the generated ordered scanner for 1, 100,
+  and 1000 rows, including nullable, decimal, and JSON fields. A scripted driver
+  removes server and network variability; its query/row overhead remains timed.
+- `InsertPlanBatch` measures plan allocation and validation for 1, 100, and 1000
+  models, including resetting the fixture models before each operation. It
+  excludes SQL rendering and database I/O.
+- The placeholder benchmarks repeat a fixed input size of 1, 10, 100, or 1000
+  parameters with `b.Loop()`, and report allocations per operation.
+
+The recorded tables below predate these additions and do not include the native
+SQL baseline. Run repeated measurements before drawing performance conclusions.
+
 ## Latest Recorded Result
 
 Recorded on August 21, 2026 with Go 1.27.0 on `darwin/arm64` (Apple M1 Pro).

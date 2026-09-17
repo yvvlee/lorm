@@ -174,12 +174,15 @@ func (s *SelectStmt[T]) Get(ctx context.Context) (T, bool, error) {
 }
 
 // GetCol returns the first selected column and whether a row was found.
-// Use []byte for byte data that must outlive the query.
+// sql.RawBytes and *sql.RawBytes are rejected; use []byte for retained byte data.
 func (s *SelectStmt[M]) GetCol[T any](ctx context.Context) (T, bool, error) {
 	var value T
 	defer s.reset()
 	if s.err != nil {
 		return value, false, s.err
+	}
+	if err := validateOwnedColumnType[T](); err != nil {
+		return value, false, err
 	}
 	if _, err := s.ensureSelectColumns(); err != nil {
 		return value, false, err
@@ -259,10 +262,14 @@ func (s *SelectStmt[T]) Find(ctx context.Context) ([]T, error) {
 }
 
 // FindCols returns the selected column from all matching rows.
+// sql.RawBytes and *sql.RawBytes are rejected; use []byte for retained byte data.
 func (s *SelectStmt[M]) FindCols[T any](ctx context.Context) ([]T, error) {
 	defer s.reset()
 	if s.err != nil {
 		return nil, s.err
+	}
+	if err := validateOwnedColumnType[T](); err != nil {
+		return nil, err
 	}
 	if _, err := s.ensureSelectColumns(); err != nil {
 		return nil, err
@@ -300,10 +307,14 @@ func (s *SelectStmt[T]) Page(ctx context.Context, page, size uint64) ([]T, uint6
 }
 
 // PageCols returns one selected column for the requested page and the total row count.
+// sql.RawBytes and *sql.RawBytes are rejected; use []byte for retained byte data.
 func (s *SelectStmt[M]) PageCols[T any](ctx context.Context, page, size uint64) ([]T, uint64, error) {
 	defer s.reset()
 	if s.err != nil {
 		return nil, 0, s.err
+	}
+	if err := validateOwnedColumnType[T](); err != nil {
+		return nil, 0, err
 	}
 	if _, err := s.ensureSelectColumns(); err != nil {
 		return nil, 0, err
