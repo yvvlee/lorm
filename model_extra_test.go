@@ -1,32 +1,12 @@
 package lorm
 
 import (
-	"database/sql/driver"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type jsonWrapperValuer struct {
-	value driver.Value
-	err   error
-}
-
-func (v jsonWrapperValuer) Value() (driver.Value, error) {
-	return v.value, v.err
-}
-
-type jsonWrapperScanner struct {
-	value any
-	err   error
-}
-
-func (s *jsonWrapperScanner) Scan(src any) error {
-	s.value = src
-	return s.err
-}
 
 func TestGeneratedInsertHookTransformsFields(t *testing.T) {
 	m := &Test{
@@ -152,41 +132,6 @@ func TestJSONFieldWrapperScan(t *testing.T) {
 	// unsupported type
 	err = w.Scan(123)
 	assert.Error(t, err)
-}
-
-func TestJSONFieldWrapperDelegatesDatabaseInterfaces(t *testing.T) {
-	valuer := jsonWrapperValuer{value: "stored"}
-	wrapped := NewJSONFieldWrapper(&valuer)
-	value, err := wrapped.Value()
-	assert.NoError(t, err)
-	assert.Equal(t, driver.Value("stored"), value)
-
-	scanner := &jsonWrapperScanner{}
-	err = NewJSONFieldWrapper(scanner).Scan([]byte(`{"a":1}`))
-	assert.NoError(t, err)
-	assert.Equal(t, []byte(`{"a":1}`), scanner.value)
-}
-
-func TestJSONFieldWrapperScanNullishDelegatesToDatabaseScanner(t *testing.T) {
-	tests := []struct {
-		name string
-		src  any
-	}{
-		{name: "sql null", src: nil},
-		{name: "string null", src: "null"},
-		{name: "bytes null", src: []byte("null")},
-		{name: "empty string", src: ""},
-		{name: "empty bytes", src: []byte{}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scanner := &jsonWrapperScanner{value: "old", err: assert.AnError}
-			err := NewJSONFieldWrapper(scanner).Scan(tt.src)
-			assert.ErrorIs(t, err, assert.AnError)
-			assert.Equal(t, tt.src, scanner.value)
-		})
-	}
 }
 
 func TestUnimplementedMarkers(t *testing.T) {

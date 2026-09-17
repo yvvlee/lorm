@@ -850,6 +850,8 @@ type Customer struct {
 }
 ```
 
+标记 `json` 的字段统一使用 `JSONMarshal` 和 `JSONUnmarshal`，包括指针字段。字段自身的数据库转换接口（`sql.Scanner`、`driver.Valuer`）不会被调用。需要使用这些接口时，不要标记 `json`。使用默认 JSON 编解码器时，可实现 `json.Marshaler`、`json.Unmarshaler` 自定义 JSON 格式。
+
 默认使用标准库 `encoding/json`。如果应用对 JSON 字段的吞吐量敏感，可以在创建
 `Engine` 或并发访问开始前，将两个函数变量替换为兼容实现（例如 Sonic）：
 

@@ -849,6 +849,8 @@ type Customer struct {
 }
 ```
 
+Fields tagged `json` use `JSONMarshal` and `JSONUnmarshal`, including pointer fields. Database conversion interfaces (`sql.Scanner` and `driver.Valuer`) on these fields are not called. To use those interfaces, omit the `json` tag. With the default JSON codec, implement `json.Marshaler` and `json.Unmarshaler` to customize JSON encoding and decoding.
+
 JSON fields use the standard library `encoding/json` by default. Applications that
 need higher JSON throughput can replace the compatible hooks once during startup:
 

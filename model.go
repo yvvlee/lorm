@@ -1,7 +1,6 @@
 package lorm
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,7 @@ var (
 	// JSONMarshal encodes a value for JSON fields. It defaults to encoding/json.Marshal
 	// and may be replaced by a compatible implementation (for example sonic.Marshal)
 	// during application initialization when higher throughput is required.
-	JSONMarshal   = json.Marshal
+	JSONMarshal = json.Marshal
 	// JSONUnmarshal decodes a value for JSON fields. It defaults to encoding/json.Unmarshal
 	// and may be replaced by a compatible implementation (for example sonic.Unmarshal)
 	// during application initialization when higher throughput is required.
@@ -76,7 +75,8 @@ type UnimplementedTable struct{}
 func (u UnimplementedTable) mustEmbedUnimplementedModel() {}
 func (u UnimplementedTable) mustEmbedUnimplementedTable() {}
 
-// JSONFieldWrapper adapts a field target to database/sql and JSON interfaces.
+// JSONFieldWrapper adapts a field target to database/sql using JSON codecs.
+// Database conversion interfaces on the wrapped field are not called.
 type JSONFieldWrapper[T any] struct {
 	target *T
 }
@@ -90,9 +90,6 @@ func NewJSONFieldWrapper[T any](target *T) *JSONFieldWrapper[T] {
 func (s *JSONFieldWrapper[T]) Value() (driver.Value, error) {
 	if s.target == nil {
 		return nil, nil
-	}
-	if v, ok := any(s.target).(driver.Valuer); ok {
-		return v.Value()
 	}
 	return JSONMarshal(s.target)
 }
@@ -134,15 +131,12 @@ func (s *JSONFieldWrapper[T]) Scan(src any) error {
 		}
 		return errors.New("lorm: JSON scan target is nil")
 	}
-	if v, ok := any(s.target).(sql.Scanner); ok {
-		return v.Scan(src)
-	}
 	if isNull {
 		var zero T
 		*s.target = zero
 		return nil
 	}
-	// Fall back to JSON decoding for drivers that return raw strings or bytes.
+	// Decode JSON from drivers that return raw strings or bytes.
 	switch v := src.(type) {
 	case []byte:
 		return JSONUnmarshal(v, s.target)

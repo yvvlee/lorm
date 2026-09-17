@@ -2,11 +2,15 @@ package main
 
 import (
 	"fmt"
+	"go/ast"
+	"go/token"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/yvvlee/lorm"
 )
 
 func TestExtractRejectsConflictingFieldTags(t *testing.T) {
@@ -77,10 +81,49 @@ type Model struct {
 
 func TestExtractRejectsTaggedGroupedFields(t *testing.T) {
 	for _, tag := range []string{"value", "value,version", ""} {
-		_, err := extractSource(t, fmt.Sprintf("package validation\nimport \"github.com/yvvlee/lorm\"\ntype Model struct {\nlorm.UnimplementedModel\nA, B int64 `lorm:%q`\n}\n", tag))
-		require.ErrorContains(t, err, "grouped fields with a lorm tag must be declared separately")
+		for _, literal := range []string{"`lorm:" + strconv.Quote(tag) + "`", strconv.Quote("lorm:" + strconv.Quote(tag))} {
+			_, err := extractSource(t, "package validation\nimport \"github.com/yvvlee/lorm\"\ntype Model struct {\nlorm.UnimplementedModel\nA, B int64 "+literal+"\n}\n")
+			require.ErrorContains(t, err, "grouped fields with a lorm tag must be declared separately")
+		}
 	}
 	info, err := extractSource(t, "package validation\nimport \"github.com/yvvlee/lorm\"\ntype Model struct {\nlorm.UnimplementedModel\nA, B int64\n}\n")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, info.Structs[0].AllFields())
+}
+
+func TestExtractInterpretedStructTags(t *testing.T) {
+	info, err := extractSource(t, `package validation
+import "github.com/yvvlee/lorm"
+type Base struct { Name string "lorm:\"display_name\"" }
+type User struct {
+ lorm.UnimplementedTable "lorm:\"custom_users\""
+ ID int64 "lorm:\"user_id,primary_key,auto_increment\""
+ Version int64 "lorm:\"revision,version\""
+ Base "lorm:\"profile_\""
+}
+`)
+	require.NoError(t, err)
+	require.Len(t, info.Structs, 1)
+	model := info.Structs[0]
+	assert.Equal(t, "custom_users", model.TableName)
+	assert.Equal(t, []string{"user_id"}, model.PrimaryKeys)
+	assert.Equal(t, []string{"user_id", "revision", "profile_display_name"}, model.AllFields())
+	assert.Equal(t, lorm.FlagPrimaryKey|lorm.FlagAutoIncrement, model.Fields[0].Flag)
+	assert.Equal(t, lorm.FlagVersion, model.Fields[1].Flag)
+}
+
+func TestInterpretedStructTagsPreserveValidation(t *testing.T) {
+	_, err := extractSource(t, `package validation
+import "github.com/yvvlee/lorm"
+type User struct {
+ lorm.UnimplementedTable
+ ID int64 "lorm:\"id,primary_key,version\""
+}
+`)
+	require.ErrorContains(t, err, "primary_key cannot be combined")
+	field := &ast.Field{Tag: &ast.BasicLit{Kind: token.STRING, Value: `"unterminated`}}
+	_, _, err = parseFieldTag(field, "lorm")
+	require.ErrorContains(t, err, "invalid struct tag literal")
+	_, err = parseNameTag(field, "lorm")
+	require.ErrorContains(t, err, "invalid struct tag literal")
 }

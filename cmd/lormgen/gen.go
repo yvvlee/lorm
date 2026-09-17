@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -519,7 +520,11 @@ func (g *Generator) parseField(pkg *packages.Package, structName string, field *
 		return nil, nil
 	}
 	if len(field.Names) > 1 && field.Tag != nil {
-		if _, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(g.tagKey); exists {
+		_, exists, err := lookupFieldTag(field, g.tagKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid lorm tag for %s.%s: %w", structName, fieldNames(field), err)
+		}
+		if exists {
 			return nil, fmt.Errorf("invalid lorm tag for %s.%s: grouped fields with a lorm tag must be declared separately", structName, fieldNames(field))
 		}
 	}
@@ -842,12 +847,25 @@ func typeOfExprSeen(pkg *packages.Package, expr ast.Expr, seen map[*packages.Pac
 	return nil
 }
 
+// lookupFieldTag decodes either Go string literal form before reading the tag.
+func lookupFieldTag(field *ast.Field, tagKey string) (string, bool, error) {
+	if field == nil || field.Tag == nil {
+		return "", false, nil
+	}
+	literal, err := strconv.Unquote(field.Tag.Value)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid struct tag literal: %w", err)
+	}
+	value, exists := reflect.StructTag(literal).Lookup(tagKey)
+	return value, exists, nil
+}
+
 // parseFieldTag splits a field tag into known flags and at most one database column.
 func parseFieldTag(field *ast.Field, tagKey string) (dbField string, flag lorm.FieldFlag, err error) {
-	if field == nil || field.Tag == nil {
-		return
+	tagString, exists, err := lookupFieldTag(field, tagKey)
+	if err != nil {
+		return "", 0, err
 	}
-	tagString, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(tagKey)
 	if !exists || tagString == "" {
 		return
 	}
@@ -869,10 +887,10 @@ func parseFieldTag(field *ast.Field, tagKey string) (dbField string, flag lorm.F
 
 // parseNameTag reads table names and embedded-field prefixes, which accept one value and no flags.
 func parseNameTag(field *ast.Field, tagKey string) (string, error) {
-	if field == nil || field.Tag == nil {
-		return "", nil
+	tagString, exists, err := lookupFieldTag(field, tagKey)
+	if err != nil {
+		return "", err
 	}
-	tagString, exists := reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Lookup(tagKey)
 	if !exists || tagString == "" {
 		return "", nil
 	}
