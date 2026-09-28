@@ -339,7 +339,7 @@ _, err := engine.Update[*User]().
 ## 📚 详细文档
 
 - 📖 **[完整使用指南](docs/usage_zh.md)**：模型定义规范、SQL 构建器用法、事务进阶、Repository 模式实践、`lormgen` 参数详解。
-- 💡 **[可运行示例集](example/README.md)**：包含 9 个独立完整的可运行示例，涵盖快速入门、分页、乐观锁、自定义投影等常见场景。
+- 💡 **[可运行示例集](example/README.md)**：10 个可运行示例，涵盖增删改查、[列表搜索与分页](example/list_search/)、事务和自定义投影等场景。
 - 📑 **[Go Reference API 文档](https://pkg.go.dev/github.com/yvvlee/lorm)**：查看导出的 Package API 与类型定义。
 - 📊 **[基准测试报告](benchmarks/orm-crud/README.md)**：多数据库 Benchmark 方法论与详细数据对比。
 

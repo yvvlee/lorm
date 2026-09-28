@@ -36,6 +36,9 @@ go run ./json_field
 # Pagination with total count & single column pagination
 go run ./pagination
 
+# List search with optional filters and pagination
+CGO_ENABLED=1 go run ./list_search
+
 # Safe concurrent updates with optimistic locking (version)
 go run ./optimistic_lock
 
@@ -70,6 +73,7 @@ go generate ./...
 | **[`custom_conversion`](custom_conversion/)** | Custom DB Type Serialization | Implementing `lorm.ScannerValuer` (`driver.Valuer` + `sql.Scanner`) for custom domain types |
 | **[`json_field`](json_field/)** | JSON Columns | `lorm:",json"` struct tag, storing nested structs and primitive slices seamlessly |
 | **[`pagination`](pagination/)** | Result Pagination | `Page(ctx, page, size)`, `PageCols[T](ctx, page, size)`, total count computation |
+| **[`list_search`](list_search/)** | List Search & Pagination | Pointer query fields, nested `try` conditions, repository `Page` queries |
 | **[`optimistic_lock`](optimistic_lock/)** | Concurrency Conflict Detection | `lorm:"version"` tag, atomic version increment (`version = version + 1`), CAS conflict checks |
 | **[`query_builder`](query_builder/)** | Complex SQL Predicates | `builder.And`, `builder.Or`, `builder.Like`, `builder.In`, `FindCols[T]`, `GetCol[T]` |
 
@@ -80,4 +84,3 @@ go generate ./...
 1. **Zero-Setup Testing**: Every example creates and initializes its own SQLite database in a temporary file and cleans up automatically upon completion.
 2. **Explicit SQL by Design**: The examples intentionally avoid implicit relationship loading or magic associations. All join operations and column selections are explicit, ensuring predictable performance and transparent execution plans.
 3. **Pre-Generated Helpers Checked-In**: All `*_lorm_gen.go` files are pre-generated and checked into Git so the examples compile and run immediately after cloning the repository.
-

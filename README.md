@@ -339,7 +339,7 @@ Tested with Go 1.27 on `darwin/arm64` (Apple M1 Pro), comparing **LORM**, **GORM
 ## 📚 Documentation
 
 - 📖 **[Comprehensive Usage Guide](docs/usage.md)**: Deep dive into model definitions, query builders, transactions, repositories, custom converters, and `lormgen` options.
-- 💡 **[Runnable Examples](example/README.md)**: 9 self-contained, executable examples covering everything from quickstart to pagination and custom projections.
+- 💡 **[Runnable Examples](example/README.md)**: 10 runnable examples covering CRUD, [list search and pagination](example/list_search/), transactions, and custom projections.
 - 📑 **[Go Reference API](https://pkg.go.dev/github.com/yvvlee/lorm)**: Standard package documentation.
 - 📊 **[Performance Benchmarks](benchmarks/orm-crud/README.md)**: Multi-database benchmarking methodology and detailed comparisons.
 
