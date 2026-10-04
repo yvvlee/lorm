@@ -361,6 +361,6 @@ same rank. `Gap to best` is calculated as `(lorm / best - 1) * 100%`.
 
 - SQLite `ns/op`: `lorm` ranks first in 6 of 10 cases.
 - MySQL `ns/op`: `lorm` ranks first in 9 of 10 cases.
-- PostgreSQL `ns/op`: `lorm` ranks first in 8 of 10 cases.
+- PostgreSQL `ns/op`: `lorm` ranks first in 7 of 10 cases.
 - `B/op`: `lorm` has the lowest allocation bytes in 9 of 10 cases on each backend.
 - `allocs/op`: `lorm` has the lowest allocation count in 9 of 10 cases on each backend.

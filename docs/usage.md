@@ -32,20 +32,18 @@ This guide provides a comprehensive overview of LORM's architecture, APIs, conve
 
 ## 1. Design Philosophy
 
-LORM is engineered around five fundamental principles:
-
-1. **Zero-Reflection Runtime**: Rather than relying on runtime reflection (`reflect.ValueOf`, `reflect.TypeOf`) to inspect struct fields during query execution and scanning, LORM generates direct pointer and value accessors at compile time via `lormgen`.
-2. **Compile-Time Type Safety**: SQL column references are verified at compile time through generated accessor methods (`u.LormCols().Name()`), eliminating typo-prone magic strings.
-3. **Explicit SQL (No Magic)**: LORM avoids implicit joins, hidden lazy loading, and query fan-out. What you construct in Go is what gets executed against the database.
-4. **Context-Propagated Transactions**: Transactions attach transparently to `context.Context`, keeping repository and domain service signatures clean and free of transaction handles.
-5. **Clean Architecture Ready**: First-class support for the Repository pattern (`lorm.Repository[T]`), cleanly decoupling business domain logic from storage implementation details.
+1. **Generated Field Access**: `lormgen` generates field pointers and value accessors, avoiding reflection when mapping model fields.
+2. **Column Accessors**: Reference columns with methods such as `u.LormCols().Name()`. After regeneration, removed or renamed model fields produce compile errors at their call sites.
+3. **Explicit SQL**: Queries, joins, and projections are defined by the caller. LORM does not load related records implicitly.
+4. **Context-Propagated Transactions**: Pass transactions across service and repository layers through `context.Context`, without separate `*sql.Tx` parameters.
+5. **Repository Support**: Embed `lorm.Repository[T]` for common CRUD methods and add custom queries behind application interfaces.
 
 ---
 
 ## 2. Installation & Toolchain
 
 ### Requirements
-- **Go 1.27.1** or higher.
+- **Go 1.27.0** or higher.
 
 ### Installing Dependencies and CLI Tool
 
@@ -542,7 +540,7 @@ _, err := engine.Update[*User]().
 
 ## 7. Type-Safe SQL Query Builder
 
-LORM includes a robust SQL builder package (`github.com/yvvlee/lorm/builder`). Using generated `LormCols()` ensures refactoring safety:
+LORM includes a SQL builder package (`github.com/yvvlee/lorm/builder`). Use generated `LormCols()` methods to reference model columns:
 
 ```go
 var u User
@@ -611,7 +609,7 @@ ids, err := engine.Query[*User]().
 
 ### Pagination with Model Results (`Page`)
 
-`Page(ctx, page, size)` computes the total row count and retrieves the requested page (1-indexed) in one seamless call:
+`Page(ctx, page, size)` computes the total row count and retrieves the requested page (1-indexed) in one call:
 
 ```go
 var u User
@@ -688,7 +686,7 @@ The outermost `TX` or `TXWithOptions` call that starts a transaction cleans it u
 
 ### Nested Transactions
 
-Calling `Engine.TX` with a `context` that already carries an active transaction session seamlessly reuses the existing transaction rather than opening a redundant one.
+Calling `Engine.TX` with a `context` that already carries an active transaction session reuses the existing transaction rather than opening a redundant one.
 
 ### Custom Transaction Options (`TXWithOptions`)
 
@@ -917,4 +915,4 @@ func (s *StringSlice) Scan(src any) error {
    baseQuery := engine.Query[*User]().Where(builder.Eq{u.LormCols().Status(): "active"})
    adminQuery := baseQuery.Clone().Where(builder.Eq{u.LormCols().Role(): "admin"})
    ```
-4. **Use Typed Column Accessors**: Always prefer `u.LormCols().FieldName()` over hardcoded strings to ensure compile-time safety and painless refactoring.
+4. **Use Typed Column Accessors**: Prefer `u.LormCols().FieldName()` over handwritten column names so model field changes can be checked at compile time after regeneration.

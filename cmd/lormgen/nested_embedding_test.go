@@ -20,7 +20,7 @@ func TestGenerateNestedEmbeddedPointersAcrossPackages(t *testing.T) {
 	previousWd := wd
 	wd = dir
 	t.Cleanup(func() { wd = previousWd })
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/nested\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/nested\n\ngo 1.27.0\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
 	copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
 	writeFile(t, filepath.Join(dir, "inner", "inner.go"), `package inner
 import (

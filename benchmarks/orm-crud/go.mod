@@ -1,6 +1,6 @@
 module github.com/yvvlee/lorm/benchmarks/orm-crud
 
-go 1.27.1
+go 1.27.0
 
 replace github.com/yvvlee/lorm => ../..
 

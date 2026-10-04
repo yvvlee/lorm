@@ -1,4 +1,4 @@
-# LORM - Lightweight, Zero-Reflection & Type-Safe ORM for Go
+# LORM - High-Performance, Zero-Reflection ORM for Go
 
 <p align="center">
   <a href="https://github.com/yvvlee/lorm"><img src="https://img.shields.io/badge/LORM-Go%20ORM-00ADD8?style=for-the-badge&logo=go" alt="LORM"></a>
@@ -8,7 +8,7 @@
   <a href="https://pkg.go.dev/github.com/yvvlee/lorm"><img src="https://pkg.go.dev/badge/github.com/yvvlee/lorm.svg" alt="Go Reference"></a>
   <a href="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml"><img src="https://github.com/yvvlee/lorm/actions/workflows/unit_test.yml/badge.svg" alt="Build Status"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27.1-007D9C?logo=go" alt="Go Version">
+  <img src="https://img.shields.io/badge/Go-%3E%3D%201.27.0-007D9C?logo=go" alt="Go Version">
 </p>
 
 <p align="center">
@@ -17,23 +17,22 @@
 
 ---
 
-**LORM** is an ultra-fast, zero-reflection, type-safe ORM and query builder for Go.
+**LORM** is a lightweight, high-performance, zero-reflection, type-safe ORM and SQL builder for Go.
 
-Designed for developers who value **performance**, **maintainability**, and **predictable execution**, LORM replaces runtime reflection with compile-time code generation (`lormgen`), embraces explicit SQL rather than magic associations, and offers transparent transaction propagation via standard Go `context.Context`.
+Designed for **performance**, **maintainability**, and **predictable execution**, LORM replaces runtime reflection and implicit ORM behavior with code generation (`lormgen`) for direct field mapping and typed column accessors. It keeps SQL construction explicit and propagates transactions transparently through Go's standard `context.Context`.
 
 ---
 
 ## 💡 Why LORM?
 
-Traditional Go ORMs often trade performance and control for convenience—introducing heavy reflection, hidden lazy-loading queries, and convoluted transaction management. LORM is built with a different philosophy:
+Traditional Go ORMs often trade performance and control for convenience through reflection overhead, implicit relationship loading, N+1 queries, and cumbersome transaction handling. LORM addresses these concerns with:
 
-- ⚡ **Zero-Reflection Performance**: Generates direct field pointer and value accessors at compile time. Eliminates reflection bottlenecks during query scanning and model mapping, delivering near-raw `database/sql` throughput with minimal memory allocations.
-- 🛡️ **Compile-Time Type Safety**: Generated column accessors (`u.LormCols().Name()`) eliminate hardcoded strings. Schema renames and field typos are caught at compile time.
-- 🔍 **Explicit SQL (No Magic)**: What you write is what executes. No implicit joins, no hidden lazy loading, and no surprising N+1 query fan-out.
-- 🔄 **Context-Propagated Transactions**: Transparent transaction management through standard `context.Context`. Pass transactions cleanly across service and repository layers without polluting method signatures.
-- 🏛️ **Clean Architecture & Repository Ready**: Built-in generic `lorm.Repository[T]` makes it effortless to implement the Repository pattern and mock data access in unit tests.
-- 🔌 **Zero External Driver Coupling**: Built strictly on Go's standard `database/sql`. Import only the database drivers your application actually needs.
-- 🦺 **Production Safety Guards**: Built-in safety checks prevent accidental unconstrained `UPDATE` and `DELETE` queries, alongside first-class support for optimistic locking (`version`), auto-timestamps (`created`, `updated`), and JSON field mapping.
+- ⚡ **Zero-Reflection Performance**: `lormgen` generates direct field pointers and value accessors, removing reflection overhead from query scanning and model mapping to deliver throughput comparable to native `database/sql` with low memory allocation.
+- 🛡️ **Compile-Time Type Safety**: Generated column accessors (`u.LormCols().Name()`) replace handwritten column names. Field renames and misspelled accessor calls are caught at compile time after regeneration.
+- 🔍 **Explicit SQL (No Hidden Behavior)**: Queries use explicit joins and loading, with no implicit relationship queries or hidden query fan-out. SQL execution remains visible and under your control.
+- 🧩 **Flexible, Intuitive Condition Builders**: Combine and nest conditions, and apply filters dynamically based on supplied parameters. Fewer conditional branches make complex queries easier to express and maintain.
+- 🔄 **Context-Propagated Transactions**: Transactions travel through standard `context.Context`, without separate `*sql.Tx` parameters in business methods. Nested calls reuse the existing transaction, with automatic rollback on errors.
+- 🏛️ **Clean Architecture & Repository Support**: The generic `lorm.Repository[T]` supports DDD and clean architecture by separating business logic from data access, making repository interfaces straightforward to mock in tests.
 
 ---
 
@@ -78,17 +77,17 @@ Traditional Go ORMs often trade performance and control for convenience—introd
 
 | Database | Driver Package | Driver Name | Status |
 | :--- | :--- | :--- | :--- |
-| **MySQL / MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | Production-Ready (First-Class) |
-| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | Production-Ready (First-Class) |
-| **SQLite** | `github.com/mattn/go-sqlite3` | `sqlite3` | Local Dev, CI & Embedded |
+| **MySQL / MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | Supported |
+| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | Supported |
+| **SQLite** | `github.com/mattn/go-sqlite3` | `sqlite3` | Supported |
 
-> LORM does not bundle database drivers. Import only the driver used by your application.
+> LORM uses `database/sql`. Applications import the database drivers they need.
 
 ---
 
 ## 📦 Installation
 
-LORM requires **Go 1.27.1** or later.
+LORM requires **Go 1.27.0** or later.
 
 ```bash
 # Install the core library
@@ -100,7 +99,7 @@ go install github.com/yvvlee/lorm/cmd/lormgen@latest
 
 ---
 
-## 🚀 Quick Start in 60 Seconds
+## 🚀 Quick Start
 
 ### 1. Define a Model
 
@@ -134,7 +133,7 @@ lormgen ./...
 
 This creates `*_lorm_gen.go` containing `LormCols()`, direct pointer scanners, and write hooks.
 
-### 3. Initialize the Engine
+### 3. Initialize the Engine and Run CRUD Operations
 
 ```go
 package main
@@ -202,9 +201,9 @@ func main() {
 
 ## ✨ Key Features at a Glance
 
-### 1. Type-Safe Column Accessors
+### 1. Type-Safe Column Accessors and Aliases
 
-Say goodbye to string typo bugs:
+Use generated methods instead of handwritten column names:
 
 ```go
 var u User
@@ -225,9 +224,9 @@ ids, err := engine.Query[*User]().
 	FindCols[int64](ctx)
 ```
 
-### 2. Context-Driven Seamless Transactions
+### 2. Context-Propagated Transactions
 
-Transactions attach transparently to `context.Context`. Nested `TX` calls automatically reuse the outer transaction:
+Transactions are stored in `context.Context`. Nested `TX` calls automatically reuse the outer transaction:
 
 ```go
 err := engine.TX(ctx, func(txCtx context.Context) error {
@@ -242,9 +241,9 @@ err := engine.TX(ctx, func(txCtx context.Context) error {
 })
 ```
 
-### 3. Clean Architecture & Repository Pattern
+### 3. Repository Pattern
 
-Encapsulate database logic behind clean interfaces:
+Encapsulate database access behind repository interfaces:
 
 ```go
 type UserRepository interface {
@@ -280,15 +279,15 @@ type Product struct {
 	lorm.UnimplementedTable
 	ID        int64     `lorm:"id,primary_key,auto_increment"`
 	Stock     int       `lorm:"stock"`
-	Version   int64     `lorm:"version"`            // Automatically checked & incremented on update
-	CreatedAt time.Time `lorm:"created_at,created"` // Automatically populated on insert
-	UpdatedAt time.Time `lorm:"updated_at,updated"` // Automatically refreshed on update
+	Version   int64     `lorm:"version"`            // Checked and incremented on update (CAS optimistic locking)
+	CreatedAt time.Time `lorm:"created_at,created"` // Set to the current time on insert if zero
+	UpdatedAt time.Time `lorm:"updated_at,updated"` // Refreshed on insert and update
 }
 ```
 
-### 5. Custom Types & Transparent JSON Serialization
+### 5. Custom Types & JSON Fields
 
-Store complex structs or custom types effortlessly:
+Map structs or slices to JSON fields:
 
 ```go
 type Profile struct {
@@ -303,17 +302,17 @@ type Account struct {
 }
 ```
 
-For domain types requiring custom DB representations, simply implement standard `sql.Scanner` and `driver.Valuer` (`lorm.ScannerValuer`).
+For domain types requiring custom DB representations, implement standard `sql.Scanner` and `driver.Valuer` (`lorm.ScannerValuer`).
 
-### 6. Safety Guards Against Accidental Full-Table Writes
+### 6. Full-Table Write Restrictions
 
-To protect against catastrophic accidental table wipes, `Update.Exec` and `Delete.Exec` reject queries lacking a restrictive `WHERE` clause:
+`Update.Exec` and `Delete.Exec` reject statements without a restrictive `WHERE` clause by default. Call `AllowGlobalWrite()` explicitly for full-table updates or deletes:
 
 ```go
-// ❌ Returns an error: update statement missing WHERE condition
+// Returns an error: update statement missing WHERE condition
 _, err := engine.Update[*User]().Set("status", "inactive").Exec(ctx)
 
-// ✅ Explicitly allow global operation when truly intended
+// Explicitly allow a full-table update
 _, err := engine.Update[*User]().
 	Set("status", "inactive").
 	AllowGlobalWrite().
@@ -322,17 +321,19 @@ _, err := engine.Update[*User]().
 
 ---
 
-## 📊 Benchmark Snapshot
+## 📊 Benchmarks
 
-Tested with Go 1.27 on `darwin/arm64` (Apple M1 Pro), comparing **LORM**, **GORM**, **XORM**, and **Ent** on identical schemas across SQLite, MySQL, and PostgreSQL.
+The recorded CRUD comparison covers LORM, GORM, XORM, and Ent on SQLite, MySQL, and PostgreSQL. Results were collected on August 21, 2026 with Go 1.27.0 on `darwin/arm64` (Apple M1 Pro). Each value is the median of three independent rounds.
 
-| Metric (Single Row & Batch) | LORM vs GORM | LORM vs XORM | LORM vs Ent |
-| :--- | :--- | :--- | :--- |
-| **Execution Latency (`ns/op`)** | Up to **35% faster** | Up to **58% faster** | **Consistently lowest** or top-tier |
-| **Memory Allocation (`B/op`)** | Up to **73% less memory** | Up to **74% less memory** | Up to **50% less memory** |
-| **Allocation Count (`allocs/op`)** | Up to **45% fewer allocs** | Up to **87% fewer allocs** | Up to **50% fewer allocs** |
+The table counts cases where LORM had the lowest value among the four ORMs. Each backend has 10 cases covering single-row and 100-row operations, including JSON reads.
 
-> 📖 See the [Complete Benchmark Report & Methodology](benchmarks/orm-crud/README.md) for full metrics and reproduction instructions.
+| Metric | SQLite | MySQL | PostgreSQL |
+| :--- | ---: | ---: | ---: |
+| Time per operation (`ns/op`) | 6/10 | 9/10 | 7/10 |
+| Allocated bytes per operation (`B/op`) | 9/10 | 9/10 | 9/10 |
+| Allocations per operation (`allocs/op`) | 9/10 | 9/10 | 9/10 |
+
+See the [full results and reproduction commands](benchmarks/orm-crud/README.md) for individual measurements. The [SQL rendering experiment](benchmarks/sql-rendering/README.md) measures query construction separately from database execution.
 
 ---
 

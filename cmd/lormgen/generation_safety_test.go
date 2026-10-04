@@ -98,7 +98,7 @@ func TestGeneratePlatformModelCompilesForOtherTarget(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 	repo := findRepoRoot(t, cwd)
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/platform\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/platform\n\ngo 1.27.0\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
 	copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
 	writeFile(t, filepath.Join(dir, "common.go"), "package platform\n")
 	model := filepath.Join(dir, "model_"+runtime.GOOS+".go")
@@ -133,7 +133,7 @@ func TestGenerateValidatesAllFilesBeforeWriting(t *testing.T) {
 			require.NoError(t, err)
 			repo := findRepoRoot(t, cwd)
 			dir := t.TempDir()
-			writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/buffered\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+			writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/buffered\n\ngo 1.27.0\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
 			copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
 			firstDir, lastDir := dir, dir
 			if tt.separateDirectories {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/yvvlee/lorm/names"
 )
 
@@ -73,7 +74,7 @@ func TestInvalidResultTypesPreserveGeneratedFile(t *testing.T) {
 		"type Model struct { lorm.UnimplementedModel; Data sql.RawBytes }",
 	} {
 		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/invalidmodel\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+		writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/invalidmodel\n\ngo 1.27.0\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
 		copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
 		model := filepath.Join(dir, "model.go")
 		writeFile(t, model, "package invalidmodel\nimport (\"github.com/yvvlee/lorm\"; \"database/sql\")\nvar _ sql.RawBytes\n"+declaration+"\n")

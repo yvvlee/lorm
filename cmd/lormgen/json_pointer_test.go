@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/yvvlee/lorm/names"
 )
 
@@ -15,7 +16,7 @@ func TestGeneratedJSONPointerFieldsUseJSON(t *testing.T) {
 	require.NoError(t, err)
 	repo := findRepoRoot(t, cwd)
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/jsonpointer\n\ngo 1.27.1\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/jsonpointer\n\ngo 1.27.0\n\nrequire github.com/yvvlee/lorm v0.0.0\nreplace github.com/yvvlee/lorm => "+filepath.ToSlash(repo)+"\n")
 	copyFile(t, filepath.Join(repo, "go.sum"), filepath.Join(dir, "go.sum"))
 	model := filepath.Join(dir, "model.go")
 	writeFile(t, model, `package jsonpointer

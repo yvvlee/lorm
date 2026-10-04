@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/yvvlee/lorm"
 	"github.com/yvvlee/lorm/builder"
 )
