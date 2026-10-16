@@ -17,7 +17,7 @@ func TestPlaceholderBranches(t *testing.T) {
 	assert.Equal(t, builder.Dollar, Placeholder("postgresql"))
 	assert.Equal(t, builder.Dollar, Placeholder("pgx"))
 	assert.Equal(t, builder.Dollar, Placeholder("pq"))
-	assert.Equal(t, builder.Question, Placeholder("ql"))
+	assert.Equal(t, builder.Question, Placeholder("sqlite3"))
 	assert.Equal(t, builder.Question, Placeholder("mysql"))
 	assert.Equal(t, builder.Question, Placeholder("unknown"))
 }
@@ -30,7 +30,7 @@ func TestEscaperBranches(t *testing.T) {
 	q = Escaper("postgresql")
 	assert.Equal(t, "\"x\"", q.Escape("x"))
 
-	q = Escaper("ql")
+	q = Escaper("sqlite3")
 	assert.Equal(t, "\"x\"", q.Escape("x"))
 
 	// MySQL

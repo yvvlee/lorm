@@ -1,6 +1,8 @@
 package lorm
 
 import (
+	"context"
+	"database/sql"
 	"time"
 
 	"github.com/yvvlee/lorm/builder"
@@ -62,7 +64,28 @@ type Config struct {
 // Option mutates Config during engine construction.
 type Option func(*Config)
 
-// WithDialectConfig sets the dialect behavior as a single config value.
+func newConfig(ctx context.Context, db *sql.DB, driverName, dsn string, options []Option) (*Config, error) {
+	dialect, err := detectDialectConfig(ctx, db, driverName)
+	if err != nil {
+		return nil, err
+	}
+	config := &Config{
+		driverName: driverName,
+		dsn:        dsn,
+		Dialect:    dialect,
+		logger:     defaultLogger,
+	}
+	for _, option := range options {
+		option(config)
+	}
+	return config, nil
+}
+
+// WithDialectConfig replaces all dialect settings, including detected defaults.
+//
+// Parameters: dialect specifies the complete dialect configuration.
+// Returns: an option applied after runtime detection, in caller-supplied order.
+// Throws: none.
 func WithDialectConfig(dialect DialectConfig) Option {
 	return func(c *Config) {
 		c.Dialect = dialect
@@ -84,6 +107,10 @@ func WithEscaper(escaper names.Escaper) Option {
 }
 
 // WithSupportsReturning overrides RETURNING support detection.
+//
+// Parameters: enabled forces the desired RETURNING behavior.
+// Returns: an option applied after runtime detection, in caller-supplied order.
+// Throws: none.
 func WithSupportsReturning(enabled bool) Option {
 	return func(c *Config) {
 		c.Dialect.SupportsReturning = enabled

@@ -214,7 +214,11 @@ LORM 根据传入的 driver name 自动匹配标准方言行为：
 | :--- | :--- | :--- | :--- | :--- |
 | `mysql` | `?` | 反引号 (`` `col` ``) | `LastInsertId` | `FOR UPDATE` |
 | `pgx` / `postgres` | `$1, $2` | 双引号 (`"col"`) | `RETURNING` | `FOR UPDATE` |
-| `sqlite3` | `?` | 双引号 (`"col"`) | `LastInsertId` | 不支持 |
+| `sqlite` / `sqlite3` | `?` | 双引号 (`"col"`) | SQLite ≥ 3.35.0 使用 `RETURNING`，旧版本使用 `LastInsertId` | 不支持 |
+
+SQLite 初始化时会执行一次 `SELECT sqlite_version()`，按实际运行的 SQLite 版本判断 `RETURNING` 支持情况。这也适用于链接系统 SQLite 的驱动。检测使用 `NewEngineContext` 传入的 context；版本查询或解析失败会返回初始化错误并关闭连接池。其他驱动不执行此检测。
+
+配置项在检测之后按传入顺序应用。可用 `WithSupportsReturning(false)` 强制使用 `LastInsertId`，或用 `WithSupportsReturning(true)` 显式启用 `RETURNING`。`WithDialectConfig` 会覆盖完整方言配置，包括检测结果。`DefaultDialectConfig` 只返回静态默认值，SQLite 的 `SupportsReturning` 仍为 `false`；初始化后的有效值通过 `engine.SupportsReturning()` 查询。
 
 ### 自定义方言配置
 

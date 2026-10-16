@@ -216,7 +216,11 @@ LORM detects default dialect rules (placeholder format, identifier quoting, `RET
 | :--- | :--- | :--- | :--- | :--- |
 | `mysql` | `?` | Backticks (`` `col` ``) | `LastInsertId` | `FOR UPDATE` |
 | `pgx` / `postgres` | `$1, $2` | Double Quotes (`"col"`) | `RETURNING` | `FOR UPDATE` |
-| `sqlite3` | `?` | Double Quotes (`"col"`) | `LastInsertId` | N/A |
+| `sqlite` / `sqlite3` | `?` | Double Quotes (`"col"`) | `RETURNING` on SQLite ≥ 3.35.0; `LastInsertId` on older versions | N/A |
+
+SQLite initialization executes `SELECT sqlite_version()` once to detect `RETURNING` support from the runtime library, including when a driver links to system SQLite. Detection uses the context passed to `NewEngineContext`. Query or version-parsing failures return an initialization error and close the database pool. Other drivers skip this detection.
+
+Options are applied after detection, in caller-supplied order. Use `WithSupportsReturning(false)` to force `LastInsertId`, or `WithSupportsReturning(true)` to explicitly enable `RETURNING`. `WithDialectConfig` replaces the complete dialect configuration, including detected values. `DefaultDialectConfig` only returns static defaults, so SQLite's `SupportsReturning` remains `false` there; use `engine.SupportsReturning()` to inspect the effective setting after initialization.
 
 ### Customizing Dialect Behavior
 

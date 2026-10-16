@@ -24,28 +24,32 @@ type Engine struct {
 	defaultSelectProjections sync.Map
 }
 
-// NewEngine opens a database connection and applies the provided options.
-// It uses a background context for the initial connectivity check; use
-// NewEngineContext to supply a context with timeout or cancellation.
+// NewEngine opens a database pool and detects SQLite RETURNING support before
+// applying options. Use NewEngineContext to bound initialization with a deadline.
+//
+// Parameters: driverName is a registered SQL driver; dsn is its data source;
+// option overrides detected defaults in the order supplied.
+// Returns: an initialized engine, or nil and an initialization error.
+// Throws: none.
 func NewEngine(driverName, dsn string, option ...Option) (*Engine, error) {
 	return NewEngineContext(context.Background(), driverName, dsn, option...)
 }
 
-// NewEngineContext is like NewEngine but accepts a context for the initial
-// connectivity check so callers can enforce a timeout.
+// NewEngineContext opens a database pool using ctx for both the connectivity
+// check and SQLite version detection. Detection errors close the pool.
+//
+// Parameters: ctx controls initialization; driverName is a registered SQL driver;
+// dsn is its data source; option overrides detected defaults in the order supplied.
+// Returns: an initialized engine, or nil and a connection or detection error.
+// Throws: none.
 func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Option) (*Engine, error) {
 	db, err := connect(ctx, driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
-	config := &Config{
-		driverName: driverName,
-		dsn:        dsn,
-		Dialect:    DefaultDialectConfig(driverName),
-		logger:     defaultLogger,
-	}
-	for _, o := range option {
-		o(config)
+	config, err := newConfig(ctx, db, driverName, dsn, option)
+	if err != nil {
+		return nil, errors.Join(err, db.Close())
 	}
 	engine := &Engine{
 		config: config,
@@ -315,7 +319,12 @@ func Escaper(driverName string) names.Escaper {
 	return DefaultDialectConfig(driverName).Escaper
 }
 
-// DefaultDialectConfig returns the built-in dialect behavior for a driver name.
+// DefaultDialectConfig returns static driver defaults. SQLite RETURNING stays
+// disabled here; engine initialization detects it before applying options.
+//
+// Parameters: driverName selects the built-in dialect defaults.
+// Returns: the static dialect configuration without opening a database.
+// Throws: none.
 func DefaultDialectConfig(driverName string) DialectConfig {
 	switch driverName {
 	case //PostgreSQL
@@ -329,7 +338,7 @@ func DefaultDialectConfig(driverName string) DialectConfig {
 			IgnoreStrategy:       IgnoreConflictSuffix,
 		}
 	case //SQLite
-		"sqlite", "sqlite3", "ql":
+		"sqlite", "sqlite3":
 		return DialectConfig{
 			PlaceholderFormat:    builder.Question,
 			Escaper:              names.NewQuoter('"', '"'),

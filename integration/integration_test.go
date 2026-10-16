@@ -1308,15 +1308,16 @@ func (m *updateSemanticsModel) LormModelDescriptor() *ModelDescriptor {
 	}
 }
 
-func newSQLiteSemanticsEngine(t *testing.T) *Engine {
+func newSQLiteSemanticsEngine(t *testing.T, options ...Option) *Engine {
 	t.Helper()
 	if ok, reason := sqlite3TestAvailable(); !ok {
 		t.Skipf("sqlite3 integration dependency unavailable: %s", reason)
 	}
+	options = append([]Option{WithMaxOpenConns(1)}, options...)
 	engine, err := NewEngine(
 		"sqlite3",
 		filepath.Join(t.TempDir(), "semantics.sqlite"),
-		WithMaxOpenConns(1),
+		options...,
 	)
 	require.NoError(t, err)
 
