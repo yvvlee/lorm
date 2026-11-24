@@ -24,7 +24,7 @@ func TestLike(t *testing.T) {
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "name LIKE ?", sql)
-	assert.Equal(t, []any{"foo"}, args)
+	assert.Equal(t, []any{"%foo%"}, args)
 
 	c = Like("name", "  ")
 	assert.Nil(t, c)
@@ -131,7 +131,12 @@ func TestLikes(t *testing.T) {
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "(name LIKE ? OR name LIKE ?)", sql)
-	assert.Equal(t, []any{"a", "b"}, args)
+	assert.Equal(t, []any{"%a%", "%b%"}, args)
+
+	c = Likes("name", []string{"a", "  ", "b"})
+	_, args, err = c.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, []any{"%a%", "%b%"}, args)
 
 	c = Likes("name", nil)
 	assert.Nil(t, c)
@@ -142,7 +147,7 @@ func TestMultiLike(t *testing.T) {
 	sql, args, err := c.ToSql()
 	assert.NoError(t, err)
 	assert.Equal(t, "(name LIKE ? OR desc LIKE ?)", sql)
-	assert.Equal(t, []any{"foo", "foo"}, args)
+	assert.Equal(t, []any{"%foo%", "%foo%"}, args)
 
 	c = MultiLike([]string{"name", "desc"}, "  ")
 	assert.Nil(t, c)
@@ -179,4 +184,13 @@ func TestTimeRangeBranches(t *testing.T) {
 
 	var zero time.Time
 	assert.Nil(t, TimeRange("created_at", &zero, &zero))
+}
+
+func TestLikesWhitespace(t *testing.T) {
+	assert.Nil(t, Likes("name", []string{"", "   ", "\t"}))
+	condition := Likes("name", []string{" a ", " b\t"})
+	sql, args, err := condition.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "(name LIKE ? OR name LIKE ?)", sql)
+	assert.Equal(t, []any{"%a%", "%b%"}, args)
 }

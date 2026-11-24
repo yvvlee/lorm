@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -59,7 +58,17 @@ func (b *InsertBuilder) ToSql() (sqlStr string, args []any, err error) {
 		return
 	}
 
-	sql := &bytes.Buffer{}
+	sql := &strings.Builder{}
+	valueCount := 0
+	if b.selectBuilder == nil {
+		for _, row := range b.values {
+			valueCount += len(row)
+		}
+	}
+	sql.Grow(32 + len(b.into) + len(b.columns)*16 + valueCount*2 + len(b.values)*3)
+	if valueCount > 0 {
+		args = make([]any, 0, valueCount)
+	}
 
 	if len(b.prefixes) > 0 {
 		args, err = appendToSql(b.prefixes, sql, " ", args)

@@ -197,7 +197,6 @@ func main() {
 		lorm.WithMaxIdleConns(20),
 		lorm.WithConnMaxLifetime(time.Hour),
 		lorm.WithConnMaxIdleTime(30*time.Minute),
-		lorm.WithLogger(lorm.NewDefaultLogger()),
 	)
 	if err != nil {
 		log.Fatalf("初始化 Engine 失败: %v", err)
@@ -365,7 +364,7 @@ rowsAffected, err := engine.Update[*User]().
 ```go
 _, err := engine.Update[*User]().
 	ID(42).
-	SetExpr(c.Age(), "age + 1").
+	Set(c.Age(), builder.Expr("age + 1")).
 	Exec(ctx)
 ```
 
@@ -557,7 +556,7 @@ c := u.LormCols()
 | 运算类型 | Go 代码表达式 | 生成的 SQL 片段 |
 | :--- | :--- | :--- |
 | **等于** | `builder.Eq{c.Email(): "a@b.com"}` | `` `email` = ? `` |
-| **不等于** | `builder.Ne(c.Age(), 0)` | `` `age` <> ? `` |
+| **不等于** | `builder.NotEq{c.Age(): 0}` | `` `age` <> ? `` |
 | **数值比较** | `builder.Gt(c.Age(), 18)`, `builder.Lte(c.Age(), 60)` | `` `age` > ? ``, `` `age` <= ? `` |
 | **IN / NOT IN** | `builder.In(c.ID(), []int64{1, 2, 3})` | `` `id` IN (?, ?, ?) `` |
 | **空值判断** | `builder.IsNull(c.DeletedAt())`, `builder.IsNotNull(c.Email())` | `` `deleted_at` IS NULL `` |
@@ -920,3 +919,7 @@ func (s *StringSlice) Scan(src any) error {
    adminQuery := baseQuery.Clone().Where(builder.Eq{u.LormCols().Role(): "admin"})
    ```
 4. **统一使用强类型列名**：优先使用 `u.LormCols().FieldName()`，减少手写列名，并在重新生成代码后检查字段引用。
+
+## 使用已有连接池
+
+可以通过 `lorm.NewEngineWithDB(ctx, db, driverName, options...)` 包装已有的 `*sql.DB`。传入 nil 会返回错误。该函数不主动 Ping；SQLite 会查询版本以检测方言能力。构造失败不会关闭传入的连接池，成功后 `Engine.Close()` 会关闭该共享连接池。`Engine.DB()` 返回原连接池，可用于读取 Stats。

@@ -60,22 +60,26 @@ func Lte[T cmp.Ordered](dbField string, value *T) builder.Sqlizer {
 	return builder.Lte(dbField, *value)
 }
 
-// Like adds condition dbField like "%${value}%" if value is not empty
+// Like adds condition dbField LIKE "%${value}%" if value is not empty.
 func Like(dbField, value string) builder.Sqlizer {
 	if v := strings.TrimSpace(value); v != "" {
-		return builder.Like(dbField, v)
+		return builder.Like(dbField, "%"+v+"%")
 	}
 	return nil
 }
 
-// Likes adds conditions dbField like "%${value1}%" OR dbField like "%${value2}%" if values are not empty
+// Likes adds conditions dbField LIKE "%${value1}%" OR dbField LIKE "%${value2}%" for non-empty values.
 func Likes(dbField string, values []string) builder.Sqlizer {
-	if len(values) == 0 {
-		return nil
-	}
 	var c []builder.Sqlizer
 	for _, v := range values {
-		c = append(c, builder.Like(dbField, v))
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		c = append(c, builder.Like(dbField, "%"+v+"%"))
+	}
+	if len(c) == 0 {
+		return nil
 	}
 	return builder.Or(c)
 }
@@ -115,12 +119,12 @@ func TimeRange(dbField string, start, end *time.Time) builder.Sqlizer {
 	}
 }
 
-// MultiLike adds conditions dbField1 like "%${value}%" OR dbField2 like "%${value}%" if value is not empty
+// MultiLike adds conditions dbField1 LIKE "%${value}%" OR dbField2 LIKE "%${value}%" if value is not empty.
 func MultiLike(dbFields []string, value string) builder.Sqlizer {
 	if v := strings.TrimSpace(value); v != "" {
 		var conds []builder.Sqlizer
 		for _, field := range dbFields {
-			conds = append(conds, builder.Like(field, v))
+			conds = append(conds, builder.Like(field, "%"+v+"%"))
 		}
 		return builder.Or(conds)
 	}

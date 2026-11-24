@@ -199,7 +199,6 @@ func main() {
 		lorm.WithMaxIdleConns(20),
 		lorm.WithConnMaxLifetime(time.Hour),
 		lorm.WithConnMaxIdleTime(30*time.Minute),
-		lorm.WithLogger(lorm.NewDefaultLogger()),
 	)
 	if err != nil {
 		log.Fatalf("failed to initialize lorm engine: %v", err)
@@ -364,7 +363,7 @@ rowsAffected, err := engine.Update[*User]().
 ```go
 _, err := engine.Update[*User]().
 	ID(42).
-	SetExpr(c.Age(), "age + 1").
+	Set(c.Age(), builder.Expr("age + 1")).
 	Exec(ctx)
 ```
 
@@ -556,7 +555,7 @@ c := u.LormCols()
 | Predicate | Go Expression | Rendered SQL Snippet |
 | :--- | :--- | :--- |
 | **Equality** | `builder.Eq{c.Email(): "a@b.com"}` | `` `email` = ? `` |
-| **Not Equal** | `builder.Ne(c.Age(), 0)` | `` `age` <> ? `` |
+| **Not Equal** | `builder.NotEq{c.Age(): 0}` | `` `age` <> ? `` |
 | **Comparisons** | `builder.Gt(c.Age(), 18)`, `builder.Lte(c.Age(), 60)` | `` `age` > ? ``, `` `age` <= ? `` |
 | **IN / NOT IN** | `builder.In(c.ID(), []int64{1, 2, 3})` | `` `id` IN (?, ?, ?) `` |
 | **NULL Checks** | `builder.IsNull(c.DeletedAt())`, `builder.IsNotNull(c.Email())` | `` `deleted_at` IS NULL `` |
@@ -920,3 +919,7 @@ func (s *StringSlice) Scan(src any) error {
    adminQuery := baseQuery.Clone().Where(builder.Eq{u.LormCols().Role(): "admin"})
    ```
 4. **Use Typed Column Accessors**: Prefer `u.LormCols().FieldName()` over handwritten column names so model field changes can be checked at compile time after regeneration.
+
+## Using an existing connection pool
+
+Use `lorm.NewEngineWithDB(ctx, db, driverName, options...)` to wrap an existing `*sql.DB`. A nil pool returns an error. This constructor does not ping; SQLite initialization queries its version to detect dialect capabilities. Failure leaves the supplied pool open. On success, `Engine.Close()` closes the shared pool. `Engine.DB()` returns the same pool for access to Stats and other pool operations.

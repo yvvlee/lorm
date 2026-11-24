@@ -183,7 +183,8 @@ func (s *UpdateStmt[T]) SetModel(model T) *UpdateStmt[T] {
 		s.builder.Set(escaped, builder.Expr(escaped+"+1"))
 	}
 	for _, item := range plan.Where {
-		s.builder.Where(builder.Eq{escaper.Escape(item.Column): item.Value})
+		field := escaper.Escape(item.Column)
+		s.builder.Where(field+" = ?", item.Value)
 	}
 	return s
 }

@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
@@ -64,7 +63,8 @@ func (b *UpdateBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bo
 		return
 	}
 
-	sql := &bytes.Buffer{}
+	sql := &strings.Builder{}
+	sql.Grow(32 + len(b.table) + len(b.setClauses)*16)
 
 	if len(b.prefixes) > 0 {
 		args, err = appendToSql(b.prefixes, sql, " ", args)
@@ -79,31 +79,15 @@ func (b *UpdateBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bo
 	sql.WriteString(b.table)
 
 	sql.WriteString(" SET ")
-	setSqls := make([]string, len(b.setClauses))
 	for i, clause := range b.setClauses {
-		var valSql string
-		if vs, ok := clause.value.(Sqlizer); ok {
-			vsql, vargs, err := vs.ToSql()
-			if err != nil {
-				return "", nil, false, err
-			}
-			if strings.TrimSpace(vsql) == "" {
-				return "", nil, false, fmt.Errorf("update SET expression for column %q must not be empty", clause.column)
-			}
-			if _, ok := vs.(*SelectBuilder); ok {
-				// Subqueries in SET need parentheses, while other Sqlizers can provide their own syntax.
-				valSql = fmt.Sprintf("(%s)", vsql)
-			} else {
-				valSql = vsql
-			}
-			args = append(args, vargs...)
-		} else {
-			valSql = "?"
-			args = append(args, clause.value)
+		if i > 0 {
+			sql.WriteString(", ")
 		}
-		setSqls[i] = fmt.Sprintf("%s = %s", clause.column, valSql)
+		args, err = appendSetClause(sql, clause, args)
+		if err != nil {
+			return "", nil, false, err
+		}
 	}
-	sql.WriteString(strings.Join(setSqls, ", "))
 
 	if b.from != nil {
 		sql.WriteString(" FROM ")
@@ -273,4 +257,31 @@ func (b *UpdateBuilder) Clear() *UpdateBuilder {
 	b.suffixes = resetSlice(b.suffixes)
 	b.returning = resetSlice(b.returning)
 	return b
+}
+
+// appendSetClause preserves expression arguments while avoiding temporary SQL strings.
+func appendSetClause(sql *strings.Builder, clause setClause, args []any) ([]any, error) {
+	sql.WriteString(clause.column)
+	sql.WriteString(" = ")
+	expression, ok := clause.value.(Sqlizer)
+	if !ok {
+		sql.WriteByte('?')
+		return append(args, clause.value), nil
+	}
+	valueSQL, valueArgs, err := expression.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(valueSQL) == "" {
+		return nil, fmt.Errorf("update SET expression for column %q must not be empty", clause.column)
+	}
+	_, subquery := expression.(*SelectBuilder)
+	if subquery {
+		sql.WriteByte('(')
+	}
+	sql.WriteString(valueSQL)
+	if subquery {
+		sql.WriteByte(')')
+	}
+	return append(args, valueArgs...), nil
 }

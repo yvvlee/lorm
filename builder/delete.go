@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -50,7 +49,8 @@ func (b *DeleteBuilder) ToSqlWithWhere() (sqlStr string, args []any, hasWhere bo
 		return
 	}
 
-	sql := &bytes.Buffer{}
+	sql := &strings.Builder{}
+	sql.Grow(24 + len(b.from) + len(b.whereParts)*16)
 
 	if len(b.prefixes) > 0 {
 		args, err = appendToSql(b.prefixes, sql, " ", args)

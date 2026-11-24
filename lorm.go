@@ -60,6 +60,40 @@ func NewEngineContext(ctx context.Context, driverName, dsn string, option ...Opt
 	return engine, nil
 }
 
+// NewEngineWithDB creates an engine around an existing database pool.
+// It does not ping the pool. SQLite initialization queries its version.
+// Failure leaves the pool open; on success Engine.Close closes the shared pool.
+//
+// Parameters: ctx controls dialect detection; db is the existing pool;
+// driverName selects its SQL dialect; option overrides detected defaults.
+// Returns: an initialized engine, or a dialect detection error.
+// Throws: none.
+func NewEngineWithDB(ctx context.Context, db *sql.DB, driverName string, option ...Option) (*Engine, error) {
+	if db == nil {
+		return nil, errors.New("lorm: NewEngineWithDB requires a non-nil database pool")
+	}
+	config, err := newConfig(ctx, db, driverName, "", option)
+	if err != nil {
+		return nil, err
+	}
+	engine := &Engine{
+		config: config,
+		db:     db,
+		logger: config.logger,
+	}
+	engine.init()
+	return engine, nil
+}
+
+// DB returns the underlying database pool.
+//
+// Parameters: none.
+// Returns: the shared pool; closing it also affects this engine.
+// Throws: none.
+func (e *Engine) DB() *sql.DB {
+	return e.db
+}
+
 // Close closes the underlying database pool.
 func (e *Engine) Close() error {
 	return e.db.Close()
@@ -280,12 +314,11 @@ func sessionIDFromContext(ctx context.Context) (string, bool) {
 }
 
 func (e *Engine) sqlLogFields(ctx context.Context, query string, args []any, err error, elapsed time.Duration) []any {
-	fields := []any{
-		"SQL", query,
-	}
+	fields := make([]any, 0, 10)
 	if sessionID, ok := sessionIDFromContext(ctx); ok {
-		fields = append([]any{"sessionID", sessionID}, fields...)
+		fields = append(fields, "sessionID", sessionID)
 	}
+	fields = append(fields, "SQL", query)
 	if err != nil {
 		fields = append(fields, "err", err)
 	}
